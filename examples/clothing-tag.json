@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "_note": "由上传的 StrandWare/.qdf 吊牌模板还原的示例设计。字段与表达式照搬自原模板；坐标/字号为估算，可自行调整。配合 clothing-tag.csv 使用。",
+  "label": { "w": 40, "h": 70, "dpi": 203, "tile": 3 },
+  "elements": [
+    { "type": "text",   "x": 3, "y": 3,  "size": 3.6, "bold": true,  "content": "[GOODSNAME]" },
+    { "type": "text",   "x": 3, "y": 8.5,"size": 3,   "bold": false, "content": "[L2NAME]" },
+    { "type": "text",   "x": 3, "y": 13, "size": 3,   "bold": false, "content": "[GOODSCODE]" },
+    { "type": "text",   "x": 3, "y": 18, "size": 2.6, "bold": false, "content": "\"QB/T1333-2018\"" },
+    { "type": "text",   "x": 3, "y": 23, "size": 2.8, "bold": false, "content": "[LILIAO]" },
+    { "type": "text",   "x": 3, "y": 28, "size": 2.6, "bold": false, "content": "left([GOODSRMK],20)" },
+    { "type": "text",   "x": 3, "y": 32, "size": 2.6, "bold": false, "content": "mid([GOODSRMK],21,25)" },
+    { "type": "text",   "x": 3, "y": 37, "size": 2.6, "bold": false, "content": "[washchar]" },
+    { "type": "text",   "x": 3, "y": 44, "size": 5,   "bold": true,  "content": "[JYPRICE] + \".00\"" },
+    { "type": "text",   "x": 26,"y": 45, "size": 3,   "bold": false, "content": "[YWPRICE] + \"Z\"" },
+    { "type": "ean13",  "x": 3, "y": 51, "h": 11, "module": 0.33, "showText": true, "content": "[BARCODE1]" },
+    { "type": "text",   "x": 3, "y": 66, "size": 2.6, "bold": false, "content": "[SKU]" }
+  ]
+}

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>标签打印工具</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#f5f6f8; --panel:#fff; --line:#d9dde3; --ink:#1c2330;
@@ -23,48 +24,59 @@
   body{margin:0;font:14px/1.5 system-ui,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;
        background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
   header{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);
-         display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+         display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
   header h1{font-size:16px;margin:0;font-weight:650}
   header .sp{flex:1}
-  .wrap{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:16px;align-items:start}
-  @media (max-width:820px){.wrap{grid-template-columns:1fr}}
+  .wrap{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;align-items:start}
+  @media (max-width:860px){.wrap{grid-template-columns:1fr}}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .panel+.panel{margin-top:14px}
   .panel h2{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
             margin:0 0 10px}
   label.f{display:block;margin:0 0 10px}
+  label.f:last-child{margin-bottom:0}
   label.f span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
   input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;
          background:var(--bg);color:var(--ink);font:inherit}
   textarea{min-height:70px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   button{cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);
           padding:8px 12px;border-radius:7px;font:inherit}
   button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
   button:hover{filter:brightness(1.03)}
   .btns{display:flex;gap:8px;flex-wrap:wrap}
   .hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+  code{background:var(--bg);padding:1px 4px;border-radius:4px;font-size:12px}
   .elitem{border:1px solid var(--line);border-radius:7px;padding:8px;margin-bottom:8px}
   .elitem .top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .elitem .top b{font-size:13px}
   .elitem .top .sp{flex:1}
   .elitem .top button{padding:3px 7px;font-size:12px}
+  .elitem.sel{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
   .stage{display:flex;flex-direction:column;align-items:center;gap:14px}
   .preview-area{background:var(--bg);border:1px dashed var(--line);border-radius:10px;
-                padding:24px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;
+                padding:24px;display:flex;flex-wrap:wrap;gap:var(--tile,12px);justify-content:center;
                 width:100%;min-height:200px;align-content:flex-start}
   .label{background:#fff;color:#000;position:relative;overflow:hidden;
           box-shadow:0 1px 4px rgba(0,0,0,.18);flex:0 0 auto}
+  .label.grid{background-image:linear-gradient(to right,#eee 1px,transparent 1px),
+                               linear-gradient(to bottom,#eee 1px,transparent 1px);
+              background-size:18.9px 18.9px}
   .label .el{position:absolute;white-space:pre;line-height:1}
+  .label .el img{display:block;width:100%;height:100%;object-fit:contain}
   .pager{color:var(--muted);font-size:13px}
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
   @media print{
+    @page{margin:8mm}
     body{background:#fff}
-    header,.panel,.preview-area>.pager,#noprint{display:none !important}
+    header,.panel,#pager,#noprint{display:none !important}
     .wrap{display:block;padding:0}
     .stage{gap:0}
-    .preview-area{border:0;padding:0;gap:0;background:#fff;display:block;min-height:0}
-    .label{box-shadow:none;page-break-inside:avoid;margin:0}
+    .preview-area{border:0;padding:0;background:#fff;min-height:0;justify-content:flex-start}
+    .label{box-shadow:none;page-break-inside:avoid}
+    .label.grid{background-image:none}
   }
 </style>
 </head>
@@ -72,6 +84,12 @@
 <header>
   <h1>标签打印工具</h1>
   <span class="sp"></span>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
+    <input type="checkbox" id="showGrid" style="width:auto"> 网格
+  </label>
+  <button id="saveBtn" title="把当前标签设计导出为 .json">保存设计</button>
+  <button id="loadBtn" title="载入 .json 设计">载入设计</button>
+  <input id="designIn" type="file" accept=".json" hidden>
   <button id="themeBtn" title="切换主题">◐</button>
   <button class="primary" id="printBtn">打印</button>
 </header>
@@ -80,41 +98,52 @@
   <!-- 左侧设置 -->
   <div>
     <div class="panel">
-      <h2>标签尺寸</h2>
+      <h2>标签 & 纸张</h2>
       <div class="row">
-        <label class="f"><span>宽 (mm)</span><input id="lw" type="number" value="50" min="5" step="1"></label>
-        <label class="f"><span>高 (mm)</span><input id="lh" type="number" value="30" min="5" step="1"></label>
+        <label class="f"><span>标签宽 (mm)</span><input id="lw" type="number" value="50" min="5" step="1"></label>
+        <label class="f"><span>标签高 (mm)</span><input id="lh" type="number" value="30" min="5" step="1"></label>
       </div>
-      <label class="f"><span>分辨率 DPI（屏幕预览/打印密度）</span>
-        <select id="dpi">
-          <option value="96">96 (屏幕)</option>
-          <option value="203" selected>203 (常见标签机)</option>
-          <option value="300">300 (高精标签机)</option>
-        </select>
-      </label>
+      <div class="row">
+        <label class="f"><span>打印精度 DPI</span>
+          <select id="dpi">
+            <option value="96">96 (屏幕)</option>
+            <option value="203" selected>203 (常见标签机)</option>
+            <option value="300">300 (高精标签机)</option>
+          </select>
+        </label>
+        <label class="f"><span>标签间距 (mm)</span><input id="tile" type="number" value="3" min="0" step="1"></label>
+      </div>
+      <p class="hint">办公打印机整页套打时，多张标签会按间距自动平铺换行；标签机一般每张一页。</p>
     </div>
 
-    <div class="panel" style="margin-top:14px">
+    <div class="panel">
       <h2>元素</h2>
       <div id="elist"></div>
       <div class="btns">
-        <button id="addText">+ 文字</button>
-        <button id="addBarcode">+ 条码(Code128)</button>
+        <button data-add="text">+ 文字</button>
+        <button data-add="barcode">+ 条码 Code128</button>
+        <button data-add="ean13">+ 条码 EAN-13</button>
+        <button data-add="qrcode">+ 二维码</button>
+        <button data-add="image">+ 图片/Logo</button>
+        <button data-add="box">+ 线条/边框</button>
       </div>
-      <p class="hint">坐标单位 mm，从标签左上角算起。</p>
+      <p class="hint">坐标单位 mm，从标签左上角算起。内容里用 <code>{字段名}</code> 套数据。</p>
     </div>
 
-    <div class="panel" style="margin-top:14px">
-      <h2>数据套打 (CSV)</h2>
-      <p class="hint" style="margin-top:0">第一行是字段名。在元素内容里用 <code>{字段名}</code> 引用，每行数据生成一张标签。</p>
+    <div class="panel">
+      <h2>数据套打</h2>
+      <p class="hint" style="margin-top:0">第一行是字段名，每行数据生成一张标签。支持逗号或 Tab 分隔（可直接从 Excel 复制粘贴）。</p>
       <textarea id="csv" placeholder="sku,name,price
 A1001,苹果,3.50
 A1002,香蕉,2.20"></textarea>
       <div id="fields" style="margin:8px 0"></div>
       <div class="btns">
+        <button id="importFile">导入 CSV 文件…</button>
+        <input id="fileIn" type="file" accept=".csv,.txt,.tsv" hidden>
         <button id="applyCsv" class="primary">生成标签</button>
-        <button id="clearCsv">清空数据（单张）</button>
+        <button id="clearCsv">单张预览</button>
       </div>
+      <p class="hint">Excel 文件请在 Excel 里「另存为 CSV」后导入，或直接复制单元格区域粘贴到上面。</p>
     </div>
   </div>
 
@@ -130,13 +159,11 @@ A1002,香蕉,2.20"></textarea>
 <script>
 /* ============================================================
    标签打印工具 —— 原创实现
-   - Code128 (B/C 自动) 条码编码：自写
-   - 标签渲染、CSV 套打、打印
+   条码编码 (Code128 / EAN-13) 为自写；二维码用开源 qrcodejs 渲染。
    ============================================================ */
 
-/* ---------- Code128 原创编码实现 ---------- */
+/* ---------- Code128 原创编码 ---------- */
 const C128 = (() => {
-  // 106 个符号的模块宽度表（每个 6 段：条-空交替，宽度 1..4）
   const PATTERNS = [
     "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213",
     "221312","231212","112232","122132","122231","113222","123122","123221","223211","221132",
@@ -150,221 +177,325 @@ const C128 = (() => {
     "214121","412121","111143","111341","131141","114113","114311","411113","411311","113141",
     "114131","311141","411131","211412","211214","211232","2331112"
   ];
-  const START_B = 104, START_C = 105, STOP = 106;
-  const isDigit = c => c >= '0' && c <= '9';
-
+  const START_B=104, START_C=105, STOP=106;
+  const isDigit=c=>c>='0'&&c<='9';
+  function run(s,p){let n=0;while(p+n<s.length&&isDigit(s[p+n]))n++;return n;}
   function encode(data){
-    const codes = [];
-    let i = 0;
-    // 选起始码：若开头有偶数个(>=4)连续数字，用 C，否则 B
-    function digitsRun(pos){ let n=0; while(pos+n < data.length && isDigit(data[pos+n])) n++; return n; }
-    let mode; // 'B' | 'C'
-    if (digitsRun(0) >= 4){ mode='C'; codes.push(START_C); }
-    else { mode='B'; codes.push(START_B); }
-
-    while (i < data.length){
-      if (mode === 'C'){
-        const run = digitsRun(i);
-        if (run >= 2){
-          const pairs = Math.floor(run/2);
-          for (let p=0;p<pairs;p++){ codes.push(parseInt(data.substr(i,2),10)); i+=2; }
-          // 若剩单个数字或非数字，切回 B
-          if (i < data.length){ codes.push(100 /*Code B*/); mode='B'; }
-        } else {
-          codes.push(100); mode='B';
-        }
-      } else { // B
-        const run = digitsRun(i);
-        if (run >= 4 && (run % 2 === 0 || run >= 6)){
-          codes.push(99 /*Code C*/); mode='C';
-        } else {
-          const ch = data.charCodeAt(i);
-          if (ch < 32 || ch > 126) throw new Error("Code128(B) 仅支持 ASCII 32-126：" + data[i]);
-          codes.push(ch - 32); i++;
-        }
+    const codes=[]; let i=0, mode;
+    if(run(data,0)>=4){mode='C';codes.push(START_C);} else {mode='B';codes.push(START_B);}
+    while(i<data.length){
+      if(mode==='C'){
+        const r=run(data,i);
+        if(r>=2){const pairs=Math.floor(r/2);for(let p=0;p<pairs;p++){codes.push(parseInt(data.substr(i,2),10));i+=2;}
+          if(i<data.length){codes.push(100);mode='B';}}
+        else {codes.push(100);mode='B';}
+      } else {
+        const r=run(data,i);
+        if(r>=4&&(r%2===0||r>=6)){codes.push(99);mode='C';}
+        else {const ch=data.charCodeAt(i);
+          if(ch<32||ch>126)throw new Error("Code128 仅支持 ASCII 32-126");
+          codes.push(ch-32);i++;}
       }
     }
-    // 校验位
-    let sum = codes[0];
-    for (let k=1;k<codes.length;k++) sum += codes[k]*k;
-    codes.push(sum % 103);
-    codes.push(STOP);
-    return codes.map(c => PATTERNS[c]).join("");
+    let sum=codes[0];for(let k=1;k<codes.length;k++)sum+=codes[k]*k;
+    codes.push(sum%103);codes.push(STOP);
+    return codes.map(c=>PATTERNS[c]).join("");
   }
+  // 返回 0/1 模块串
+  function modules(data){
+    const seq=encode(data);let out="";
+    for(let k=0;k<seq.length;k++){const w=+seq[k];out+=(k%2===0?"1":"0").repeat(w);}
+    return out;
+  }
+  return {modules};
+})();
 
-  // 返回一组 {x,width} 黑条（单位：模块数）
-  function bars(data){
-    const seq = encode(data);
-    const out = [];
-    let x = 0;
-    for (let k=0;k<seq.length;k++){
-      const w = parseInt(seq[k],10);
-      if (k % 2 === 0) out.push({x, w}); // 偶数位=黑条
-      x += w;
-    }
-    return { bars: out, modules: x };
+/* ---------- EAN-13 原创编码 ---------- */
+const EAN13=(()=>{
+  const L=["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"];
+  const G=["0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111"];
+  const R=["1110010","1100110","1101100","1000010","1011100","1001110","1010000","1000100","1001000","1110100"];
+  const PAR=["LLLLLL","LLGLGG","LLGGLG","LLGGGL","LGLLGG","LGGLLG","LGGGLL","LGLGLG","LGLGGL","LGGLGL"];
+  function checksum(d12){let s=0;for(let i=0;i<12;i++)s+=(+d12[i])*(i%2?3:1);return (10-(s%10))%10;}
+  function normalize(raw){
+    const d=(raw||"").replace(/\D/g,"");
+    if(d.length===12)return d+checksum(d);
+    if(d.length===13)return d;
+    throw new Error("EAN-13 需要 12 或 13 位数字");
   }
-  return { bars };
+  function modules(raw){
+    const d=normalize(raw);
+    const first=+d[0], left=d.slice(1,7), right=d.slice(7);
+    let s="101"; // 左护线
+    const par=PAR[first];
+    for(let i=0;i<6;i++)s+=(par[i]==='L'?L:G)[+left[i]];
+    s+="01010"; // 中护线
+    for(let i=0;i<6;i++)s+=R[+right[i]];
+    s+="101"; // 右护线
+    return {bits:s, text:d, groups:[d[0], d.slice(1,7), d.slice(7)]};
+  }
+  return {modules};
 })();
 
 /* ---------- 状态 ---------- */
-let elements = [
-  { type:'text', x:3, y:3, size:4, bold:true, content:'{name}' },
-  { type:'barcode', x:3, y:12, h:12, module:0.33, showText:true, content:'{sku}' }
+let elements=[
+  {type:'text',x:3,y:3,size:4,bold:true,content:'{name}'},
+  {type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,content:'{sku}'}
 ];
-let rows = null; // CSV 数据；null = 单张预览
+let rows=null, sel=-1;
+const PXMM=3.78; // 屏幕预览 1mm≈3.78px(96dpi)
 
-const MM = dpi => dpi/25.4; // 每 mm 像素（按所选 DPI，用于条码模块对齐）
-const PXMM = 3.78;          // 屏幕预览 1mm≈3.78px (96dpi)
+const $=s=>document.querySelector(s);
 
-/* ---------- 工具 ---------- */
-const $ = s => document.querySelector(s);
-function merge(str, row){
-  if (!row) return str.replace(/\{(\w+)\}/g, (_,k)=>'['+k+']');
-  return str.replace(/\{(\w+)\}/g, (_,k)=> (k in row)? row[k] : '{'+k+'}');
+/* ---------- 内容/表达式求值 ----------
+   支持两种写法：
+   1) 简单插值： 文本里写 {字段}
+   2) 表达式：   [字段] / [表.字段]、"文字"、+ 拼接、
+                 函数 left(s,n) right(s,n) mid(s,起,长) upper lower trim concat
+   含 [ 的内容按表达式解析，否则按 {字段} 插值。
+*/
+function fieldVal(name,row){
+  const key=String(name).split('.').pop().trim(); // 去掉表前缀
+  if(!row)return '['+key+']';
+  return (key in row)?row[key]:'';
 }
-function parseCSV(text){
-  const lines = text.trim().split(/\r?\n/).filter(l=>l.length);
-  if (lines.length < 2) return null;
-  const split = l => l.split(',').map(s=>s.trim());
-  const head = split(lines[0]);
-  return lines.slice(1).map(l=>{
-    const cells = split(l); const o={};
-    head.forEach((h,i)=> o[h] = cells[i] ?? '');
-    return o;
-  });
+function evalContent(str,row){
+  if(str==null)return '';
+  str=String(str);
+  if(str.indexOf('[')===-1)
+    return str.replace(/\{([\w.]+)\}/g,(_,k)=>fieldVal(k,row));
+  try{return evalExpr(str,row);}catch(e){return '⚠'+e.message;}
 }
-
-/* ---------- 渲染 ---------- */
-function renderLabel(row){
-  const W = +$('#lw').value, H = +$('#lh').value;
-  const dpi = +$('#dpi').value;
-  const d = document.createElement('div');
-  d.className = 'label';
-  d.style.width = (W*PXMM)+'px';
-  d.style.height = (H*PXMM)+'px';
-
-  for (const el of elements){
-    const node = document.createElement('div');
-    node.className = 'el';
-    node.style.left = (el.x*PXMM)+'px';
-    node.style.top  = (el.y*PXMM)+'px';
-    const text = merge(el.content, row);
-
-    if (el.type === 'text'){
-      node.textContent = text;
-      node.style.fontSize = (el.size*PXMM)+'px';
-      node.style.fontWeight = el.bold ? '700' : '400';
-    } else if (el.type === 'barcode'){
-      try{
-        const {bars, modules} = C128.bars(text);
-        const modPx = el.module*PXMM;               // 单模块屏幕宽
-        const svgW = modules*modPx, svgH = el.h*PXMM;
-        const ns='http://www.w3.org/2000/svg';
-        const svg=document.createElementNS(ns,'svg');
-        svg.setAttribute('width',svgW); svg.setAttribute('height',svgH);
-        svg.setAttribute('shape-rendering','crispEdges');
-        for (const b of bars){
-          const r=document.createElementNS(ns,'rect');
-          r.setAttribute('x',b.x*modPx); r.setAttribute('y',0);
-          r.setAttribute('width',b.w*modPx); r.setAttribute('height',svgH);
-          r.setAttribute('fill','#000'); svg.appendChild(r);
-        }
-        node.appendChild(svg);
-        if (el.showText){
-          const t=document.createElement('div');
-          t.textContent=text;
-          t.style.cssText='text-align:center;font-size:'+(2.6*PXMM)+'px;font-family:monospace;margin-top:1px;width:'+svgW+'px';
-          node.appendChild(t);
-        }
-      }catch(err){
-        node.textContent='⚠ '+err.message;
-        node.style.cssText+=';color:#c00;font-size:10px';
-      }
+function evalExpr(src,row){
+  let i=0;
+  const skip=()=>{while(i<src.length&&/\s/.test(src[i]))i++;};
+  function expr(){let v=term();skip();while(src[i]==='+'){i++;v=v+term();skip();}return v;}
+  function args(){const a=[];skip();if(src[i]===')')return a;a.push(expr());skip();
+    while(src[i]===','){i++;a.push(expr());skip();}return a;}
+  function term(){
+    skip();const c=src[i];
+    if(c==='"'){i++;let s='';while(i<src.length&&src[i]!=='"')s+=src[i++];i++;return s;}
+    if(c==='['){i++;let n='';while(i<src.length&&src[i]!==']')n+=src[i++];i++;return fieldVal(n,row);}
+    if(c==='{'){i++;let n='';while(i<src.length&&src[i]!=='}')n+=src[i++];i++;return fieldVal(n,row);}
+    if(/[0-9.]/.test(c)){let n='';while(i<src.length&&/[0-9.]/.test(src[i]))n+=src[i++];return n;}
+    if(c==='('){i++;const v=expr();skip();if(src[i]===')')i++;return v;}
+    if(/[A-Za-z_]/.test(c)){let fn='';while(i<src.length&&/[A-Za-z0-9_]/.test(src[i]))fn+=src[i++];
+      skip();if(src[i]==='('){i++;const a=args();skip();if(src[i]===')')i++;return callFn(fn.toLowerCase(),a);}
+      throw new Error('未知标记 '+fn);}
+    throw new Error('无法解析: '+src.slice(i));
+  }
+  function callFn(fn,a){
+    const s=String(a[0]??'');
+    switch(fn){
+      case 'left':return s.slice(0,Number(a[1])||0);
+      case 'right':{const n=Number(a[1])||0;return n?s.slice(-n):'';}
+      case 'mid':{const st=(Number(a[1])||1)-1;return a[2]!=null?s.substr(st,Number(a[2])):s.substr(st);}
+      case 'upper':return s.toUpperCase();
+      case 'lower':return s.toLowerCase();
+      case 'trim':return s.trim();
+      case 'concat':return a.map(x=>String(x)).join('');
+      default:throw new Error('不支持函数 '+fn);
     }
+  }
+  const r=expr();return r;
+}
+function parseData(text){
+  const t=text.trim();if(!t)return null;
+  const lines=t.split(/\r?\n/).filter(l=>l.length);
+  if(lines.length<2)return null;
+  const sep=lines[0].includes('\t')?'\t':',';
+  const split=l=>l.split(sep).map(s=>s.trim());
+  const head=split(lines[0]);
+  return lines.slice(1).map(l=>{const c=split(l);const o={};head.forEach((h,i)=>o[h]=c[i]??'');return o;});
+}
+
+/* ---------- 条码绘制 ---------- */
+function barsSVG(bits, modPx, heightPx){
+  const ns='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('width',bits.length*modPx);
+  svg.setAttribute('height',heightPx);
+  svg.setAttribute('shape-rendering','crispEdges');
+  let x=0,i=0;
+  while(i<bits.length){
+    if(bits[i]==='1'){let w=0;while(i<bits.length&&bits[i]==='1'){w++;i++;}
+      const r=document.createElementNS(ns,'rect');
+      r.setAttribute('x',x*modPx);r.setAttribute('y',0);
+      r.setAttribute('width',w*modPx);r.setAttribute('height',heightPx);
+      r.setAttribute('fill','#000');svg.appendChild(r);x+=w;}
+    else {x++;i++;}
+  }
+  return svg;
+}
+
+/* ---------- 渲染单张标签 ---------- */
+function renderLabel(row){
+  const W=+$('#lw').value,H=+$('#lh').value;
+  const d=document.createElement('div');
+  d.className='label'+($('#showGrid').checked?' grid':'');
+  d.style.width=(W*PXMM)+'px';d.style.height=(H*PXMM)+'px';
+
+  for(const el of elements){
+    const node=document.createElement('div');
+    node.className='el';
+    node.style.left=(el.x*PXMM)+'px';node.style.top=(el.y*PXMM)+'px';
+    const text=evalContent(el.content,row);
+    try{
+      if(el.type==='text'){
+        node.textContent=text;
+        node.style.fontSize=(el.size*PXMM)+'px';
+        node.style.fontWeight=el.bold?'700':'400';
+      }
+      else if(el.type==='barcode'){
+        const modPx=el.module*PXMM;
+        node.appendChild(barsSVG(C128.modules(text),modPx,el.h*PXMM));
+        if(el.showText){const t=document.createElement('div');t.textContent=text;
+          t.style.cssText='text-align:center;font:'+(2.6*PXMM)+'px/1.1 monospace;margin-top:1px;width:100%';
+          node.appendChild(t);}
+      }
+      else if(el.type==='ean13'){
+        const {bits,text:full}=EAN13.modules(text);
+        const modPx=el.module*PXMM;
+        node.appendChild(barsSVG(bits,modPx,el.h*PXMM));
+        if(el.showText){const t=document.createElement('div');t.textContent=full;
+          t.style.cssText='text-align:center;font:'+(2.8*PXMM)+'px/1.1 monospace;letter-spacing:2px;margin-top:1px;width:100%';
+          node.appendChild(t);}
+      }
+      else if(el.type==='qrcode'){
+        const px=el.size*PXMM;
+        const box=document.createElement('div');box.style.cssText='width:'+px+'px;height:'+px+'px';
+        node.appendChild(box);
+        if(window.QRCode){new QRCode(box,{text:text||' ',width:px,height:px,correctLevel:QRCode.CorrectLevel.M});}
+        else {box.textContent='⚠ 二维码库未加载（需联网）';box.style.cssText+=';font-size:10px;color:#c00';}
+      }
+      else if(el.type==='image'){
+        if(el.src){const img=document.createElement('img');img.src=el.src;
+          node.style.width=(el.w*PXMM)+'px';node.style.height=(el.h*PXMM)+'px';node.appendChild(img);}
+        else {node.textContent='（未选图片）';node.style.cssText+=';font-size:10px;color:#999';}
+      }
+      else if(el.type==='box'){
+        node.style.width=(el.w*PXMM)+'px';node.style.height=(el.h*PXMM)+'px';
+        if(el.fill)node.style.background='#000';
+        else node.style.border=(el.border*PXMM)+'px solid #000';
+      }
+    }catch(err){node.textContent='⚠ '+err.message;node.style.cssText+=';color:#c00;font-size:10px';}
     d.appendChild(node);
   }
   return d;
 }
 
 function render(){
-  const pv = $('#preview'); pv.innerHTML='';
-  const list = rows ? rows : [null];
-  list.forEach(r => pv.appendChild(renderLabel(r)));
-  $('#pager').textContent = rows ? ('共 '+rows.length+' 张标签') : '单张预览（未加载数据）';
+  const pv=$('#preview');pv.innerHTML='';
+  pv.style.setProperty('--tile',(+$('#tile').value)*PXMM+'px');
+  const list=rows?rows:[null];
+  list.forEach(r=>pv.appendChild(renderLabel(r)));
+  $('#pager').textContent=rows?('共 '+rows.length+' 张标签'):'单张预览（未加载数据）';
 }
 
 /* ---------- 元素编辑 UI ---------- */
+const FIELDS={
+  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool']],
+  barcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool']],
+  ean13:[['content','内容(12/13位数字)','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示数字','bool']],
+  qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num']],
+  image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file']],
+  box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool']]
+};
+const TYPENAME={text:'文字',barcode:'Code128',ean13:'EAN-13',qrcode:'二维码',image:'图片',box:'线条/边框'};
+
 function renderEditor(){
-  const box = $('#elist'); box.innerHTML='';
-  elements.forEach((el, idx)=>{
-    const d=document.createElement('div'); d.className='elitem';
-    const type = el.type==='text'?'文字':'条码';
-    d.innerHTML = `
-      <div class="top"><b>${type}</b><span class="sp"></span>
-        <button data-up="${idx}">↑</button>
-        <button data-del="${idx}">✕</button></div>
-      <label class="f"><span>内容（可用 {字段}）</span>
-        <input data-k="content" data-i="${idx}" value="${escapeHtml(el.content)}"></label>
-      <div class="row">
-        <label class="f"><span>X (mm)</span><input type="number" step="0.5" data-k="x" data-i="${idx}" value="${el.x}"></label>
-        <label class="f"><span>Y (mm)</span><input type="number" step="0.5" data-k="y" data-i="${idx}" value="${el.y}"></label>
-      </div>` +
-      (el.type==='text'
-        ? `<div class="row">
-             <label class="f"><span>字号 (mm)</span><input type="number" step="0.5" data-k="size" data-i="${idx}" value="${el.size}"></label>
-             <label class="f"><span>加粗</span><select data-k="bold" data-i="${idx}"><option value="1"${el.bold?' selected':''}>是</option><option value="0"${!el.bold?' selected':''}>否</option></select></label>
-           </div>`
-        : `<div class="row">
-             <label class="f"><span>条高 (mm)</span><input type="number" step="0.5" data-k="h" data-i="${idx}" value="${el.h}"></label>
-             <label class="f"><span>模块宽 (mm)</span><input type="number" step="0.01" data-k="module" data-i="${idx}" value="${el.module}"></label>
-           </div>
-           <label class="f"><span>显示文字</span><select data-k="showText" data-i="${idx}"><option value="1"${el.showText?' selected':''}>是</option><option value="0"${!el.showText?' selected':''}>否</option></select></label>`);
-    box.appendChild(d);
+  const box=$('#elist');box.innerHTML='';
+  elements.forEach((el,idx)=>{
+    const d=document.createElement('div');d.className='elitem'+(idx===sel?' sel':'');
+    let h=`<div class="top"><b>${TYPENAME[el.type]}</b><span class="sp"></span>
+      <button data-up="${idx}" title="上移">↑</button>
+      <button data-del="${idx}" title="删除">✕</button></div>`;
+    // 两列排版数值字段，文本/文件单列
+    const fs=FIELDS[el.type];
+    let numBuf=[];
+    const flush=()=>{if(numBuf.length){h+='<div class="row">'+numBuf.join('')+'</div>';numBuf=[];}};
+    for(const [k,label,t] of fs){
+      if(t==='num'){numBuf.push(`<label class="f"><span>${label}</span><input type="number" step="0.01" data-k="${k}" data-i="${idx}" value="${el[k]??0}"></label>`);
+        if(numBuf.length===2)flush();}
+      else{flush();
+        if(t==='text')h+=`<label class="f"><span>${label}</span><input data-k="${k}" data-i="${idx}" value="${esc(el[k]??'')}"></label>`;
+        else if(t==='bool')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}"><option value="1"${el[k]?' selected':''}>是</option><option value="0"${!el[k]?' selected':''}>否</option></select></label>`;
+        else if(t==='file')h+=`<label class="f"><span>${label}</span><input type="file" accept="image/*" data-img="${idx}"></label>`;
+      }
+    }
+    flush();
+    d.innerHTML=h;box.appendChild(d);
   });
 }
-function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 /* ---------- 事件 ---------- */
-$('#elist').addEventListener('input', e=>{
-  const i=e.target.dataset.i, k=e.target.dataset.k;
-  if (i==null) return;
-  let v=e.target.value;
-  if (['x','y','size','h','module'].includes(k)) v=parseFloat(v)||0;
-  if (['bold','showText'].includes(k)) v = v==='1';
-  elements[i][k]=v; render();
+const DEFAULTS={
+  text:{type:'text',x:3,y:3,size:4,bold:false,content:'文字'},
+  barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,content:'123456'},
+  ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,content:'690123456789'},
+  qrcode:{type:'qrcode',x:3,y:3,size:15,content:'https://'},
+  image:{type:'image',x:3,y:3,w:15,h:15,src:''},
+  box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false}
+};
+document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
+  elements.push(JSON.parse(JSON.stringify(DEFAULTS[b.dataset.add])));
+  sel=elements.length-1;renderEditor();render();
 });
-$('#elist').addEventListener('click', e=>{
-  if (e.target.dataset.del!=null){ elements.splice(+e.target.dataset.del,1); renderEditor(); render(); }
-  if (e.target.dataset.up!=null){ const i=+e.target.dataset.up; if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];renderEditor();render();} }
+$('#elist').addEventListener('input',e=>{
+  const i=e.target.dataset.i,k=e.target.dataset.k;
+  if(i!=null){let v=e.target.value;
+    if(['x','y','size','h','module','w','border'].includes(k))v=parseFloat(v)||0;
+    if(['bold','showText','fill'].includes(k))v=v==='1';
+    elements[i][k]=v;render();return;}
+  const img=e.target.dataset.img;
+  if(img!=null&&e.target.files[0]){const fr=new FileReader();
+    fr.onload=()=>{elements[img].src=fr.result;render();};fr.readAsDataURL(e.target.files[0]);}
 });
-$('#addText').onclick=()=>{ elements.push({type:'text',x:3,y:3,size:4,bold:false,content:'文字'}); renderEditor(); render(); };
-$('#addBarcode').onclick=()=>{ elements.push({type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,content:'123456'}); renderEditor(); render(); };
+$('#elist').addEventListener('click',e=>{
+  if(e.target.dataset.del!=null){elements.splice(+e.target.dataset.del,1);sel=-1;renderEditor();render();}
+  if(e.target.dataset.up!=null){const i=+e.target.dataset.up;if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];sel=i-1;renderEditor();render();}}
+});
 
 function refreshFields(){
-  const r = parseCSV($('#csv').value);
-  const box=$('#fields'); box.innerHTML='';
-  if (r && r.length){
-    Object.keys(r[0]).forEach(f=>{
-      const t=document.createElement('span'); t.className='tag'; t.textContent='{'+f+'}';
-      t.title='点击复制'; t.onclick=()=>navigator.clipboard?.writeText('{'+f+'}');
-      box.appendChild(t);
-    });
-  }
+  const r=parseData($('#csv').value);const box=$('#fields');box.innerHTML='';
+  if(r&&r.length)Object.keys(r[0]).forEach(f=>{
+    const t=document.createElement('span');t.className='tag';t.textContent='{'+f+'}';
+    t.title='点击复制';t.onclick=()=>navigator.clipboard?.writeText('{'+f+'}');box.appendChild(t);});
 }
-$('#csv').addEventListener('input', refreshFields);
-$('#applyCsv').onclick=()=>{ rows=parseCSV($('#csv').value); if(!rows){alert('需要至少一行表头 + 一行数据');return;} render(); };
-$('#clearCsv').onclick=()=>{ rows=null; render(); };
-$('#lw').oninput=$('#lh').oninput=$('#dpi').onchange=render;
+$('#csv').addEventListener('input',refreshFields);
+$('#applyCsv').onclick=()=>{rows=parseData($('#csv').value);if(!rows){alert('需要至少表头 + 一行数据');return;}render();};
+$('#clearCsv').onclick=()=>{rows=null;render();};
+$('#importFile').onclick=()=>$('#fileIn').click();
+$('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
+  fr.onload=()=>{$('#csv').value=fr.result;refreshFields();rows=parseData(fr.result);render();};fr.readAsText(f);};
+$('#lw').oninput=$('#lh').oninput=$('#tile').oninput=render;
+$('#dpi').onchange=render;
+$('#showGrid').onchange=render;
 $('#printBtn').onclick=()=>window.print();
-$('#themeBtn').onclick=()=>{
-  const r=document.documentElement;
-  const cur=r.getAttribute('data-theme')|| (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
-  r.setAttribute('data-theme', cur==='dark'?'light':'dark');
+
+/* ---------- 保存 / 载入设计 ---------- */
+$('#saveBtn').onclick=()=>{
+  const design={v:1,label:{w:+$('#lw').value,h:+$('#lh').value,dpi:+$('#dpi').value,tile:+$('#tile').value},elements};
+  const blob=new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
+  URL.revokeObjectURL(a.href);
 };
+function loadDesign(d){
+  if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
+  if(d.label){$('#lw').value=d.label.w??50;$('#lh').value=d.label.h??30;
+    $('#dpi').value=d.label.dpi??203;$('#tile').value=d.label.tile??3;}
+  elements=d.elements;sel=-1;renderEditor();render();
+}
+$('#loadBtn').onclick=()=>$('#designIn').click();
+$('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
+  fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));}catch(err){alert('读取失败: '+err.message);}};fr.readAsText(f);};
+$('#themeBtn').onclick=()=>{const r=document.documentElement;
+  const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  r.setAttribute('data-theme',cur==='dark'?'light':'dark');};
 
 /* ---------- 启动 ---------- */
-renderEditor(); render();
+renderEditor();render();
 </script>
 </body>
 </html>
