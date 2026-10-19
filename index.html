@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>标签打印工具</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#fff; --line:#d9dde3; --ink:#1c2330;
+    --muted:#6b7482; --accent:#2f6fed; --accent-ink:#fff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14171c; --panel:#1d2127; --line:#333a44; --ink:#e8ebef;
+      --muted:#9aa4b2; --accent:#5b8dff; --accent-ink:#0b1016;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14171c; --panel:#1d2127; --line:#333a44; --ink:#e8ebef;
+    --muted:#9aa4b2; --accent:#5b8dff; --accent-ink:#0b1016;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 system-ui,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;
+       background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  header{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);
+         display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:650}
+  header .sp{flex:1}
+  .wrap{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:16px;align-items:start}
+  @media (max-width:820px){.wrap{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .panel h2{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);
+            margin:0 0 10px}
+  label.f{display:block;margin:0 0 10px}
+  label.f span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;
+         background:var(--bg);color:var(--ink);font:inherit}
+  textarea{min-height:70px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  button{cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+          padding:8px 12px;border-radius:7px;font:inherit}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+  button:hover{filter:brightness(1.03)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  .hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+  .elitem{border:1px solid var(--line);border-radius:7px;padding:8px;margin-bottom:8px}
+  .elitem .top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .elitem .top b{font-size:13px}
+  .elitem .top .sp{flex:1}
+  .elitem .top button{padding:3px 7px;font-size:12px}
+  .stage{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .preview-area{background:var(--bg);border:1px dashed var(--line);border-radius:10px;
+                padding:24px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;
+                width:100%;min-height:200px;align-content:flex-start}
+  .label{background:#fff;color:#000;position:relative;overflow:hidden;
+          box-shadow:0 1px 4px rgba(0,0,0,.18);flex:0 0 auto}
+  .label .el{position:absolute;white-space:pre;line-height:1}
+  .pager{color:var(--muted);font-size:13px}
+  .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
+       padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
+  @media print{
+    body{background:#fff}
+    header,.panel,.preview-area>.pager,#noprint{display:none !important}
+    .wrap{display:block;padding:0}
+    .stage{gap:0}
+    .preview-area{border:0;padding:0;gap:0;background:#fff;display:block;min-height:0}
+    .label{box-shadow:none;page-break-inside:avoid;margin:0}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>标签打印工具</h1>
+  <span class="sp"></span>
+  <button id="themeBtn" title="切换主题">◐</button>
+  <button class="primary" id="printBtn">打印</button>
+</header>
+
+<div class="wrap">
+  <!-- 左侧设置 -->
+  <div>
+    <div class="panel">
+      <h2>标签尺寸</h2>
+      <div class="row">
+        <label class="f"><span>宽 (mm)</span><input id="lw" type="number" value="50" min="5" step="1"></label>
+        <label class="f"><span>高 (mm)</span><input id="lh" type="number" value="30" min="5" step="1"></label>
+      </div>
+      <label class="f"><span>分辨率 DPI（屏幕预览/打印密度）</span>
+        <select id="dpi">
+          <option value="96">96 (屏幕)</option>
+          <option value="203" selected>203 (常见标签机)</option>
+          <option value="300">300 (高精标签机)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>元素</h2>
+      <div id="elist"></div>
+      <div class="btns">
+        <button id="addText">+ 文字</button>
+        <button id="addBarcode">+ 条码(Code128)</button>
+      </div>
+      <p class="hint">坐标单位 mm，从标签左上角算起。</p>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>数据套打 (CSV)</h2>
+      <p class="hint" style="margin-top:0">第一行是字段名。在元素内容里用 <code>{字段名}</code> 引用，每行数据生成一张标签。</p>
+      <textarea id="csv" placeholder="sku,name,price
+A1001,苹果,3.50
+A1002,香蕉,2.20"></textarea>
+      <div id="fields" style="margin:8px 0"></div>
+      <div class="btns">
+        <button id="applyCsv" class="primary">生成标签</button>
+        <button id="clearCsv">清空数据（单张）</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧预览 -->
+  <div class="panel">
+    <div class="stage">
+      <div class="pager" id="pager"></div>
+      <div class="preview-area" id="preview"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   标签打印工具 —— 原创实现
+   - Code128 (B/C 自动) 条码编码：自写
+   - 标签渲染、CSV 套打、打印
+   ============================================================ */
+
+/* ---------- Code128 原创编码实现 ---------- */
+const C128 = (() => {
+  // 106 个符号的模块宽度表（每个 6 段：条-空交替，宽度 1..4）
+  const PATTERNS = [
+    "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213",
+    "221312","231212","112232","122132","122231","113222","123122","123221","223211","221132",
+    "221231","213212","223112","312131","311222","321122","321221","312212","322112","322211",
+    "212123","212321","232121","111323","131123","131321","112313","132113","132311","211313",
+    "231113","231311","112133","112331","132131","113123","113321","133121","313121","211331",
+    "231131","213113","213311","213131","311123","311321","331121","312113","312311","332111",
+    "314111","221411","431111","111224","111422","121124","121421","141122","141221","112214",
+    "112412","122114","122411","142112","142211","241211","221114","413111","241112","134111",
+    "111242","121142","121241","114212","124112","124211","411212","421112","421211","212141",
+    "214121","412121","111143","111341","131141","114113","114311","411113","411311","113141",
+    "114131","311141","411131","211412","211214","211232","2331112"
+  ];
+  const START_B = 104, START_C = 105, STOP = 106;
+  const isDigit = c => c >= '0' && c <= '9';
+
+  function encode(data){
+    const codes = [];
+    let i = 0;
+    // 选起始码：若开头有偶数个(>=4)连续数字，用 C，否则 B
+    function digitsRun(pos){ let n=0; while(pos+n < data.length && isDigit(data[pos+n])) n++; return n; }
+    let mode; // 'B' | 'C'
+    if (digitsRun(0) >= 4){ mode='C'; codes.push(START_C); }
+    else { mode='B'; codes.push(START_B); }
+
+    while (i < data.length){
+      if (mode === 'C'){
+        const run = digitsRun(i);
+        if (run >= 2){
+          const pairs = Math.floor(run/2);
+          for (let p=0;p<pairs;p++){ codes.push(parseInt(data.substr(i,2),10)); i+=2; }
+          // 若剩单个数字或非数字，切回 B
+          if (i < data.length){ codes.push(100 /*Code B*/); mode='B'; }
+        } else {
+          codes.push(100); mode='B';
+        }
+      } else { // B
+        const run = digitsRun(i);
+        if (run >= 4 && (run % 2 === 0 || run >= 6)){
+          codes.push(99 /*Code C*/); mode='C';
+        } else {
+          const ch = data.charCodeAt(i);
+          if (ch < 32 || ch > 126) throw new Error("Code128(B) 仅支持 ASCII 32-126：" + data[i]);
+          codes.push(ch - 32); i++;
+        }
+      }
+    }
+    // 校验位
+    let sum = codes[0];
+    for (let k=1;k<codes.length;k++) sum += codes[k]*k;
+    codes.push(sum % 103);
+    codes.push(STOP);
+    return codes.map(c => PATTERNS[c]).join("");
+  }
+
+  // 返回一组 {x,width} 黑条（单位：模块数）
+  function bars(data){
+    const seq = encode(data);
+    const out = [];
+    let x = 0;
+    for (let k=0;k<seq.length;k++){
+      const w = parseInt(seq[k],10);
+      if (k % 2 === 0) out.push({x, w}); // 偶数位=黑条
+      x += w;
+    }
+    return { bars: out, modules: x };
+  }
+  return { bars };
+})();
+
+/* ---------- 状态 ---------- */
+let elements = [
+  { type:'text', x:3, y:3, size:4, bold:true, content:'{name}' },
+  { type:'barcode', x:3, y:12, h:12, module:0.33, showText:true, content:'{sku}' }
+];
+let rows = null; // CSV 数据；null = 单张预览
+
+const MM = dpi => dpi/25.4; // 每 mm 像素（按所选 DPI，用于条码模块对齐）
+const PXMM = 3.78;          // 屏幕预览 1mm≈3.78px (96dpi)
+
+/* ---------- 工具 ---------- */
+const $ = s => document.querySelector(s);
+function merge(str, row){
+  if (!row) return str.replace(/\{(\w+)\}/g, (_,k)=>'['+k+']');
+  return str.replace(/\{(\w+)\}/g, (_,k)=> (k in row)? row[k] : '{'+k+'}');
+}
+function parseCSV(text){
+  const lines = text.trim().split(/\r?\n/).filter(l=>l.length);
+  if (lines.length < 2) return null;
+  const split = l => l.split(',').map(s=>s.trim());
+  const head = split(lines[0]);
+  return lines.slice(1).map(l=>{
+    const cells = split(l); const o={};
+    head.forEach((h,i)=> o[h] = cells[i] ?? '');
+    return o;
+  });
+}
+
+/* ---------- 渲染 ---------- */
+function renderLabel(row){
+  const W = +$('#lw').value, H = +$('#lh').value;
+  const dpi = +$('#dpi').value;
+  const d = document.createElement('div');
+  d.className = 'label';
+  d.style.width = (W*PXMM)+'px';
+  d.style.height = (H*PXMM)+'px';
+
+  for (const el of elements){
+    const node = document.createElement('div');
+    node.className = 'el';
+    node.style.left = (el.x*PXMM)+'px';
+    node.style.top  = (el.y*PXMM)+'px';
+    const text = merge(el.content, row);
+
+    if (el.type === 'text'){
+      node.textContent = text;
+      node.style.fontSize = (el.size*PXMM)+'px';
+      node.style.fontWeight = el.bold ? '700' : '400';
+    } else if (el.type === 'barcode'){
+      try{
+        const {bars, modules} = C128.bars(text);
+        const modPx = el.module*PXMM;               // 单模块屏幕宽
+        const svgW = modules*modPx, svgH = el.h*PXMM;
+        const ns='http://www.w3.org/2000/svg';
+        const svg=document.createElementNS(ns,'svg');
+        svg.setAttribute('width',svgW); svg.setAttribute('height',svgH);
+        svg.setAttribute('shape-rendering','crispEdges');
+        for (const b of bars){
+          const r=document.createElementNS(ns,'rect');
+          r.setAttribute('x',b.x*modPx); r.setAttribute('y',0);
+          r.setAttribute('width',b.w*modPx); r.setAttribute('height',svgH);
+          r.setAttribute('fill','#000'); svg.appendChild(r);
+        }
+        node.appendChild(svg);
+        if (el.showText){
+          const t=document.createElement('div');
+          t.textContent=text;
+          t.style.cssText='text-align:center;font-size:'+(2.6*PXMM)+'px;font-family:monospace;margin-top:1px;width:'+svgW+'px';
+          node.appendChild(t);
+        }
+      }catch(err){
+        node.textContent='⚠ '+err.message;
+        node.style.cssText+=';color:#c00;font-size:10px';
+      }
+    }
+    d.appendChild(node);
+  }
+  return d;
+}
+
+function render(){
+  const pv = $('#preview'); pv.innerHTML='';
+  const list = rows ? rows : [null];
+  list.forEach(r => pv.appendChild(renderLabel(r)));
+  $('#pager').textContent = rows ? ('共 '+rows.length+' 张标签') : '单张预览（未加载数据）';
+}
+
+/* ---------- 元素编辑 UI ---------- */
+function renderEditor(){
+  const box = $('#elist'); box.innerHTML='';
+  elements.forEach((el, idx)=>{
+    const d=document.createElement('div'); d.className='elitem';
+    const type = el.type==='text'?'文字':'条码';
+    d.innerHTML = `
+      <div class="top"><b>${type}</b><span class="sp"></span>
+        <button data-up="${idx}">↑</button>
+        <button data-del="${idx}">✕</button></div>
+      <label class="f"><span>内容（可用 {字段}）</span>
+        <input data-k="content" data-i="${idx}" value="${escapeHtml(el.content)}"></label>
+      <div class="row">
+        <label class="f"><span>X (mm)</span><input type="number" step="0.5" data-k="x" data-i="${idx}" value="${el.x}"></label>
+        <label class="f"><span>Y (mm)</span><input type="number" step="0.5" data-k="y" data-i="${idx}" value="${el.y}"></label>
+      </div>` +
+      (el.type==='text'
+        ? `<div class="row">
+             <label class="f"><span>字号 (mm)</span><input type="number" step="0.5" data-k="size" data-i="${idx}" value="${el.size}"></label>
+             <label class="f"><span>加粗</span><select data-k="bold" data-i="${idx}"><option value="1"${el.bold?' selected':''}>是</option><option value="0"${!el.bold?' selected':''}>否</option></select></label>
+           </div>`
+        : `<div class="row">
+             <label class="f"><span>条高 (mm)</span><input type="number" step="0.5" data-k="h" data-i="${idx}" value="${el.h}"></label>
+             <label class="f"><span>模块宽 (mm)</span><input type="number" step="0.01" data-k="module" data-i="${idx}" value="${el.module}"></label>
+           </div>
+           <label class="f"><span>显示文字</span><select data-k="showText" data-i="${idx}"><option value="1"${el.showText?' selected':''}>是</option><option value="0"${!el.showText?' selected':''}>否</option></select></label>`);
+    box.appendChild(d);
+  });
+}
+function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- 事件 ---------- */
+$('#elist').addEventListener('input', e=>{
+  const i=e.target.dataset.i, k=e.target.dataset.k;
+  if (i==null) return;
+  let v=e.target.value;
+  if (['x','y','size','h','module'].includes(k)) v=parseFloat(v)||0;
+  if (['bold','showText'].includes(k)) v = v==='1';
+  elements[i][k]=v; render();
+});
+$('#elist').addEventListener('click', e=>{
+  if (e.target.dataset.del!=null){ elements.splice(+e.target.dataset.del,1); renderEditor(); render(); }
+  if (e.target.dataset.up!=null){ const i=+e.target.dataset.up; if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];renderEditor();render();} }
+});
+$('#addText').onclick=()=>{ elements.push({type:'text',x:3,y:3,size:4,bold:false,content:'文字'}); renderEditor(); render(); };
+$('#addBarcode').onclick=()=>{ elements.push({type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,content:'123456'}); renderEditor(); render(); };
+
+function refreshFields(){
+  const r = parseCSV($('#csv').value);
+  const box=$('#fields'); box.innerHTML='';
+  if (r && r.length){
+    Object.keys(r[0]).forEach(f=>{
+      const t=document.createElement('span'); t.className='tag'; t.textContent='{'+f+'}';
+      t.title='点击复制'; t.onclick=()=>navigator.clipboard?.writeText('{'+f+'}');
+      box.appendChild(t);
+    });
+  }
+}
+$('#csv').addEventListener('input', refreshFields);
+$('#applyCsv').onclick=()=>{ rows=parseCSV($('#csv').value); if(!rows){alert('需要至少一行表头 + 一行数据');return;} render(); };
+$('#clearCsv').onclick=()=>{ rows=null; render(); };
+$('#lw').oninput=$('#lh').oninput=$('#dpi').onchange=render;
+$('#printBtn').onclick=()=>window.print();
+$('#themeBtn').onclick=()=>{
+  const r=document.documentElement;
+  const cur=r.getAttribute('data-theme')|| (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  r.setAttribute('data-theme', cur==='dark'?'light':'dark');
+};
+
+/* ---------- 启动 ---------- */
+renderEditor(); render();
+</script>
+</body>
+</html>
