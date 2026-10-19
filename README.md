@@ -35,6 +35,36 @@
 
 坐标 / 字号是估算值，可按实际吊牌微调。
 
+## 桌面安装版（本地运行 + 连数据库）
+
+除了直接打开 `index.html`，本项目也可打包成 Windows 安装版客户端（基于 Electron），本地安装运行，并直接连数据库做套打。
+
+支持的数据库：**SQLite、Microsoft Access(.mdb/.accdb)、MySQL、PostgreSQL、SQL Server**。
+
+### 在你的 Windows 电脑上构建安装包
+
+> 云端容器装不了 Electron 和原生数据库驱动，请在本机操作。需先装 [Node.js](https://nodejs.org)（建议 18+）。
+
+```bat
+npm install
+npm run dist
+```
+
+完成后在 `dist/` 目录得到安装程序（`.exe`），双击安装即可。开发调试用：
+
+```bat
+npm start
+```
+
+### 连数据库套打
+
+1. 打开客户端，在「数据库」面板选类型、填连接信息（Access/SQLite 选本地文件，其余填主机/账号/库名）。
+2. 点「测试连接」，再填一条 `SELECT` 查询，点「取数生成标签」。
+3. 查询返回的每一行生成一张标签，列名即可在元素里用 `[列名]` 或 `{列名}` 引用。
+
+> Access 连接需本机已安装「Microsoft Access Database Engine / ODBC 驱动」。
+> 各数据库驱动（better-sqlite3 / odbc / mysql2 / pg / mssql）为原生模块，由 `npm install` 自动编译安装；没用到的类型即使未成功安装也不影响其它功能。
+
 ## 关于二维码库
 
 二维码用开源库 [qrcodejs](https://github.com/davidshimjs/qrcodejs)，通过 CDN 在浏览器端加载，离线或无法访问 CDN 时二维码不渲染（会给出提示），其余功能不受影响。如需完全离线，可把该库下载到本地并改为本地引用。
