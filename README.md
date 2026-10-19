@@ -10,12 +10,13 @@
 
 - **标签 & 纸张**：自定义标签宽高（mm）、打印精度 DPI（96 / 203 / 300）、整页套打时的标签间距。
 - **元素**：
-  - 文字
-  - Code128 条码（自写编码）
-  - EAN-13 条码（自写编码，自动校验位）
+  - 文字（字号、加粗、字体、对齐）
+  - 条码：Code128、EAN-13、EAN-8、UPC-A、Code39、ITF-25（均为自写编码，含自动校验位）
   - 二维码（使用开源 qrcodejs 渲染，浏览器从 CDN 加载）
   - 图片 / Logo（本地上传）
   - 线条 / 边框 / 黑块
+  - 每个元素支持任意角度旋转、复制
+  - 预览缩放
 - **数据套打**：第一行字段名，每行数据生成一张标签。支持逗号或 Tab 分隔（可直接从 Excel 复制粘贴），也可导入 CSV 文件。
 - **内容语法**：
   - 普通文字直接写（可含 `[` `]` 等任意字符）。
@@ -42,9 +43,16 @@
 
 支持的数据库：**SQLite、Microsoft Access(.mdb/.accdb)、MySQL、PostgreSQL、SQL Server**。
 
-### 在你的 Windows 电脑上构建安装包
+### 方式一：下载已打包好的安装程序（推荐）
 
-> 云端容器装不了 Electron 和原生数据库驱动，请在本机操作。需先装 [Node.js](https://nodejs.org)（建议 18+）。
+仓库已配置 GitHub Actions 自动在 Windows 上打包：
+
+- 在 GitHub 仓库页 **Actions → Build Windows Installer**，手动运行（Run workflow），完成后在该次运行页底部下载 `label-print-tool-windows` 产物，解压得到 `.exe` 安装程序。
+- 或推一个 `v` 开头的标签（如 `git tag v0.2.0 && git push --tags`），会自动在 **Releases** 页发布安装包，直接下载。
+
+### 方式二：在你的 Windows 电脑上自己构建
+
+> 需先装 [Node.js](https://nodejs.org)（建议 18+）。
 
 ```bat
 npm install
@@ -56,6 +64,8 @@ npm run dist
 ```bat
 npm start
 ```
+
+> 数据库驱动列为可选依赖：某个驱动在你的机器上编译不成功，不会中断安装，只是该类型数据库暂不可用，其它功能照常。
 
 ### 连数据库套打
 

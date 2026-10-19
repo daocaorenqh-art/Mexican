@@ -74,6 +74,7 @@
     header, .wrap>div:first-child, #pager{display:none !important}
     .wrap{display:block;padding:0}
     .wrap>.panel{border:0;padding:0;background:#fff}
+    #preview{zoom:1 !important}
     .stage{gap:0}
     .preview-area{border:0;padding:0;background:#fff;min-height:0;justify-content:flex-start}
     .label{box-shadow:none;page-break-inside:avoid}
@@ -88,6 +89,8 @@
   <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
     <input type="checkbox" id="showGrid" style="width:auto"> 网格
   </label>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)">
+    缩放<input type="range" id="zoom" min="50" max="200" value="100" style="width:90px"></label>
   <button id="saveBtn" title="把当前标签设计导出为 .json">保存设计</button>
   <button id="loadBtn" title="载入 .json 设计">载入设计</button>
   <input id="designIn" type="file" accept=".json" hidden>
@@ -122,8 +125,12 @@
       <div id="elist"></div>
       <div class="btns">
         <button data-add="text">+ 文字</button>
-        <button data-add="barcode">+ 条码 Code128</button>
-        <button data-add="ean13">+ 条码 EAN-13</button>
+        <button data-add="barcode">+ Code128</button>
+        <button data-add="ean13">+ EAN-13</button>
+        <button data-add="ean8">+ EAN-8</button>
+        <button data-add="upca">+ UPC-A</button>
+        <button data-add="code39">+ Code39</button>
+        <button data-add="itf">+ ITF-25</button>
         <button data-add="qrcode">+ 二维码</button>
         <button data-add="image">+ 图片/Logo</button>
         <button data-add="box">+ 线条/边框</button>
@@ -271,6 +278,55 @@ const EAN13=(()=>{
   return {modules};
 })();
 
+/* ---------- EAN-8 / UPC-A 原创编码（复用 L/R 码） ---------- */
+const EANLR={
+  L:["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"],
+  R:["1110010","1100110","1101100","1000010","1011100","1001110","1010000","1000100","1001000","1110100"]
+};
+const EAN8=(()=>{
+  const {L,R}=EANLR;
+  const ck=d=>{let s=0;for(let i=0;i<7;i++)s+=(+d[i])*(i%2===0?3:1);return (10-s%10)%10;};
+  function modules(raw){let d=String(raw).replace(/\D/g,'');
+    if(d.length===7)d+=ck(d);if(d.length!==8)throw new Error('EAN-8 需要 7 或 8 位数字');
+    let s='101';for(let i=0;i<4;i++)s+=L[+d[i]];s+='01010';for(let i=4;i<8;i++)s+=R[+d[i]];s+='101';
+    return {bits:s,text:d};}
+  return {modules};
+})();
+const UPCA=(()=>{
+  const {L,R}=EANLR;
+  const ck=d=>{let s=0;for(let i=0;i<11;i++)s+=(+d[i])*(i%2===0?3:1);return (10-s%10)%10;};
+  function modules(raw){let d=String(raw).replace(/\D/g,'');
+    if(d.length===11)d+=ck(d);if(d.length!==12)throw new Error('UPC-A 需要 11 或 12 位数字');
+    let s='101';for(let i=0;i<6;i++)s+=L[+d[i]];s+='01010';for(let i=6;i<12;i++)s+=R[+d[i]];s+='101';
+    return {bits:s,text:d};}
+  return {modules};
+})();
+
+/* ---------- Code39 原创编码 ---------- */
+const C39=(()=>{
+  const T={'0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn','A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn','K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn','U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','$':'nwnwnwnnn','/':'nwnwnnnwn','+':'nwnnnwnwn','%':'nnnwnwnwn','*':'nwnnwnwnn'};
+  function modules(raw){const N=1,W=3;const data=String(raw).toUpperCase();
+    const seq=['*',...data,'*'];let s='';
+    seq.forEach((ch,idx)=>{const p=T[ch];if(!p)throw new Error('Code39 不支持字符: '+ch);
+      for(let i=0;i<9;i++)s+=(i%2===0?'1':'0').repeat(p[i]==='w'?W:N);
+      if(idx<seq.length-1)s+='0'.repeat(N);});
+    return {bits:s,text:data};}
+  return {modules};
+})();
+
+/* ---------- ITF-25（交叉 25 码）原创编码 ---------- */
+const ITF=(()=>{
+  const P={'0':'nnwwn','1':'wnnnw','2':'nwnnw','3':'wwnnn','4':'nnwnw','5':'wnwnn','6':'nwwnn','7':'nnnww','8':'wnnwn','9':'nwnwn'};
+  function modules(raw){let d=String(raw).replace(/\D/g,'');if(!d)throw new Error('ITF 需要数字');
+    if(d.length%2)d='0'+d;const N=1,W=3;
+    let s='1'.repeat(N)+'0'.repeat(N)+'1'.repeat(N)+'0'.repeat(N); // 起始 nnnn
+    for(let i=0;i<d.length;i+=2){const a=P[d[i]],b=P[d[i+1]];
+      for(let k=0;k<5;k++){s+='1'.repeat(a[k]==='w'?W:N);s+='0'.repeat(b[k]==='w'?W:N);}}
+    s+='1'.repeat(W)+'0'.repeat(N)+'1'.repeat(N); // 终止 宽条 窄空 窄条
+    return {bits:s,text:d};}
+  return {modules};
+})();
+
 /* ---------- 状态 ---------- */
 let elements=[
   {type:'text',x:3,y:3,size:4,bold:true,content:'{name}'},
@@ -383,27 +439,29 @@ function renderLabel(row){
     const node=document.createElement('div');
     node.className='el';
     node.style.left=(el.x*PXMM)+'px';node.style.top=(el.y*PXMM)+'px';
+    if(el.rot){node.style.transform='rotate('+el.rot+'deg)';node.style.transformOrigin='top left';}
     const text=evalContent(el.content,row);
     try{
       if(el.type==='text'){
         node.textContent=text;
         node.style.fontSize=(el.size*PXMM)+'px';
         node.style.fontWeight=el.bold?'700':'400';
+        if(el.font)node.style.fontFamily=el.font;
+        if(el.align&&el.align!=='left'){node.style.textAlign=el.align;node.style.display='inline-block';}
       }
-      else if(el.type==='barcode'){
-        const modPx=el.module*PXMM;
-        node.appendChild(barsSVG(C128.modules(text),modPx,el.h*PXMM));
-        if(el.showText){const t=document.createElement('div');t.textContent=text;
-          t.style.cssText='text-align:center;font:'+(2.6*PXMM)+'px/1.1 monospace;margin-top:1px;width:100%';
-          node.appendChild(t);}
-      }
-      else if(el.type==='ean13'){
-        const {bits,text:full}=EAN13.modules(text);
-        const modPx=el.module*PXMM;
-        node.appendChild(barsSVG(bits,modPx,el.h*PXMM));
-        if(el.showText){const t=document.createElement('div');t.textContent=full;
-          t.style.cssText='text-align:center;font:'+(2.8*PXMM)+'px/1.1 monospace;letter-spacing:2px;margin-top:1px;width:100%';
-          node.appendChild(t);}
+      else if(['barcode','ean13','ean8','upca','code39','itf'].includes(el.type)){
+        const draw1D=(res,gap)=>{
+          node.appendChild(barsSVG(res.bits,el.module*PXMM,el.h*PXMM));
+          if(el.showText){const t=document.createElement('div');t.textContent=res.text;
+            t.style.cssText='text-align:center;font:'+(2.7*PXMM)+'px/1.1 monospace;'+(gap?'letter-spacing:'+gap+';':'')+'margin-top:1px;width:100%';
+            node.appendChild(t);}
+        };
+        if(el.type==='barcode')     draw1D({bits:C128.modules(text),text});
+        else if(el.type==='ean13')  draw1D(EAN13.modules(text),'2px');
+        else if(el.type==='ean8')   draw1D(EAN8.modules(text),'2px');
+        else if(el.type==='upca')   draw1D(UPCA.modules(text),'1px');
+        else if(el.type==='code39') draw1D(C39.modules(text));
+        else if(el.type==='itf')    draw1D(ITF.modules(text),'1px');
       }
       else if(el.type==='qrcode'){
         const px=el.size*PXMM;
@@ -437,15 +495,20 @@ function render(){
 }
 
 /* ---------- 元素编辑 UI ---------- */
+const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['rot','旋转°','num']];
 const FIELDS={
-  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool']],
-  barcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool']],
-  ean13:[['content','内容(12/13位数字)','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示数字','bool']],
-  qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num']],
-  image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file']],
-  box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool']]
+  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  barcode:BC('内容'),
+  ean13:BC('内容(12/13位数字)'),
+  ean8:BC('内容(7/8位数字)'),
+  upca:BC('内容(11/12位数字)'),
+  code39:BC('内容(字母/数字)'),
+  itf:BC('内容(数字,奇数自动补0)'),
+  qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['rot','旋转°','num']],
+  image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],['rot','旋转°','num']],
+  box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',barcode:'Code128',ean13:'EAN-13',qrcode:'二维码',image:'图片',box:'线条/边框'};
+const TYPENAME={text:'文字',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',image:'图片',box:'线条/边框'};
 
 function renderEditor(){
   const box=$('#elist');box.innerHTML='';
@@ -453,17 +516,20 @@ function renderEditor(){
     const d=document.createElement('div');d.className='elitem'+(idx===sel?' sel':'');
     let h=`<div class="top"><b>${TYPENAME[el.type]}</b><span class="sp"></span>
       <button data-up="${idx}" title="上移">↑</button>
+      <button data-dup="${idx}" title="复制">⧉</button>
       <button data-del="${idx}" title="删除">✕</button></div>`;
-    // 两列排版数值字段，文本/文件单列
+    // 两列排版数值字段，文本/文件/下拉单列
     const fs=FIELDS[el.type];
     let numBuf=[];
     const flush=()=>{if(numBuf.length){h+='<div class="row">'+numBuf.join('')+'</div>';numBuf=[];}};
-    for(const [k,label,t] of fs){
+    for(const f of fs){
+      const k=f[0],label=f[1],t=f[2],opts=f[3];
       if(t==='num'){numBuf.push(`<label class="f"><span>${label}</span><input type="number" step="0.01" data-k="${k}" data-i="${idx}" value="${el[k]??0}"></label>`);
         if(numBuf.length===2)flush();}
       else{flush();
         if(t==='text')h+=`<label class="f"><span>${label}</span><input data-k="${k}" data-i="${idx}" value="${esc(el[k]??'')}"></label>`;
         else if(t==='bool')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}"><option value="1"${el[k]?' selected':''}>是</option><option value="0"${!el[k]?' selected':''}>否</option></select></label>`;
+        else if(t==='sel')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}">`+opts.map(o=>`<option value="${o}"${(el[k]??'')===o?' selected':''}>${o||'默认'}</option>`).join('')+`</select></label>`;
         else if(t==='file')h+=`<label class="f"><span>${label}</span><input type="file" accept="image/*" data-img="${idx}"></label>`;
       }
     }
@@ -475,12 +541,16 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 
 /* ---------- 事件 ---------- */
 const DEFAULTS={
-  text:{type:'text',x:3,y:3,size:4,bold:false,content:'文字'},
-  barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,content:'123456'},
-  ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,content:'690123456789'},
-  qrcode:{type:'qrcode',x:3,y:3,size:15,content:'https://'},
-  image:{type:'image',x:3,y:3,w:15,h:15,src:''},
-  box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false}
+  text:{type:'text',x:3,y:3,size:4,bold:false,align:'left',font:'',rot:0,content:'文字'},
+  barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,rot:0,content:'123456'},
+  ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,rot:0,content:'690123456789'},
+  ean8:{type:'ean8',x:3,y:12,h:14,module:0.33,showText:true,rot:0,content:'1234567'},
+  upca:{type:'upca',x:3,y:12,h:14,module:0.33,showText:true,rot:0,content:'03600029145'},
+  code39:{type:'code39',x:3,y:12,h:12,module:0.3,showText:true,rot:0,content:'CODE39'},
+  itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,rot:0,content:'1234567890'},
+  qrcode:{type:'qrcode',x:3,y:3,size:15,rot:0,content:'https://'},
+  image:{type:'image',x:3,y:3,w:15,h:15,src:'',rot:0},
+  box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0}
 };
 document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
   elements.push(JSON.parse(JSON.stringify(DEFAULTS[b.dataset.add])));
@@ -489,7 +559,7 @@ document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
 $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
-    if(['x','y','size','h','module','w','border'].includes(k))v=parseFloat(v)||0;
+    if(['x','y','size','h','module','w','border','rot'].includes(k))v=parseFloat(v)||0;
     if(['bold','showText','fill'].includes(k))v=v==='1';
     elements[i][k]=v;render();return;}
   const img=e.target.dataset.img;
@@ -498,6 +568,7 @@ $('#elist').addEventListener('input',e=>{
 });
 $('#elist').addEventListener('click',e=>{
   if(e.target.dataset.del!=null){elements.splice(+e.target.dataset.del,1);sel=-1;renderEditor();render();}
+  if(e.target.dataset.dup!=null){const i=+e.target.dataset.dup;elements.splice(i+1,0,JSON.parse(JSON.stringify(elements[i])));sel=i+1;renderEditor();render();}
   if(e.target.dataset.up!=null){const i=+e.target.dataset.up;if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];sel=i-1;renderEditor();render();}}
 });
 
@@ -519,6 +590,7 @@ $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new Fi
 $('#lw').oninput=$('#lh').oninput=$('#tile').oninput=render;
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
+$('#zoom').oninput=()=>{try{$('#preview').style.zoom=(+$('#zoom').value/100);}catch(e){}};
 $('#printBtn').onclick=()=>window.print();
 
 /* ---------- 保存 / 载入设计 ---------- */
@@ -546,19 +618,28 @@ if(window.labelDB&&window.labelDB.isDesktop){
   $('#dbPanel').style.display='';
   const fileBased=()=>['sqlite','access'].includes($('#dbType').value);
   const syncDb=()=>{const f=fileBased();$('#dbFile').style.display=f?'':'none';$('#dbConn').style.display=f?'none':'';};
-  $('#dbType').onchange=syncDb;syncDb();
+  $('#dbType').onchange=syncDb;
   $('#dbPick').onclick=async()=>{const p=await window.labelDB.pickFile($('#dbType').value);if(p)$('#dbPath').value=p;};
   const cfg=()=>{const t=$('#dbType').value;
     if(fileBased())return {type:t,file:$('#dbPath').value};
     return {type:t,host:$('#dbHost').value,port:+$('#dbPort').value||undefined,
       user:$('#dbUser').value,password:$('#dbPass').value,database:$('#dbName').value};};
   const msg=(s,ok)=>{const m=$('#dbMsg');m.textContent=s;m.style.color=ok?'var(--muted)':'#c00';};
+  // 记住上次连接（本机 localStorage）
+  const KEY='labelDB.cfg';
+  const saveCfg=()=>{try{localStorage.setItem(KEY,JSON.stringify({c:cfg(),sql:$('#dbSql').value}));}catch(e){}};
+  const restoreCfg=()=>{try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(!s)return;const c=s.c||{};
+    if(c.type)$('#dbType').value=c.type;if(c.file)$('#dbPath').value=c.file;
+    if(c.host)$('#dbHost').value=c.host;if(c.port)$('#dbPort').value=c.port;
+    if(c.user)$('#dbUser').value=c.user;if(c.password)$('#dbPass').value=c.password;
+    if(c.database)$('#dbName').value=c.database;if(s.sql)$('#dbSql').value=s.sql;}catch(e){}};
   $('#dbTest').onclick=async()=>{msg('测试中…',true);const r=await window.labelDB.test(cfg());
-    msg(r.ok?'连接成功':('连接失败：'+r.error),r.ok);};
+    msg(r.ok?'连接成功':('连接失败：'+r.error),r.ok);if(r.ok)saveCfg();};
   $('#dbRun').onclick=async()=>{msg('查询中…',true);const r=await window.labelDB.query(cfg(),$('#dbSql').value);
     if(!r.ok){msg('查询失败：'+r.error,false);return;}
     if(!r.rows||!r.rows.length){msg('查询无数据',false);return;}
-    rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);};
+    rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);saveCfg();};
+  restoreCfg();syncDb();
 }
 
 /* ---------- 启动 ---------- */
