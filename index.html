@@ -71,8 +71,9 @@
   @media print{
     @page{margin:8mm}
     body{background:#fff}
-    header,.panel,#pager,#noprint{display:none !important}
+    header, .wrap>div:first-child, #pager{display:none !important}
     .wrap{display:block;padding:0}
+    .wrap>.panel{border:0;padding:0;background:#fff}
     .stage{gap:0}
     .preview-area{border:0;padding:0;background:#fff;min-height:0;justify-content:flex-start}
     .label{box-shadow:none;page-break-inside:avoid}
@@ -144,6 +145,39 @@ A1002,香蕉,2.20"></textarea>
         <button id="clearCsv">单张预览</button>
       </div>
       <p class="hint">Excel 文件请在 Excel 里「另存为 CSV」后导入，或直接复制单元格区域粘贴到上面。</p>
+    </div>
+
+    <div class="panel" id="dbPanel" style="display:none">
+      <h2>数据库套打（桌面版）</h2>
+      <label class="f"><span>类型</span>
+        <select id="dbType">
+          <option value="sqlite">SQLite</option>
+          <option value="access">Access (.mdb/.accdb)</option>
+          <option value="mysql">MySQL</option>
+          <option value="postgres">PostgreSQL</option>
+          <option value="mssql">SQL Server</option>
+        </select></label>
+      <div id="dbFile">
+        <label class="f"><span>数据库文件</span>
+          <div style="display:flex;gap:6px"><input id="dbPath" placeholder="选择本地文件…"><button id="dbPick">浏览</button></div></label>
+      </div>
+      <div id="dbConn">
+        <div class="row">
+          <label class="f"><span>主机</span><input id="dbHost" value="localhost"></label>
+          <label class="f"><span>端口</span><input id="dbPort" type="number" placeholder="默认"></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>用户</span><input id="dbUser"></label>
+          <label class="f"><span>密码</span><input id="dbPass" type="password"></label>
+        </div>
+        <label class="f"><span>数据库名</span><input id="dbName"></label>
+      </div>
+      <label class="f"><span>SQL 查询</span><textarea id="dbSql" placeholder="SELECT * FROM products"></textarea></label>
+      <div class="btns">
+        <button id="dbTest">测试连接</button>
+        <button id="dbRun" class="primary">取数生成标签</button>
+      </div>
+      <p class="hint" id="dbMsg"></p>
     </div>
   </div>
 
@@ -262,9 +296,10 @@ function fieldVal(name,row){
 function evalContent(str,row){
   if(str==null)return '';
   str=String(str);
-  if(str.indexOf('[')===-1)
-    return str.replace(/\{([\w.]+)\}/g,(_,k)=>fieldVal(k,row));
-  try{return evalExpr(str,row);}catch(e){return '⚠'+e.message;}
+  if(str[0]==='='){ // 表达式模式
+    try{return evalExpr(str.slice(1),row);}catch(e){return '⚠'+e.message;}
+  }
+  return str.replace(/\{([\w.]+)\}/g,(_,k)=>fieldVal(k,row)); // 简单插值 {字段}
 }
 function evalExpr(src,row){
   let i=0;
@@ -297,14 +332,23 @@ function evalExpr(src,row){
       default:throw new Error('不支持函数 '+fn);
     }
   }
-  const r=expr();return r;
+  const r=expr();skip();
+  if(i<src.length)throw new Error('无法解析: '+src.slice(i));
+  return r;
 }
 function parseData(text){
-  const t=text.trim();if(!t)return null;
-  const lines=t.split(/\r?\n/).filter(l=>l.length);
+  const t=String(text).replace(/\r\n/g,'\n').trim();if(!t)return null;
+  const lines=t.split('\n').filter(l=>l.length);
   if(lines.length<2)return null;
   const sep=lines[0].includes('\t')?'\t':',';
-  const split=l=>l.split(sep).map(s=>s.trim());
+  const split=l=>{ // 支持 "..." 引用与 "" 转义
+    const out=[];let cur='',q=false;
+    for(let i=0;i<l.length;i++){const c=l[i];
+      if(q){ if(c==='"'){ if(l[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+      else { if(c==='"')q=true; else if(c===sep){out.push(cur);cur='';} else cur+=c; }
+    }
+    out.push(cur);return out.map(s=>s.trim());
+  };
   const head=split(lines[0]);
   return lines.slice(1).map(l=>{const c=split(l);const o={};head.forEach((h,i)=>o[h]=c[i]??'');return o;});
 }
@@ -457,11 +501,14 @@ $('#elist').addEventListener('click',e=>{
   if(e.target.dataset.up!=null){const i=+e.target.dataset.up;if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];sel=i-1;renderEditor();render();}}
 });
 
-function refreshFields(){
-  const r=parseData($('#csv').value);const box=$('#fields');box.innerHTML='';
-  if(r&&r.length)Object.keys(r[0]).forEach(f=>{
-    const t=document.createElement('span');t.className='tag';t.textContent='{'+f+'}';
+function showFieldTags(keys){
+  const box=$('#fields');box.innerHTML='';
+  keys.forEach(f=>{const t=document.createElement('span');t.className='tag';t.textContent='{'+f+'}';
     t.title='点击复制';t.onclick=()=>navigator.clipboard?.writeText('{'+f+'}');box.appendChild(t);});
+}
+function refreshFields(){
+  const r=parseData($('#csv').value);
+  showFieldTags(r&&r.length?Object.keys(r[0]):[]);
 }
 $('#csv').addEventListener('input',refreshFields);
 $('#applyCsv').onclick=()=>{rows=parseData($('#csv').value);if(!rows){alert('需要至少表头 + 一行数据');return;}render();};
@@ -493,6 +540,26 @@ $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new 
 $('#themeBtn').onclick=()=>{const r=document.documentElement;
   const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
   r.setAttribute('data-theme',cur==='dark'?'light':'dark');};
+
+/* ---------- 数据库套打（仅桌面版，window.labelDB 存在时） ---------- */
+if(window.labelDB&&window.labelDB.isDesktop){
+  $('#dbPanel').style.display='';
+  const fileBased=()=>['sqlite','access'].includes($('#dbType').value);
+  const syncDb=()=>{const f=fileBased();$('#dbFile').style.display=f?'':'none';$('#dbConn').style.display=f?'none':'';};
+  $('#dbType').onchange=syncDb;syncDb();
+  $('#dbPick').onclick=async()=>{const p=await window.labelDB.pickFile($('#dbType').value);if(p)$('#dbPath').value=p;};
+  const cfg=()=>{const t=$('#dbType').value;
+    if(fileBased())return {type:t,file:$('#dbPath').value};
+    return {type:t,host:$('#dbHost').value,port:+$('#dbPort').value||undefined,
+      user:$('#dbUser').value,password:$('#dbPass').value,database:$('#dbName').value};};
+  const msg=(s,ok)=>{const m=$('#dbMsg');m.textContent=s;m.style.color=ok?'var(--muted)':'#c00';};
+  $('#dbTest').onclick=async()=>{msg('测试中…',true);const r=await window.labelDB.test(cfg());
+    msg(r.ok?'连接成功':('连接失败：'+r.error),r.ok);};
+  $('#dbRun').onclick=async()=>{msg('查询中…',true);const r=await window.labelDB.query(cfg(),$('#dbSql').value);
+    if(!r.ok){msg('查询失败：'+r.error,false);return;}
+    if(!r.rows||!r.rows.length){msg('查询无数据',false);return;}
+    rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);};
+}
 
 /* ---------- 启动 ---------- */
 renderEditor();render();
