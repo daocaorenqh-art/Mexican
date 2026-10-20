@@ -41,6 +41,16 @@ jobs:
           }
           node -e "const a=require('@electron/asar');const l=a.listPackage('dist/win-unpacked/resources/app.asar').join('\n');for(const m of ['mysql2','pg','mssql']){if(!new RegExp('node_modules[\\\\/]'+m+'[\\\\/]package\\.json').test(l)){console.error('安装包缺少驱动：'+m);process.exit(1)}console.log('OK  '+m)}"
 
+      # 真机启动自检：启动打包好的程序，检查窗口/接口/ZPL/网络直发/各数据库驱动，有一项不通过就不出包
+      - name: Smoke test packaged app
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/win-unpacked -Filter *.exe | Select-Object -First 1
+          $out = Join-Path $PWD 'smoke.json'
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test', "--smoke-out=$out" -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out -Encoding utf8 } else { Write-Error '自检没有输出结果'; exit 1 }
+          if ($p.ExitCode -ne 0) { Write-Error "启动自检失败（退出码 $($p.ExitCode)）"; exit 1 }
+
       # 把安装包作为构建产物上传（在 Actions 运行页可下载）
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

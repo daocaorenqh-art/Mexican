@@ -80,14 +80,14 @@
 
 ### 方式一：下载已打包好的安装程序（推荐）
 
-仓库已配置 GitHub Actions 自动在 Windows 上打包：
+仓库已配置 GitHub Actions 自动在 Windows 上打包（Electron 44）。每次打包前跑全部自检，打包后还会**真机启动安装版**做一次自检（窗口、ZPL 引擎、网络直发、5 种数据库驱动），任何一项不通过都不出包：
 
 - 在 GitHub 仓库页 **Actions → Build Windows Installer**，手动运行（Run workflow），完成后在该次运行页底部下载 `label-print-tool-windows` 产物，解压得到 `.exe` 安装程序。
 - 或推一个 `v` 开头的标签（如 `git tag v0.2.0 && git push --tags`），会自动在 **Releases** 页发布安装包，直接下载。
 
 ### 方式二：在你的 Windows 电脑上自己构建
 
-> 需先装 [Node.js](https://nodejs.org)（建议 18+）。
+> 需先装 [Node.js](https://nodejs.org)（建议 22+）。
 
 ```bat
 npm install

@@ -2,6 +2,7 @@
 /* Electron 主进程：开窗口 + 通过 IPC 处理数据库请求。
    渲染进程（index.html）不直接碰数据库，只通过 preload 暴露的安全接口调用。 */
 const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const datasource = require('./src/datasource');
 const rawprint = require('./src/rawprint');
@@ -23,11 +24,31 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  createWindow();
+  const win = createWindow();
+  if (process.argv.includes('--smoke-test')) smokeTest(win);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// 启动自检：跑完 src/smoke.js 里的检查，结果写到 --smoke-out 指定的文件（没指定则打到控制台），按结果退出
+function smokeTest(win) {
+  const outArg = process.argv.find(a => a.startsWith('--smoke-out='));
+  const pageErrors = [];
+  win.webContents.on('console-message', (e, level, message) => {
+    const lv = e && e.level !== undefined ? e.level : level;          // 新版 Electron 传 details 对象
+    if (lv === 'error' || lv === 3) pageErrors.push(e && e.message !== undefined ? e.message : message);
+  });
+  const finish = (results) => {
+    const text = JSON.stringify(results, null, 2);
+    if (outArg) fs.writeFileSync(outArg.slice('--smoke-out='.length), text, 'utf8'); else console.log(text);
+    app.exit(results.length && results.every(r => r.ok) ? 0 : 1);
+  };
+  setTimeout(() => finish([{ name: '超时', ok: false, detail: '60 秒内未完成' }]), 60000).unref();
+  win.webContents.once('did-finish-load', () => {
+    require('./src/smoke').run(win, pageErrors).then(finish, (e) => finish([{ name: '自检', ok: false, detail: String(e) }]));
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

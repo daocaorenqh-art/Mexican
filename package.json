@@ -1,6 +1,6 @@
 {
   "name": "label-print-tool",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "本地安装运行的标签/条码设计与批量打印客户端，支持多种数据库套打",
   "main": "main.js",
   "scripts": {
@@ -12,18 +12,18 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "electron": "33.2.0",
-    "electron-builder": "25.1.8",
+    "electron": "44.9.1",
+    "electron-builder": "26.15.3",
     "jsqr": "1.4.0",
     "@zxing/library": "0.23.0"
   },
   "dependencies": {},
   "optionalDependencies": {
-    "better-sqlite3": "12.11.1",
-    "mysql2": "3.11.5",
-    "pg": "8.13.1",
-    "mssql": "11.0.1",
-    "odbc": "2.4.9"
+    "better-sqlite3": "13.0.3",
+    "mysql2": "3.24.6",
+    "pg": "8.23.1",
+    "mssql": "11.0.2",
+    "odbc": "2.6.0"
   },
   "build": {
     "appId": "com.local.labelprint",
