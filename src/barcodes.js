@@ -428,9 +428,125 @@ const CODABAR=(()=>{
   return {modules};
 })();
 
+/* ---------- PDF417（ISO/IEC 15438）原创编码 ----------
+   数据：文字压缩（大写 / 小写 / 混合 / 标点四个子模式）、≥13 位连续数字用数字压缩、其余按字节压缩；
+   含非 ASCII 字符时整段按 UTF-8 并加 ECI 26，扫码枪读出原文（含中文）。
+   纠错：GF(929) 上的 Reed-Solomon，等级 0–8（默认按数据量取标准推荐等级）。
+   码字图样表是标准数据（3 簇 × 929 个，见 tools/gen-pdf417-table.cjs 的来源说明），每个码字 3 个 base32 字符。
+   输出 {w,h,modules}：每行高 3 个模块（标准要求行高 ≥ 3X）。 */
+const PDF417_TABLE='qn0tbouluqjgt9sukvl30qhol1ga10l0oa0gln0qrotduljgqpstcvb30lhob1gbn0lroqtubjglpsqsvbholoubroltubpslsvbtuuntqbgt5suivkj0q9ot4ukhgq8s910kgoq8e90gkgc908krgqdst6v9j0kpoqcu9hgkosqcf9gokoe9rgktsqev9poksu9osksf9tskuv9su9sfkb0q5ot2uk9gq4st2f8h0k8oq4e8ggk8c8g88g48r0kdoq6u8pgkcsq6f8ookce8oc8o68tokeu8sskef8se8uuk5gq2st1f890k4oq2e88gk4cq27888k46884k438dgk6sq3f8cok6e8cck678c68c3k7f8e7850k2oq1e84gk2cq17848k26844k2384286o86c86682gq0nk16k13821pbgslsuavij0p9oskuihgp8sskf510igo50girgpdssmv5j0ipopcu5hgios5go5gc5rgitspev5poisu5os5oe5tsiuv5su5uvrb0tlouqur9gtksuqfmh0r8otkemggr8ctk7mg8r86ib0p5osiumr0i9gp4ssifmpgrcstmfdh04ggi8cp47dggmocdg84r0idop6udr04pgicsp6fdpgmssrefdoo4ocdoc4toieudto4ssiefdssmufdse4uuduu4ufdufr5gtisupfm90r4otiem8gr4cti7m88r46m84m82i5gp2sshfmdgi4op2ecp048gr6ep27cog488i46co8mc6i434824dgi6sp3fctg4coi6ecsomeei67csc4c64c34esi7fcus4eecue4e7cu7cvfm50r2othem4gr2cth7m48r26m44r23m42m41450i2op1ecd044gi2cp17ccgm6cr37cc8444i23cc4m63cc246oi3eceo46ci37cecm77ce6463ce3cfecf7m2gr1ctgnm28r16m24r13m22m2142gi1cp0nc6g428i16c68m36i13c64422c6242143cc7cc76c73r0mr0jm11i0m414c34c32c31hb0olosauh9goks2h0h8ooke2ggh8c2g82g42r0hdoomu2pghcsomf2oohce2oc2o62toheu2sshef2se2uu2ufplgsqsudfj90pkosqej8gpkcsq7j88pk6j84pk3h5goiss9fjdgh4ooie6p028gpmeoi76ogjcch466o82846o42dgh6sojf6tg2copnf6sojeeh676sc2c66s62esh7f6us2ee6ue2e72ff6vfrl0tqouterkgtqcut7rk8tq6rk4tq3rk2j50piospend0j4gtresp7ncgrmctr7nc8j44pi3nc4rm3j41250h2oohe6d024gh2coh7et06cgj6cpj7esgnecrn7h23es86c4j63es424126oh3e6eo26ch37euo6ecj77eucnf72636e327e6fe277eve6f7rigtpcusnri8tp6ri4tp3ri2ri1j2gphcsonn6gj28tpnn68rj6ph3n64j22n62j21n6122gh1cogn66g228h16eeg668j36h13ee8n76222ee466222166123ch1n67c236efc676233ef667323nefnrh8tomrh4tojrh2rh1j18pgmn38j14pgjn34rhjn32j11n31218h0m638214h0je78634j1je74n3j211e72631e7163me7me7jtobrghpgbj0ij0h20k61ke3k20h61hglg190gko18ggkcoa7188gk6184gk31dggmsobf1cogme1ccgm71c61c31esgnf1ee1e71ffhl0oqosdehkgoqchk8oq6hk4oq3hk2150gioo9e3d014goreo973cghmcor73c8144gi33c4hm314116ogje3eo16cgj73echn73e616317e3fe1773f7pqgstcuenpq8st6pq4st3pq2pq1higopcjmghi8op6jm8pr6op3jm4hi2jm2hi1jm112gghc36g128opn7eg368hj6gh37e8jn61227e436212136113cghn37c1367fc3761337f637313n37n7fntt8uumtt4uujtt2tt1pp8ssmrr8ttmssjrr4ttjrr2pp1rr1hh8oomjj8hh4oojnn8jj4ppjnn4rrjhh1nn2jj1nn1118ggm338114ggj778334hhjff8774jjj111ff4nnj331ff211m33m11j77m33jffm77jffjtskuubtsitshpokssbrpktsrrpipohrphhgkoobjhkhginjkjhihghnjijhhnjh10kggb31khgr73k31i10hf7k73i31hf7i73hf7h31rf7rts9roqropjgqnhqnhp30q71qf3qf3p0l00kggac0k80k40k20mo0mc0m60m30ne0n7gqggq8od6gq4od3gq2gq10igg9c1mggrcg961m8gr61m4gr31m20i11m10jcg9n1ncgrn1n60j31n30jn1nnot8ot4ot2ot1gp8hr8otmocjhr4otjhr2gp1hr10h81j80h4g8j3n81j40h23n41j20h13n21j10hm1jm0hj3nm1jj3njsuksuisuhoskptksurptioshpthgokocbhpkosrjrkhpigohjrihphjrh0gkg8b1hkgor3jk1hi0gh7nk3ji1hh7ni3jh0gr1hr3jr7nruvauv9suatuqsu9tuposapsqos9rtqpsprtpgoahoqgo9jpqhopnrqulgvast90ukovaet8gukcva7t88uk6t84uk3t82tdgumsvbfqp0tcoumeqogtccum7qo8tc6qo4tc3qo2qtgtesunflp0qsoteelogqscte7lo8qs6lo4qs3lo2ltgqustffbp0lsoqueboglscqu7bo8ls6bo4ls3btglusqvfbsoluebsclu7bs6buslvfbuebu7t50uiov9et4guicv97t48ui6t44ui3t42t41qd0t6oujeqcgt6cuj7qc8t66qc4t63qc2qc1kt0qeot7eksgqect77ks8qe6ks4qe3ks2ks19t0kuoqfe9sgkucqf79s8ku69s4ku39s29uokve9uckv79u69u39ve9v7t2guhcv8nt28uh6t24uh3t22t21q6gt3cuhnq68t36q64t33q62q61kegq7ct3nke8q76ke4q73ke2ke18ugkfcq7n8u8kf68u4kf38u28u18vckfn8v68v38vnt18ugmt14ugjt12t11q38t1mq34t1jq32q31k78q3mk74q3jk72k718f8k7m8f4k7j8f28f18fm8fjt0kugbt0it0hq1kt0rq1iq1hk3kq1rk3ik3h87kk3r87i87ht0at09q0qq0pk1qk1psl0uaov5eskguacv57sk8ua6sk4ua3sk2sk1pd0smoubepcgsmcub7pc8sm6pc4sm3pc2pc1it0peosneisgpecsn7is8pe6is4pe3is2is15t0iuopfe5sgiucpf75s8iu65s4iu35s25uoive5uciv75u65u35ve5v7uqgvdcdfouq8vd6d7suq4vd3d3uuq2uq1sigu9cv4ntmgsi8vdntm8ur6u93tm4si2tm2si1tm1p6gsjcu9nregp68sj6re8tn6sj3re4p62re2p61re1iegp7csjnmugie8p76mu8rf6p73mu4ie2mu2ie1mu14ugifcp7ndug4u8if6du8mv6if3du44u2du24u14vcifndvc4v6dv64v3dv34vnup8vcmcnsup4vcjcjuup2chvup1sh8u8mtj8sh4u8jtj4upjtj2sh1tj1p38shmr78p34shjr74tjjr72p31r71i78p3mmf8i74p3jmf4r7jmf2i71mf14f8i7mcv84f4i7jcv4mfjcv24f1cv14fmcvm4fjcvjuokvcbcbuuoic9vuohsgku8bthkuorthisghthhp1ksgrr3kp1ir3ip1hr3hi3kp1rm7kr3rm7ii3hm7h47ki3rcfk47icfi47hcfh47rcfruoac5vuo9sgatgqsg9tgpp0qr1qp0pr1pi1qm3qi1pm3p43qc7q43pc7puo5sg5tgdp0dr0ti0tm1tsagu5cv2nsa8u56sa4u53sa2sa1omgsbcu5nom8sb6om4sb3om2om1hegoncsbnhe8on6he4on3he2he12ughfconn2u8hf62u4hf32u22u12vchfn2v62v32vnud8v6m6nsud4v6j6juud26hvud1s98u4msr8s94u4jsr4udjsr2s91sr1oj8s9mpn8oj4s9jpn4srjpn2oj1pn1h78ojmjf8h74ojjjf4pnjjf2h71jf12f8h7m6v82f4h7j6v4jfj6v22f16v12fm6vm2fj6vjvekenonbuveiejsn9vvehehuegvuckv6b6buutkvereru69vutiuchepvuths8ku4bspks8itrkutrs8htrisphtrhohks8rpjkohirnkpjiohhrnipjhrnhh3kohrj7kh3infkj7ih3hnfij7hnfh27kh3r6fk27ievk6fi27hevi6fhevh27r6frveaebsn5vve9e9ue8vuca65vusquc9edvusps8asoqs89tpqsoptppogqphqogprjqphprjph1qj3qh1pn7qj3pn7p23q67q23pefq67pefpve5e5ue4vuc5usds85sodtotogdpgtrhth0tj1tn3t21t63te7te2vs58u2ms54u2js52s51ob8s5mob4s5job2ob1gn8obmgn4objgn2gn11f8gnm1f4gnj1f21f11fm1fju6kv3b3buu6i39vu6hs4ku2bsdks4isdis4hsdho9ks4rorko9iorio9horhgjko9rhnkgjihnigjhhnh17kgjr3fk17i3fi17h3fh17r3frv7a7bsjlvv7979u78vu6a35vuequ697dvueps4ascqs49stqscpstpo8qopqo8pprqoppprpghqhjqghpjnqhjpjnp13q37q13p7fq37p7fpfbonluf9snkvf8uf8fv7575uvfdfdu74vfcvu65ueduuts45scdsstttto8dootpptrrtggthhtjjtnnt11t33t77tf5snivf4uf4f72vf6vf2uf2ff1fs2ks2is2ho5ks2ro5io5hgbko5rgbigbh0nkgbr0ni0nh0nru3a1lvu39s2as6qs29s6po4qodqo4podpg9qgrqg9pgrp0jq1nq0jp1npv3l3lu3kvu35u7ds25s6dseto4doctottg8tgpthrt0ht1jt3nt7lsjqv7ku7kf3iv7mvflonqufksnqffkefk77iufmu7iffmffisnpffiefi77hffjffhefh7fgno2qo2pg5qg5p0bq0bps3do2do6tg4tgdt09t0rt1qv3qu3qf7qsjtf7qe7q73pf7rffqontefqcnt7fq6fq37pefre7p7fr7fpcnsnfp6fp37onfpnfomfoj1tf3te3t77tcjun7t67t33sn7tn7sm7sjlfgqnsaf0l7oqjua7gl3sqhva3ol1ua1svb8bfglnsvb4b7oljuvb2b3slhvvb1b1uun8vbmbnsun4vbjbjuun2bhvun1tf8unmtf4unjtf2tf1qv8tfmqv4tfjqv2qv1lv8qvmlv4qvjlv29f0knoqbu97gkjsq9v93okhu91skgv90uv9k9nokruv9i9jskpvv9h9hu9gvujkv9r9ruuji9pvujht7kujrt7it7hqfkt7rqfiqfhkvkqfrkvikvh8ngkbsq5v8jok9u8hsk8v8gu8gfv8q8rskdvv8p8pu8ovuhq8tvuhpt3qt3pq7qq7pkfqkfp8bok5u89sk4v88u88fv8d8du8cvugtt1tq3t85sk2v84u84f86v82u82f5f0inopbu57gijsp9v53oihu51sigv50uv5k5noiruv5i5jsipvv5h5hu5gvubkv5r5ruubi5pvubhsnkubrsnisnhpfksnrpfipfhivkpfriviivhmngrbstlvd70mjor9ud3gmhsr8vd1omgud0smgfd0e4ngibsp5vdng4joi9udjompui8vdhs4gudgu4gfdgfv4q4rsidvvdqv4pdrs4puvdpdpu4ovdovu9q4tvurqu9pdtvurpsjqtnqsjptnpp7qrfqp7prfpifqifpcn0mbor5ucjgm9sr4vchom8ucgsm8fcgecg74boi5ucro49si4vcpsmcvcou48fcofv4d4duvctctu4cvcsvu8tuptshttjtp3tr7ti7tcbgm5sr2vc9om4uc8sm4fc8ec8745si2vcds44uccu44fccf46vcevc5om2uc4sm2fc4ec4742uc6u42fc6fc2sm1fc2ec2741fc3fc1ec172nghbsolv2joh9u2hsh8v2gu2gfv2q2rshdvv2p2pu2ovu5q2tvu5psbqsbponqonphfqhfp6n0jboplu6jgj9spkv6hoj8u6gsj8f6ge6g72boh5u6ro29sh4v6psjcv6ou28f6ofv2d2duv6t6tu2cv6svu4tudts9tsrtojtpnth7tnbgrlstqvej0n9orkuehgn8srkfegon8eegcn87eg66bgj5spiverg69oj4ueponcuj4feos68eeoe687eo725sh2v6ds24uets6cu24fesu6cfesf26v6eveuveb0n5oriue9gn4srife8on4ee8cn47e86e8365oj2uedo64sj2fecsn6fece647ec722u66u22feeu66feefe5gn2srhfe4on2ee4cn27e46e4362sj1fe6s62ee6e627e6721f63fe7fe2on1ee2cn17e26e2361ee3e617e37e1cn0ne16e1360ne1ne0me0j1boglu19sgkv18u18f1du1cvu2ts5tobtgnt3bghlsoqv39ohku38shkf38e38715sgiv3ds14u3cu14f3cf16v3ev7b0jlopqu79gjkspqf78ojke78cjk778678335ohiu7do34shif7cs34e7ce3477c712u36u12f7eu36f7efnlgrqsttff90nkorqef8gnkcrq7f88nk6f84nk3f8275gjisppffdg74ojiefconmeji7fcc746fc6743fc332shhf76s32efes76e327fee767fe711f33f77fffff50niorpef4gnicrp7f48ni6f44ni3f42f4172ojhef6o72cjh7f6cnj7f66723f6331e73e317f7e737f77f2gnhcronf28nh6f24nh3f22f2171cjgnf3c716f36713f3330n71nf3nf18ngmf14ngjf12f1170mf1m70jf1jf0kngbf0if0h70bf0r0lsgav0ku0kf0mv1logqu1ksgqf1ke1k70iu1mu0if1mf3lghqsotf3kohqe3kchq73k63k31isgpf3ms1ie3me1i73m70hf1jf3nf7l0jqopte7kgjqcpt77k8jq67k4jq37k27k13iohpe7mo3ichp77mcjr77m63i37m31he3je1h77ne3j77n7nqgrtctunnq8rt6nq4rt3nq2nq17igjpcpsnfmg7i8jp6fm8nr6jp3fm47i2fm27i1fm13hchon7jc3h6fnc7j63h3fn67j3fn31gn3hn7jnfnnnp8rsmnp4rsjnp2np17h8jomfj87h4jojfj4npjfj27h1fj13gm7hm3gjfjm7hjfjjnokrsbnoinoh7gkjobfhk7gifhi7ghfhh3gb7grfhrnoano97gafgq7g9fgp0au0af0qsgdf0qe0q709f0rf1qogte1qcgt71q61q30pe1re0p71r73qghtcoun3q8ht63q4ht33q23q11pcgsn3rchtn3r61p33r30on1pn3rnjt8pumjt4pujjt2jt13p8hsm7r8jtmhsj7r43p27r23p17r11om3pm1oj7rm3pj7rjruktvbruiruhjskpubntkjsintijshnth3okhsb7pk3oifrk7pi3ohfri7phfrh1ob3or7prfrrruaru9jsansqjs9nsp3oa7oq3o9fpq7opfppru5js5nsd3o57odfot0de0d70tcgen0t60t30cn0tn1t8gum1t4guj1t21t10sm1tm0sj1tjhukovbhuihuh1skgub3tkhur3ti1sh3th0sb1sr3trpvapv9huajuqhu9jup1sa3sq1s97tq3sp7tppv5hu5jud1s53sd7st0em0ej0ukgfb0ui0uh0eb0urgvagv90ua1uq0u91upovl';
+const PDF417=(()=>{
+  const TXT=0,BYTE=1,NUM=2, ALPHA=0,LOWER=1,MIXED=2,PUNCT=3;
+  const MIX=[48,49,50,51,52,53,54,55,56,57,38,13,9,44,58,35,45,46,36,47,43,37,42,61,94,-1,32];
+  const PUN=[59,60,62,64,91,92,93,95,96,126,33,13,9,44,58,10,45,46,36,47,34,124,42,40,41,63,123,125,39];
+  const mixIdx=new Map(MIX.map((c,i)=>[c,i]).filter(([c])=>c>=0)),punIdx=new Map(PUN.map((c,i)=>[c,i]));
+  const isUp=c=>c===32||(c>=65&&c<=90), isLow=c=>c===32||(c>=97&&c<=122);
+  const isText=c=>c===9||c===10||c===13||(c>=32&&c<=126);
+  let PAT=null;
+  const pattern=(k,cw)=>{if(!PAT){PAT=[[],[],[]];for(let k2=0;k2<3;k2++)for(let i=0;i<929;i++)
+      PAT[k2][i]=(1<<16)|(parseInt(PDF417_TABLE.substr((k2*929+i)*3,3),32)<<1);}
+    return PAT[k][cw];};
+  // 文字压缩：先得到 0–29 的子码，再两两合成一个码字
+  function text(b,from,to,sub,out){const t=[];
+    for(let i=from;i<to;){const c=b[i];
+      if(sub===ALPHA){
+        if(isUp(c)){t.push(c===32?26:c-65);i++;}
+        else if(isLow(c)){sub=LOWER;t.push(27);}
+        else if(mixIdx.has(c)){sub=MIXED;t.push(28);}
+        else {t.push(29,punIdx.get(c));i++;}}
+      else if(sub===LOWER){
+        if(isLow(c)){t.push(c===32?26:c-97);i++;}
+        else if(isUp(c)){t.push(27,c-65);i++;}
+        else if(mixIdx.has(c)){sub=MIXED;t.push(28);}
+        else {t.push(29,punIdx.get(c));i++;}}
+      else if(sub===MIXED){
+        if(mixIdx.has(c)){t.push(mixIdx.get(c));i++;}
+        else if(isUp(c)){sub=ALPHA;t.push(28);}
+        else if(isLow(c)){sub=LOWER;t.push(27);}
+        else if(i+1<to&&punIdx.has(b[i+1])){sub=PUNCT;t.push(25);}
+        else {t.push(29,punIdx.get(c));i++;}}
+      else {
+        if(punIdx.has(c)){t.push(punIdx.get(c));i++;}
+        else {sub=ALPHA;t.push(29);}}
+    }
+    for(let i=0;i<t.length;i+=2)out.push(t[i]*30+(i+1<t.length?t[i+1]:29));
+    return sub;}
+  // 字节压缩：每 6 字节 → 5 个码字（48 位按 900 进制），余下的字节一个一个
+  function bytes(b,from,to,out){const n=to-from;out.push(n%6===0?924:901);let i=from;
+    for(;i+6<=to;i+=6){let v=0;for(let j=0;j<6;j++)v=v*256+b[i+j];
+      const g=[];for(let j=0;j<5;j++){g.unshift(v%900);v=Math.floor(v/900);}out.push(...g);}
+    for(;i<to;i++)out.push(b[i]);}
+  // 数字压缩：每 44 位一组，前面加 1 后按 900 进制
+  function numeric(b,from,to,out){
+    for(let i=from;i<to;i+=44){const e=Math.min(to,i+44);let v=BigInt('1'+String.fromCharCode(...b.slice(i,e)));
+      const g=[];while(v>0n){g.unshift(Number(v%900n));v/=900n;}out.push(...g);}}
+  const digitRun=(b,p)=>{let n=0;while(p+n<b.length&&b[p+n]>=48&&b[p+n]<=57)n++;return n;};
+  function textRun(b,p){let n=0;
+    while(p+n<b.length&&isText(b[p+n])){const d=digitRun(b,p+n);if(d>=13)break;n+=Math.max(1,d);}
+    return n;}
+  function binRun(b,p){let n=0;
+    while(p+n<b.length){if(digitRun(b,p+n)>=13)break;let t=0;while(p+n+t<b.length&&isText(b[p+n+t])&&t<5)t++;if(t>=5)break;n++;}
+    return n;}
+  function highLevel(str){
+    const b=[...new TextEncoder().encode(String(str))],out=[];
+    if(b.some(c=>c>127))out.push(927,26);   // ECI 26 = UTF-8
+    let mode=TXT,sub=ALPHA;
+    for(let p=0;p<b.length;){
+      const d=digitRun(b,p);
+      if(d>=13){out.push(902);mode=NUM;sub=ALPHA;numeric(b,p,p+d,out);p+=d;continue;}
+      const t=textRun(b,p);
+      if(t>=5||(t>0&&p+t===b.length)){if(mode!==TXT){out.push(900);mode=TXT;sub=ALPHA;}sub=text(b,p,p+t,sub,out);p+=t;continue;}
+      const n=Math.max(1,binRun(b,p));
+      if(n===1&&mode===TXT)out.push(913,b[p]);
+      else {bytes(b,p,p+n,out);mode=BYTE;sub=ALPHA;}
+      p+=n;}
+    return out;}
+  // 纠错码：生成多项式 Π(x − 3^i)，i=1..2^(L+1)
+  const genCache={};
+  function generator(k){if(genCache[k])return genCache[k];let g=[1];let a=1;
+    for(let i=1;i<=k;i++){a=a*3%929;const ng=new Array(g.length+1).fill(0);
+      for(let j=0;j<g.length;j++){ng[j+1]=(ng[j+1]+g[j])%929;ng[j]=(ng[j]+(929-a)*g[j])%929;}g=ng;}
+    return genCache[k]=g.slice(0,k);}   // 升幂，去掉首一项
+  function ecc(data,level){const k=2<<level,c=generator(k),e=new Array(k).fill(0);
+    for(const d of data){const t1=(d+e[k-1])%929;
+      for(let j=k-1;j>=1;j--)e[j]=(e[j-1]+929-(t1*c[j])%929)%929;
+      e[0]=(929-(t1*c[0])%929)%929;}
+    return e.map(v=>v?929-v:0).reverse();}
+  const autoLevel=n=>n<=40?2:n<=160?3:n<=320?4:5;
+  function encode(str,opt){opt=opt||{};
+    const data=highLevel(str);
+    let level=opt.level===''||opt.level==null||isNaN(+opt.level)?autoLevel(data.length+1):Math.max(0,Math.min(8,Math.floor(+opt.level)));
+    let k=2<<level;
+    if(data.length+1+k>928){if(opt.level===''||opt.level==null||isNaN(+opt.level))while(level>0&&data.length+1+(2<<level)>928)level--;k=2<<level;}
+    if(data.length+1+k>928)throw new Error('PDF417 内容太长（'+(data.length+1)+' 个数据码字，上限 '+(928-k)+'）');
+    const n=data.length+1+k;
+    // 列数：指定则用；否则选宽高比最接近 3:1 的（宽 17c+69 模块，高 3 行×行数）
+    let cols=Math.floor(+opt.cols||0),rows;
+    if(cols>0){cols=Math.min(30,cols);rows=Math.max(3,Math.ceil(n/cols));
+      if(rows>90)throw new Error('PDF417 列数 '+cols+' 时需要 '+rows+' 行，超过 90 行；请加大列数');}
+    else {let best=null;
+      for(let c=1;c<=30;c++){const r=Math.max(3,Math.ceil(n/c));if(r>90)continue;
+        const ratio=(17*c+69)/(3*r),score=Math.abs(Math.log(ratio/3))+(r*c-n)*0.002;
+        if(!best||score<best.score)best={c,r,score};}
+      cols=best.c;rows=best.r;}
+    const pads=rows*cols-n,cw=[data.length+1+pads,...data,...new Array(pads).fill(900)];
+    const all=cw.concat(ecc(cw,level));
+    const START=0x1FEA8,STOP=0x3FA29,W=17*cols+69,RH=3,M=[];
+    for(let y=0;y<rows;y++){const k3=y%3,b=Math.floor(y/3)*30,
+        rI=Math.floor((rows-1)/3),lI=level*3+(rows-1)%3,cI=cols-1;
+      const L=b+(k3===0?rI:k3===1?lI:cI),R=b+(k3===0?cI:k3===1?rI:lI);
+      const row=[];const put=(v,nb)=>{for(let i=nb-1;i>=0;i--)row.push(((v>>i)&1)===1);};
+      put(START,17);put(pattern(k3,L),17);
+      for(let x=0;x<cols;x++)put(pattern(k3,all[y*cols+x]),17);
+      put(pattern(k3,R),17);put(STOP,18);
+      for(let r=0;r<RH;r++)M.push(r?row.slice():row);}
+    return {w:W,h:rows*RH,size:W,modules:M,rows,cols,level};}
+  return {encode,highLevel,ecc};
+})();
+
 // 统一入口：一维码类型 → {bits,text}；预览、预检、ZPL 共用，保证三处数据一致
 const BARCODE_1D=['barcode','gs1128','ean13','ean8','upca','upce','code39','code93','codabar','itf'];
-const BARCODE_2D=['qrcode','datamatrix','gs1dm'];
+const BARCODE_2D=['qrcode','datamatrix','gs1dm','pdf417'];
 function encode1D(type,text){
   switch(type){
     case 'barcode':if(String(text)==='')throw new Error('Code128 内容为空');return {bits:C128.modules(String(text)),text:String(text)};
@@ -446,13 +562,14 @@ function encode1D(type,text){
   }
   throw new Error('未知条码类型 '+type);
 }
-// 二维码：{size, modules}
-function encode2D(type,text,ecl){
+// 二维码：{size, modules}；PDF417 是长方形，另给 {w, h}（其余码制 w = h = size）
+function encode2D(type,text,ecl,cols){
   if(type==='qrcode')return Codes2D.encodeQR(text||' ',ecl||'M');
   if(type==='datamatrix')return Codes2D.encodeDM(text||' ');
   if(type==='gs1dm')return Codes2D.encodeDM(GS1.data(GS1.parse(text)),{gs1:true});
+  if(type==='pdf417'){if(String(text)==='')throw new Error('PDF417 内容为空');return PDF417.encode(text,{level:ecl,cols});}
   throw new Error('未知二维码类型 '+type);
 }
-const api={Codes2D,C128,EAN13,EAN8,UPCA,C39,ITF,UPCE,C93,CODABAR,GS1,BARCODE_1D,BARCODE_2D,encode1D,encode2D};
+const api={Codes2D,PDF417,C128,EAN13,EAN8,UPCA,C39,ITF,UPCE,C93,CODABAR,GS1,BARCODE_1D,BARCODE_2D,encode1D,encode2D};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else Object.assign(root,api);
 })(typeof window!=='undefined'?window:globalThis);

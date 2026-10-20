@@ -25,8 +25,9 @@ const CASES=[
   ['gs1128','(01)06925253841665(10)B26','01069252538416651' + '0B26',0.25],['upce','0123456','01234565',0.33],
   ['code93','CODE93-X','CODE93-X',0.25],['codabar','A123456B','A123456B',0.3],
   ['gs1dm','(01)06925253841665(17)271231(10)B26','01069252538416651727123110B26',12],
+  ['pdf417','合格证 FZ075885L-01110 零售价 558.00','合格证 FZ075885L-01110 零售价 558.00',40],['pdf417','SN-0001 6925253841665123456','SN-0001 6925253841665123456',34],
 ];
-const readers={qrcode:()=>new Z.QRCodeReader(),datamatrix:()=>new Z.DataMatrixReader(),gs1dm:()=>new Z.DataMatrixReader()};
+const readers={qrcode:()=>new Z.QRCodeReader(),datamatrix:()=>new Z.DataMatrixReader(),gs1dm:()=>new Z.DataMatrixReader(),pdf417:()=>new Z.PDF417Reader()};
 // 模拟扫码：裁出码区（含静区），转回正向后再扫；真实扫码枪各方向都能读
 let expectOf=null;
 function decode(png,type,rot){
@@ -64,7 +65,7 @@ function decode(png,type,rot){
 for(const dpi of [203,300])for(const rot of [0,90,180]){
   console.log(`\n[${dpi}dpi 旋转${rot}°]`);
   for(const [type,content,expect,sz] of CASES){
-    const el=type==='qrcode'||type==='datamatrix'||type==='gs1dm'?{type,x:10,y:10,size:sz,ecl:'M',rot,content}
+    const el=type==='qrcode'||type==='datamatrix'||type==='gs1dm'||type==='pdf417'?{type,x:10,y:10,size:sz,ecl:type==='pdf417'?'':'M',rot,content}
       :{type,x:10,y:10,h:12,module:sz,showText:true,rot,content};
     if(rot===90)el.x=40;if(rot===180){el.x=75;el.y=40;}
     const zpl=await p.evaluate(async([el,dpi])=>{loadDesign({v:1,label:{w:90,h:60,dpi,cols:0,gapX:3,gapY:3},elements:[el]});

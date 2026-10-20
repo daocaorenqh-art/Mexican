@@ -182,6 +182,7 @@
     <a data-ins="qrcode">二维码 QR</a>
     <a data-ins="datamatrix">二维码 DataMatrix</a>
     <a data-ins="gs1dm">二维码 GS1 DataMatrix</a>
+    <a data-ins="pdf417">二维码 PDF417</a>
     <a data-ins="counter">流水号</a>
     <a data-ins="date">日期</a>
     <a data-ins="image">图片 / Logo</a>
@@ -332,6 +333,7 @@
         <button data-add="itf">+ ITF-25</button>
         <button data-add="qrcode">+ 二维码</button>
         <button data-add="datamatrix">+ DataMatrix</button>
+        <button data-add="pdf417">+ PDF417</button>
         <button data-add="gs1dm">+ GS1 DataMatrix</button>
         <button data-add="counter">+ 流水号</button>
         <button data-add="date">+ 日期</button>
@@ -584,11 +586,11 @@ function moduleDots(moduleMM,dpi){return Math.max(1,Math.round((+moduleMM||0)*dp
 function snapModulePx(moduleMM){const dpi=+$('#dpi').value||203;return moduleDots(moduleMM,dpi)/dpmmOf(dpi)*PXMM;}
 // 二维码矩阵 → SVG（单条 path；模块宽对齐到整数打印点）
 function qr2dModuleDots(sizeMM,n,dpi){return Math.max(1,Math.floor(mm2dots(sizeMM,dpi)/n));}
-function matrixSVG(mods,n,sizeMM,color){
+function matrixSVG(mods,n,sizeMM,color,rows){rows=rows||n;   // rows：行数（PDF417 长方形），缺省为方形
   const dpi=+$('#dpi').value||203, mpx=qr2dModuleDots(sizeMM,n,dpi)/dpmmOf(dpi)*PXMM, tot=n*mpx;
   const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
-  svg.setAttribute('width',tot);svg.setAttribute('height',tot);svg.setAttribute('shape-rendering','crispEdges');
-  let d='';for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(mods[y][x])d+='M'+(x*mpx)+' '+(y*mpx)+'h'+mpx+'v'+mpx+'h-'+mpx+'z';
+  svg.setAttribute('width',tot);svg.setAttribute('height',rows*mpx);svg.setAttribute('shape-rendering','crispEdges');
+  let d='';for(let y=0;y<rows;y++)for(let x=0;x<n;x++)if(mods[y][x])d+='M'+(x*mpx)+' '+(y*mpx)+'h'+mpx+'v'+mpx+'h-'+mpx+'z';
   const p=document.createElementNS(ns,'path');p.setAttribute('d',d);p.setAttribute('fill',color||'#000');
   svg.appendChild(p);return svg;
 }
@@ -660,9 +662,9 @@ function renderLabel(e,idx){
         node.appendChild(svg);
       }
       else if(BARCODE_2D.includes(el.type)){
-        const m=encode2D(el.type,text,el.ecl);
+        const m=encode2D(el.type,text,el.ecl,el.cols);
         if(el.bg)node.style.background=el.bg;
-        node.appendChild(matrixSVG(m.modules,m.size,el.size,el.color));
+        node.appendChild(matrixSVG(m.modules,m.w||m.size,el.size,el.color,m.h));
       }
       else if(el.type==='image'){
         const src=Job.imageSrc(el,text);   // 动态图片（字段 / 路径 / 数据库图片）优先，空则用上传的图片
@@ -779,6 +781,8 @@ const FIELDS={
   itf:BC('内容(数字,奇数自动补0)'),
   qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['ecl','纠错等级','sel',['L','M','Q','H']],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   datamatrix:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
+  pdf417:[['content','内容（中文按 UTF-8）','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','宽度(mm)','num'],
+    ['ecl','纠错等级','sel',[['','自动（按数据量）'],['0','0'],['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8']]],['cols','数据列数（0=自动）','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   gs1dm:[['content','GS1 内容，如 (01)06925253841665(17)261020(10){批号}','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   gs1128:BC('GS1 内容，如 (01)06925253841665(17)261020(10){批号}'),
   upce:BC('内容(6/7/8位数字，首位 0 或 1)'),
@@ -795,7 +799,7 @@ const FIELDS={
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',gs1dm:'GS1 DataMatrix',gs1128:'GS1-128',upce:'UPC-E',code93:'Code93',codabar:'Codabar',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',gs1dm:'GS1 DataMatrix',pdf417:'PDF417',gs1128:'GS1-128',upce:'UPC-E',code93:'Code93',codabar:'Codabar',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   syncSel();
@@ -852,6 +856,7 @@ const DEFAULTS={
   itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567890'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,ecl:'M',color:'#000000',bg:'',rot:0,content:'https://'},
   datamatrix:{type:'datamatrix',x:3,y:3,size:12,color:'#000000',bg:'',rot:0,content:'DM-0001'},
+  pdf417:{type:'pdf417',x:3,y:3,size:40,ecl:'',cols:0,color:'#000000',bg:'',rot:0,content:'PDF417-0001'},
   gs1dm:{type:'gs1dm',x:3,y:3,size:14,color:'#000000',bg:'',rot:0,content:'(01)06925253841665(17)271231(10)B26'},
   gs1128:{type:'gs1128',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'(01)06925253841665(10)B26'},
   upce:{type:'upce',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'0123456'},
@@ -1165,7 +1170,7 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 添加对象向导 ---------- */
 const WZ={step:0,type:'text',source:'const',value:''};
-const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['gs1128','条码 GS1-128'],['upce','条码 UPC-E'],['code93','条码 Code93'],['codabar','条码 Codabar'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['gs1dm','GS1 DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['gs1128','条码 GS1-128'],['upce','条码 UPC-E'],['code93','条码 Code93'],['codabar','条码 Codabar'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['gs1dm','GS1 DataMatrix'],['pdf417','PDF417'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
 const wzHasData=t=>['text','para','rich','wordart',...BARCODE_1D,...BARCODE_2D].includes(t);
 function wzFields(){const r=parseData($('#csv').value);
   const fs=r&&r.length?Object.keys(r[0]):rows&&rows.length?Object.keys(rows[0]):[];
@@ -1366,10 +1371,10 @@ function painter(el,text,dpi,idx,img){
       return {w:gm.w,h:gm.h,paint:g=>{gm.rects.forEach(r=>g.fillRect(r[0],r[1],r[2],r[3]));
         g.textAlign='center';g.textBaseline='hanging';
         gm.texts.forEach(([t,cx,ty,sc])=>{g.font=gm.fs*(sc||1)+'px monospace';g.fillText(t,cx,ty);});}};}
-    case 'qrcode':case 'datamatrix':case 'gs1dm':{
-      const mx=encode2D(el.type,text,el.ecl);
-      const md=qr2dModuleDots(el.size,mx.size,dpi);
-      return {w:mx.size*md,h:mx.size*md,paint:g=>{for(let y=0;y<mx.size;y++)for(let x=0;x<mx.size;x++)if(mx.modules[y][x])g.fillRect(x*md,y*md,md,md);}};}
+    case 'qrcode':case 'datamatrix':case 'gs1dm':case 'pdf417':{
+      const mx=encode2D(el.type,text,el.ecl,el.cols),mw=mx.w||mx.size,mh=mx.h||mx.size;
+      const md=qr2dModuleDots(el.size,mw,dpi);
+      return {w:mw*md,h:mh*md,paint:g=>{for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(mx.modules[y][x])g.fillRect(x*md,y*md,md,md);}};}
   }
   return null;
 }

@@ -23,8 +23,8 @@ function barsBitmap(bits,md,hd){const bm=Bitmap(bits.length*md,hd);
   for(let i=0;i<bits.length;){if(bits[i]!=='1'){i++;continue;}let j=i;while(j<bits.length&&bits[j]==='1')j++;
     fillRect(bm,i*md,0,(j-i)*md,hd);i=j;}return bm;}
 // 二维码矩阵 → 位图（每模块 md 点）
-function matrixBitmap(mods,n,md){const bm=Bitmap(n*md,n*md);
-  for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(mods[y][x])fillRect(bm,x*md,y*md,md,md);return bm;}
+function matrixBitmap(mods,n,md,h){h=h||n;const bm=Bitmap(n*md,h*md);   // h：行数（PDF417 长方形），缺省为方形
+  for(let y=0;y<h;y++)for(let x=0;x<n;x++)if(mods[y][x])fillRect(bm,x*md,y*md,md,md);return bm;}
 // 顺时针旋转 90° 的整数倍
 function rotateBitmap(bm,deg){const k=((Math.round(deg/90)%4)+4)%4;if(!k)return bm;
   const r=k===2?Bitmap(bm.w,bm.h):Bitmap(bm.h,bm.w);
@@ -167,10 +167,10 @@ function labelItems(o,e,ctx,env){
         place(x,y,bm,rot);
       }
       else if(B.BARCODE_2D.includes(t)){
-        const m=B.encode2D(t,text,el.ecl),md=Job.matrixModuleDots(el.size,m.size,dpi);
+        const m=B.encode2D(t,text,el.ecl,el.cols),md=Job.matrixModuleDots(el.size,m.w||m.size,dpi);
         if(lang==='zpl'&&opt.barcodes==='native'&&((t==='datamatrix'&&isRightAngle(rot))||(t==='qrcode'&&!rot))){
           items.push({k:'native',t,el,m,x,y,rot,md,text});continue;}
-        place(x,y,matrixBitmap(m.modules,m.size,md),rot);
+        place(x,y,matrixBitmap(m.modules,m.w||m.size,md,m.h),rot);
       }
       else if(t==='image'){
         const src=Job.imageSrc(el,text);if(!src)continue;
