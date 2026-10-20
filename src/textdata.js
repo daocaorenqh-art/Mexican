@@ -11,7 +11,7 @@
      {#TIME}          HH:mm:ss
      {#N} 本次第几张  {#REC} 第几条记录  {#COPY} 该记录第几份
      {?批号}          打印时弹窗输入
-   ctx：{row, vars, prompts, now, n, rec, copy, missing:Set} */
+   ctx：{row, vars, prompts, defs（设计定义的变量值）, now, n, rec, copy, missing:Set} */
 (function(root){
 
 /* ---------- 日期 ---------- */
@@ -66,13 +66,15 @@ function fieldVal(name,c){
   if(raw[0]==='?'){const k=raw.slice(1).trim();
     if(ctx.prompts&&k in ctx.prompts)return String(ctx.prompts[k]);
     return (ctx.row||ctx.strict)?(ctx.missing.add(raw),''):'['+raw+']';}  // 预检（strict）时未填视为缺失
-  const row=ctx.row;
-  if(!row)return '['+raw.split('.').pop().trim()+']';
+  const row=ctx.row,key=raw.split('.').pop().trim(); // 去掉表前缀
+  // 设计里定义的变量（打印时输入 / 挑选列表等）：数据里没有同名字段时才用
+  const defs=ctx.defs,dv=defs&&Object.prototype.hasOwnProperty.call(defs,key)?String(defs[key]):undefined;
+  if(!row)return dv!==undefined?dv:'['+key+']';
   if(raw in row)return row[raw];
-  const key=raw.split('.').pop().trim(); // 去掉表前缀
   if(key in row)return row[key];
   const lk=key.toLowerCase(),hit=Object.keys(row).find(k=>k.toLowerCase()===lk); // 不区分大小写回退
   if(hit!==undefined)return row[hit];
+  if(dv!==undefined)return dv;
   ctx.missing.add(key);return '';
 }
 // 内容里用到的 {?输入项}（打印前弹窗收集）

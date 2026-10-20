@@ -78,4 +78,15 @@ eq('UTF-8', T.decodeText(Buffer.from('品名,价格', 'utf8')), '品名,价格')
 eq('UTF-8 BOM', T.decodeText(Buffer.from('﻿品名', 'utf8')), '品名');
 eq('GBK（中文版 Excel 另存为 CSV）', T.decodeText(Buffer.from('c6b7c3fb2cbcdbb8f1', 'hex')), '品名,价格');
 
+// 设计里定义的变量（ctx.defs）：数据字段优先；无数据时直接取变量值；都没有时无数据显示 [名]、有数据记缺失
+{
+  const defs = { '批号': 'B26', '品名': '不应使用' };
+  eq('变量：无数据时取变量值', T.evalContent('{批号}', T.makeCtx({ defs })), 'B26');
+  eq('变量：数据里有同名字段时以数据为准', T.evalContent('{品名}', T.makeCtx({ row, defs })), '女包');
+  eq('变量：数据里没有该字段时用变量', T.evalContent('{批号}/{SKU}', T.makeCtx({ row, defs })), 'B26/A1');
+  eq('变量：表达式里同样可用', T.evalContent('=[批号]+"-"+left([品名],1)', T.makeCtx({ row, defs })), 'B26-女');
+  eq('变量：未定义且无数据显示占位', T.evalContent('{颜色}', T.makeCtx({ defs })), '[颜色]');
+  const c = T.makeCtx({ row, defs }); T.evalContent('{颜色}', c);
+  check('变量：未定义且有数据记为缺失', c.missing.has('颜色'));
+}
 done();
