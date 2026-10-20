@@ -93,5 +93,16 @@ check('条码被文字压住被警告（外框线不算）', ov.warnings.filter(
 const bx = Job.rotatedBox(10, 10, 20, 5, 90);
 check('旋转 90° 外框（绕左上角顺时针）', Math.abs(bx.x0 - 5) < 1e-9 && Math.abs(bx.x1 - 10) < 1e-9 && Math.abs(bx.y1 - 30) < 1e-9, JSON.stringify(bx));
 eq('图片路径转 file 地址', Job.imageSrc({}, 'C:\\img\\a.png'), 'file:///C:/img/a.png');
+eq('网址图片不加载（离线）', Job.imageSrc({ src: '' }, 'https://example.com/a.png'), '');
+eq('data: 图片照常', Job.imageSrc({}, 'data:image/png;base64,AA'), 'data:image/png;base64,AA');
 
+// 预检：界面提供的尺寸（sizeOf）优先于通用估算
+{
+  const els = [{ type: 'rich', x: 5, y: 5, w: 10, content: 'x' }];
+  const L1 = Job.makePrintList(null, 1, 0, 1);
+  const big = Job.preflight({ elements: els, list: L1, label: { w: 30, h: 20, dpi: 203 }, sizeOf: () => ({ w: 40, h: 5 }) });
+  check('sizeOf 给出的宽度超出标签 → 警告', big.warnings.some(w => w.msg.includes('超出标签')));
+  const fit = Job.preflight({ elements: els, list: L1, label: { w: 30, h: 20, dpi: 203 }, sizeOf: () => ({ w: 10, h: 5 }) });
+  check('sizeOf 给出的尺寸在标签内 → 无警告', !fit.warnings.length && !fit.errors.length);
+}
 done();

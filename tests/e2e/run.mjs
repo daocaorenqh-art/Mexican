@@ -12,8 +12,9 @@ const files = fs.readdirSync(here).filter(f => f.endsWith('.mjs') && !f.startsWi
 const results = [];
 for (const f of files) {
   const t0 = Date.now();
-  const r = spawnSync(process.execPath, [path.join(here, f)], { encoding: 'utf8', timeout: 600000 });
-  const out = (r.stdout || '') + (r.stderr || '');
+  // 单组 5 分钟上限：界面卡在某个弹框上时尽快失败，而不是拖住整个 CI
+  const r = spawnSync(process.execPath, [path.join(here, f)], { encoding: 'utf8', timeout: 300000 });
+  const out = (r.stdout || '') + (r.stderr || '') + (r.error && r.error.code === 'ETIMEDOUT' ? '\n✗ 超时（5 分钟）：可能停在了某个弹框上' : '');
   const bad = out.split('\n').filter(l => l.includes('✗'));
   const ok = r.status === 0 && !bad.length;
   const summary = (out.match(/^==== .*====$/m) || [''])[0];

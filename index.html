@@ -458,7 +458,7 @@ const PXMM=3.78; // 屏幕预览 1mm≈3.78px(96dpi)
 // 标签内容默认字体：预览与 ZPL 栅格化用同一字体，度量与换行才一致
 const LABEL_FONT='"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",sans-serif';
 let UNIT='mm'; // 显示单位；内部一律用 mm 存储
-const LENKEYS=new Set(['x','y','size','h','module','w','border','spacing','stroke','shadow']); // 需随单位换算的长度字段
+const LENKEYS=new Set(['x','y','size','h','module','w','border','spacing','stroke','shadow','fitW','minSize']); // 需随单位换算的长度字段
 const toMM=v=>UNIT==='cm'?(+v||0)*10:(+v||0);      // 输入(显示单位)→mm
 const fromMM=mm=>UNIT==='cm'?+(mm/10).toFixed(3):+(+mm).toFixed(3); // mm→显示单位
 
@@ -540,6 +540,11 @@ function matrixSVG(mods,n,sizeMM,color){
 }
 
 /* ---------- 渲染单张标签 ---------- */
+// 文字对齐 = 锚点：左对齐时 x 为左边，居中时 x 为中点，右对齐时 x 为右边（预览 / ZPL / 预检一致）
+const ANCHOR={center:'translateX(-50%)',right:'translateX(-100%)'};
+const ANCHOR_K={center:0.5,right:1};
+// 文字宽度（mm），与 ZPL 栅格化用同一字体度量
+function measureMM(text,el){_measureCtx.font=fontOf(el,100);return _measureCtx.measureText(String(text)).width*(+el.size||0)/100;}
 function renderLabel(e,idx){
   idx=idx||0;e=e||{row:null,rec:0,recPos:0,copy:1,idx:0};
   const ctx=Job.labelCtx(elements,e,jobOpts());
@@ -553,15 +558,16 @@ function renderLabel(e,idx){
     node.className='el'+(idx===0&&selSet.has(ei)?' selel':'');
     node.dataset.ei=ei;
     node.style.left=(el.x*PXMM)+'px';node.style.top=(el.y*PXMM)+'px';
-    if(el.rot){node.style.transform='rotate('+el.rot+'deg)';node.style.transformOrigin='top left';}
+    const tf=[];if(el.rot)tf.push('rotate('+el.rot+'deg)');
     let text;try{text=elText(el,ctx,e);}catch(err){text='⚠'+err.message;}
     try{
-      if(el.type==='text'){
+      if(el.type==='text'||el.type==='counter'||el.type==='date'){
+        // 适应宽度：超宽时缩小字号；对齐 = 锚点（居中时 x 为中点、右对齐时 x 为右边），与 ZPL 一致
         node.textContent=text;
-        node.style.fontSize=(el.size*PXMM)+'px';
+        node.style.fontSize=(Job.effectiveSize(el,text,measureMM)*PXMM)+'px';
         node.style.fontWeight=el.bold?'700':'400';
         if(el.font)node.style.fontFamily=el.font;
-        if(el.align&&el.align!=='left'){node.style.textAlign=el.align;node.style.display='inline-block';}
+        if(ANCHOR[el.align]){node.style.textAlign=el.align;node.style.display='inline-block';tf.push(ANCHOR[el.align]);}
       }
       else if(el.type==='rich'){
         // 预览与 ZPL 共用 richLayout/drawRich：断行、字号混排、下划线位置完全一致
@@ -605,7 +611,8 @@ function renderLabel(e,idx){
         node.appendChild(matrixSVG(m.modules,m.size,el.size,el.color));
       }
       else if(el.type==='image'){
-        if(el.src){const img=document.createElement('img');img.src=el.src;
+        const src=Job.imageSrc(el,text);   // 动态图片（字段 / 路径 / 数据库图片）优先，空则用上传的图片
+        if(src){const img=document.createElement('img');img.src=src;
           node.style.width=(el.w*PXMM)+'px';node.style.height=(el.h*PXMM)+'px';node.appendChild(img);}
         else {node.textContent='（未选图片）';node.style.cssText+=';font-size:10px;color:#999';}
       }
@@ -619,15 +626,8 @@ function renderLabel(e,idx){
         if(el.fill)node.style.background='#000';
         else node.style.border=(el.border*PXMM)+'px solid #000';
       }
-      else if(el.type==='counter'){
-        node.textContent=text;
-        node.style.fontSize=(el.size*PXMM)+'px';node.style.fontWeight=el.bold?'700':'400';
-      }
-      else if(el.type==='date'){
-        node.textContent=text;
-        node.style.fontSize=(el.size*PXMM)+'px';node.style.fontWeight=el.bold?'700':'400';
-      }
     }catch(err){node.textContent='⚠ '+err.message;node.style.cssText+=';color:#c00;font-size:10px';}
+    if(tf.length){node.style.transform=tf.join(' ');node.style.transformOrigin='top left';}
     if(idx===0&&ei===sel&&selSet.size===1){const hz=document.createElement('div');hz.className='rz';hz.dataset.ei=ei;node.appendChild(hz);}
     d.appendChild(node);
   });
@@ -688,7 +688,7 @@ function render(opt){
 /* ---------- 元素编辑 UI ---------- */
 const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']];
 const FIELDS={
-  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['fitW','适应宽度(mm，0=不缩)','num'],['minSize','最小字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   rich:[['content','内容（富文本）','rich'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','基础字号(mm)','num'],
     ['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei']],['rot','旋转°','num']],
@@ -710,10 +710,11 @@ const FIELDS={
   codabar:BC('内容(数字 -$:/.+，可带起止符 A–D)'),
   counter:[['name','名称（其他元素用 {#名称} 引用）','text'],['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['every','每几张/条递增','num'],['suffix','后缀','text'],
     ['per','递增方式','sel',[['label','每张递增'],['record','每条记录递增（多份同号）']]],['radix','进制','sel',[['10','十进制'],['16','十六进制'],['36','36 进制（0-9A-Z）']]],
-    ['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
+    ['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
   date:[['format','格式（YYYY YY MM DD HH mm ss JJJ WW）','text'],['offset','偏移','num'],['unit','偏移单位','sel',[['d','天'],['m','月'],['y','年']]],
-    ['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
-  image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],['rot','旋转°','num']],
+    ['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
+  image:[['content','动态图片（可空：{字段} / C:\\图片\\{SKU}.png / 数据库图片字段）','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],
+    ['dither','黑白转换（打印机指令）','sel',[['fs','抖动（适合照片）'],['','阈值（适合 Logo / 文字）']]],['threshold','阈值 0–255','num'],['rot','旋转°','num']],
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
@@ -781,7 +782,7 @@ const DEFAULTS={
   codabar:{type:'codabar',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'A123456B'},
   counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,name:'SN',prefix:'',start:1,step:1,pad:4,every:1,per:'label',radix:'10',suffix:'',persist:false},
   date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD',offset:0,unit:'d'},
-  image:{type:'image',x:3,y:3,w:15,h:15,src:'',rot:0},
+  image:{type:'image',x:3,y:3,w:15,h:15,src:'',content:'',dither:'fs',threshold:128,rot:0},
   box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0},
   ellipse:{type:'ellipse',x:3,y:3,w:15,h:15,border:0.4,fill:false,rot:0}
 };
@@ -1176,7 +1177,7 @@ function loadImage(src){
 }
 // 通用栅格化：paint 以「元素未旋转、左上角为原点、单位=打印点」作画；按元素旋转（绕左上角，与预览一致）
 // 求外接框，超出标签左/上边的部分裁掉。返回相对元素原点的偏移与 1-bit 位图。
-function rasterize(Wd,Hd,rotDeg,paint,dither){
+function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
   const th=(+rotDeg||0)*Math.PI/180,c=Math.cos(th),s=Math.sin(th);
   const pts=[[0,0],[Wd,0],[0,Hd],[Wd,Hd]].map(([x,y])=>[x*c-y*s,x*s+y*c]);
   const minX=Math.floor(Math.min(...pts.map(p=>p[0]))),minY=Math.floor(Math.min(...pts.map(p=>p[1])));
@@ -1189,7 +1190,8 @@ function rasterize(Wd,Hd,rotDeg,paint,dither){
   const d=g.getImageData(0,0,W,ch).data, lum=new Float32Array(W*ch);
   for(let i=0;i<W*ch;i++){const a=d[i*4+3]/255;lum[i]=255-a*(255-(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]));}
   const bits=new Uint8Array(W*ch);
-  for(let y=0;y<ch;y++)for(let x=0;x<W;x++){const i=y*W+x,v=lum[i],b=v<128?1:0;bits[i]=b;
+  const cut=+threshold>0&&+threshold<256?+threshold:128;
+  for(let y=0;y<ch;y++)for(let x=0;x<W;x++){const i=y*W+x,v=lum[i],b=v<cut?1:0;bits[i]=b;
     if(dither){const e=v-(b?0:255);   // Floyd–Steinberg 误差扩散：照片/Logo 灰度转成黑白点阵
       if(x+1<W)lum[i+1]+=e*7/16;
       if(y+1<ch){if(x>0)lum[i+W-1]+=e*3/16;lum[i+W]+=e*5/16;if(x+1<W)lum[i+W+1]+=e/16;}}}
@@ -1206,7 +1208,7 @@ function painter(el,text,dpi,idx,img){
   switch(el.type){
     case 'text':case 'counter':case 'date':{
       const t=text;
-      if(!t)return null;const px=D(el.size);_measureCtx.font=fontOf(el,px);
+      if(!t)return null;const px=D(Job.effectiveSize(el,t,measureMM));_measureCtx.font=fontOf(el,px);
       return {w:_measureCtx.measureText(t).width,h:px*1.25,paint:g=>{g.font=fontOf(el,px);g.textBaseline='top';g.fillText(t,0,0);}};}
     case 'para':{if(!text)return null;
       const px=D(el.size),lh=px*1.25,wd=D(el.w),lines=wrapLines(text,el);
@@ -1219,7 +1221,7 @@ function painter(el,text,dpi,idx,img){
       return {w:L.w*s,h:L.h*s,paint:g=>drawWordart(g,L,el,s)};}
     case 'image':{if(!img)return null;const w=D(el.w),h=D(el.h);
       const r=Math.min(w/img.naturalWidth,h/img.naturalHeight),iw=img.naturalWidth*r,ih=img.naturalHeight*r;
-      return {w,h,dither:true,paint:g=>g.drawImage(img,(w-iw)/2,(h-ih)/2,iw,ih)};}   // 等比居中，同预览 object-fit:contain
+      return {w,h,dither:el.dither!=='',threshold:el.threshold,paint:g=>g.drawImage(img,(w-iw)/2,(h-ih)/2,iw,ih)};}   // 等比居中，同预览 object-fit:contain；抖动适合照片，阈值适合 Logo / 文字
     case 'box':case 'ellipse':{const w=D(el.w),h=D(el.h),t=Math.max(1,D(el.border));
       return {w,h,paint:g=>{g.beginPath();
         if(el.type==='box'){if(el.fill)g.rect(0,0,w,h);else g.rect(t/2,t/2,w-t,h-t);}
@@ -1471,11 +1473,13 @@ async function buildZPL(){
   const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
   const list=printList();
   if(!list.length)throw new Error(list.error||'没有要出的标签');
-  const imgs=new Map();
-  for(const el of elements)if(el.type==='image'&&el.src&&!imgs.has(el.src))imgs.set(el.src,await loadImage(el.src));
+  // 预先解码本批用到的所有图片（动态图片每张可能不同）
+  const imgs=new Map(),imgEls=elements.filter(el=>el.type==='image'),opts=jobOpts();
+  if(imgEls.length)for(const e of list){const ctx=Job.labelCtx(elements,e,opts);
+    for(const el of imgEls){let src='';try{src=Job.imageSrc(el,elText(el,ctx,e));}catch(err){}
+      if(src&&!imgs.has(src))imgs.set(src,await loadImage(src));}}
   // 第一遍：生成每张标签的指令；相同输入的位图只算一次
   const cache=new Map(), use=new Map(), labels=[];
-  const opts=jobOpts();
   list.forEach((e,idx)=>{
     const parts=[],ctx=Job.labelCtx(elements,e,opts);
     elements.forEach(el=>{
@@ -1483,7 +1487,7 @@ async function buildZPL(){
       let text;try{text=elText(el,ctx,e);}catch(err){text='';}
       if(!RASTER_ONLY.has(el.type)&&!isRot(el)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
       // 「品名：{字段}」这类模板：静态文字与字段值分开转位图，静态部分全批只发一次（串口打印快很多）
-      const segs=el.type==='text'?textSegments(el,ctx):null;
+      const segs=el.type==='text'&&!ANCHOR_K[el.align]&&!(+el.fitW)?textSegments(el,ctx):null;
       if(segs&&segs.length>1){
         const th=(+el.rot||0)*Math.PI/180;
         segs.forEach(sg=>{const sub={...el,content:sg.text,x:el.x+sg.dx*Math.cos(th),y:el.y+sg.dx*Math.sin(th)};
@@ -1492,13 +1496,16 @@ async function buildZPL(){
       placeRaster(el,text,x,y);
     });
     function placeRaster(el,text,x,y){
-      const key=JSON.stringify([el.type,text,el.size,el.bold,el.font,el.w,el.h,el.align,el.rot,el.border,el.fill,el.module,el.showText,el.ecl,
-        el.type==='image'?el.src:0,dpi]);
+      const src=el.type==='image'?Job.imageSrc(el,text):0;
+      const key=JSON.stringify([el.type,text,el.size,el.fitW,el.minSize,el.bold,el.font,el.w,el.h,el.align,el.rot,el.border,el.fill,el.module,el.showText,el.ecl,
+        src,el.dither,el.threshold,dpi]);
       let r=cache.get(key);
-      if(r===undefined){let pt=null;try{pt=painter(el,text,dpi,idx,el.type==='image'?imgs.get(el.src):null);}catch(e){pt=null;}
-        r=pt?rasterize(pt.w,pt.h,el.rot,pt.paint,pt.dither):null;if(r)r.key=key;cache.set(key,r);}
+      if(r===undefined){let pt=null;try{pt=painter(el,text,dpi,idx,src?imgs.get(src):null);}catch(e){pt=null;}
+        r=pt?rasterize(pt.w,pt.h,el.rot,pt.paint,pt.dither,pt.threshold):null;if(r){r.key=key;r.aw=pt.w;}cache.set(key,r);}
       if(!r)return;
-      const fx=x+r.dx,fy=y+r.dy;
+      // 居中 / 右对齐：x 为锚点，沿文字方向（含旋转）左移半个 / 整个字宽
+      const ak=(el.type==='text'||el.type==='counter'||el.type==='date')&&ANCHOR_K[el.align]||0,th=(+el.rot||0)*Math.PI/180;
+      const fx=x+r.dx-Math.round(ak*r.aw*Math.cos(th)),fy=y+r.dy-Math.round(ak*r.aw*Math.sin(th));
       const cx=Math.max(0,-fx),cy=Math.max(0,-fy);   // 超出左/上边缘的部分裁掉（预览中同样被标签边裁掉）
       if(cx||cy){const c=cropGF(r,cx,cy);if(c)parts.push({gf:c,x:fx+cx,y:fy+cy});return;}
       use.set(key,(use.get(key)||0)+1);parts.push({r,x:fx,y:fy});
@@ -1533,9 +1540,9 @@ function acsEncode(hex,bpr){
     if(row===prev){out+=':';continue;}
     prev=row;
     let body=row,tail='';
-    const z=row.match(/0+$/),f=row.match(/F+$/);
+    // 行尾全 0 用「,」；行尾全 F 不用「!」而写成重复计数：部分解释器对整行「!」处理不一致，计数写法所有机型都认
+    const z=row.match(/0+$/);
     if(z&&z[0].length>=2){body=row.slice(0,-z[0].length);tail=',';}
-    else if(f&&f[0].length>=2){body=row.slice(0,-f[0].length);tail='!';}
     out+=body.replace(/([0-9A-F])\1{2,}/g,(m,c)=>acsRun(m.length)+c)+tail;
   }
   return out;
@@ -1799,9 +1806,41 @@ async function askVars(){
 async function startJob(){
   if(!await askVars())return false;
   jobSkip=null;jobNow=new Date();
-  const list=printList();
+  let list=printList();
   if(!list.length){alert(list.error||'没有要出的标签');endJob();return false;}
+  // 打印前预检：错误（编码失败、字段缺失、表达式错）必须处理，可只跳过出错的标签；警告（出界、静区、重叠…）可继续
+  const r=Job.preflight({elements,list,label:labelSpec(),prompts:jobPrompts,defs:varDefs(),now:jobNow,measure:measureMM,sizeOf:sizeOfEl});
+  if(r.errors.length||r.warnings.length){
+    const act=await showIssues(r,list.length);
+    if(act==='cancel'){endJob();return false;}
+    if(act==='skip')jobSkip=new Set(r.errors.map(i=>i.n-1));
+    list=printList();
+    if(!list.length){alert('没有可打印的标签');endJob();return false;}
+  }
   return true;
+}
+const labelSpec=()=>({w:toMM($('#lw').value),h:toMM($('#lh').value),dpi:+$('#dpi').value||203});
+// 本软件自己排版的元素给出精确尺寸（mm，未旋转）；其它交给通用估算
+function sizeOfEl(el,text){
+  if(el.type==='rich'){const L=richLayout(el,text);return {w:L.w,h:L.h};}
+  if(el.type==='wordart'){if(!text)return {w:0,h:0};const L=wordartLayout(el,text);return {w:L.w,h:L.h};}
+  if(el.type==='para')return {w:+el.w||0,h:wrapLines(text,el).length*(+el.size||0)*1.25};
+  return null;
+}
+// 预检结果：同一元素的同类问题合并，列出涉及的张数
+function issueHTML(groups){
+  return groups.map(g=>{const ls=g.labels,more=ls.length>8?' 等 '+ls.length+' 张':'';
+    return `<div style="margin:0 0 6px;color:${g.level==='error'?'#c00':'#b26a00'}">${g.level==='error'?'✗':'⚠'} 第 ${ls.slice(0,8).join(', ')}${more} 张 · #${g.ei+1} ${esc(TYPENAME[g.el.type]||g.el.type)}：${esc(g.msg)}</div>`;}).join('');
+}
+async function showIssues(r,total){
+  const errs=Job.groupIssues(r.errors,'error'),warns=Job.groupIssues(r.warnings,'warn');
+  const bad=new Set(r.errors.map(i=>i.n)).size;
+  const body=(errs.length?`<p>${bad} 张标签有错误，直接打印会出错误内容或扫不出的码：</p>`+issueHTML(errs):'')
+    +(warns.length?`<p style="margin-top:10px">警告（可以继续，但建议检查）：</p>`+issueHTML(warns):'');
+  const btns=[{id:'cancel',label:'返回修改'}];
+  if(errs.length&&bad<total)btns.push({id:'skip',label:'跳过出错的 '+bad+' 张，打印其余 '+(total-bad)+' 张',primary:true});
+  if(!errs.length)btns.push({id:'go',label:'继续打印',primary:true});
+  return (await dialog('打印前预检',body,btns))||'cancel';
 }
 function endJob(){if(jobNow||jobSkip){jobNow=null;jobSkip=null;render();}}
 async function doPrint(){if(!await startJob())return;window.print();}

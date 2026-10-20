@@ -24,7 +24,8 @@ ok('最后一张是第 500 条记录',last==='R500',last);
 await p.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
 ok('打印后恢复 200 张',await cnt()===200);
 
-const sp=await p.evaluate(async()=>{window.confirm=()=>true;document.querySelector('#prnList').value='ZT410';await doSilentPrint();
+// 条码离边 2mm（静区不足）会触发打印前预检警告；本测试只关心性能，直接「继续打印」
+const sp=await p.evaluate(async()=>{window.confirm=()=>true;window.showIssues=async()=>'go';document.querySelector('#prnList').value='ZT410';await doSilentPrint();
   return {at:window.__atPrint,after:document.querySelectorAll('#preview .label').length};});
 ok('桌面静默打印调用时刻页面有全部 500 张',sp.at===500,'调用时 '+sp.at);
 ok('静默打印后恢复 200 张',sp.after===200,'之后 '+sp.after);
