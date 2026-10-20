@@ -15,28 +15,22 @@ const SHARE_RE = /^[A-Za-z0-9 _.\-]{1,64}$/;
 const COM_RE = /^COM[1-9]\d{0,2}$/i;
 const HOST_RE = /^[A-Za-z0-9.\-:]{1,253}$/;
 
+// 数据写完后再等一小段：期间打印机复位断开（ECONNRESET / EPIPE）视为发送失败，避免「已发送」但数据丢失；
+// 打印机正常关闭（FIN）或等待期满都算成功（很多标签机收完数据不主动断开）
+const SETTLE_MS = 400;
 function sendTcp(host, port, buf, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     if (!HOST_RE.test(host)) return reject(new Error('打印机地址无效'));
     const p = Number(port) || 9100;
     if (!(Number.isInteger(p) && p > 0 && p < 65536)) return reject(new Error('端口无效'));
     const sock = net.createConnection({ host, port: p });
-    let settled = false;
-    const fail = (e) => { if (settled) return; settled = true; sock.destroy(); reject(e); };
-    sock.setTimeout(timeoutMs, () => fail(new Error('连接打印机超时（' + host + ':' + p + '）')));
-    let connected = false;
-    sock.on('error', (e) => fail(new Error((connected ? '打印机中途断开连接，数据可能未收全：' : '无法连接打印机：') + e.message)));
+    let settled = false, written = false, timer = null;
+    const done = (err) => { if (settled) return; settled = true; clearTimeout(timer); sock.destroy(); err ? reject(err) : resolve(); };
+    sock.setTimeout(timeoutMs, () => done(written ? null : new Error('连接打印机超时（' + host + ':' + p + '）')));
+    sock.on('error', (e) => done(new Error((written ? '打印机中途断开，数据可能未完整接收：' : '无法连接打印机：') + e.message)));
+    sock.on('close', (hadError) => { if (written && !hadError) done(); });
     sock.on('connect', () => {
-      connected = true;
-      // 写完后不立即算成功：打印机中途复位 / 断网时数据会丢，系统只会在之后报 ECONNRESET。
-      // 等打印机正常关闭连接即成功；不主动断开的打印机，写完 1.5 秒内没出错也算成功（然后由我们关闭）
-      sock.end(buf, () => {
-        if (settled) return;
-        sock.setTimeout(0);
-        const t = setTimeout(() => { if (settled) return; settled = true; sock.destroy(); resolve(); }, 1500);
-        sock.once('close', (hadError) => { clearTimeout(t); if (settled) return; settled = true;
-          hadError ? reject(new Error('打印机中途断开连接（' + host + ':' + p + '），数据可能未收全')) : resolve(); });
-      });
+      sock.end(buf, () => { written = true; timer = setTimeout(() => done(), SETTLE_MS); });
     });
   });
 }

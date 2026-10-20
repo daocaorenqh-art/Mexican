@@ -468,6 +468,7 @@ A1002,香蕉,2.20"></textarea>
 <script src="src/textdata.js"></script>
 <script src="src/xlsx.js"></script>
 <script src="src/job.js"></script>
+<script src="src/zpl.js"></script>
 <script>
 /* ============================================================
    标签打印工具 —— 原创实现（全部编码器自写，完全离线）
@@ -1308,7 +1309,9 @@ function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
     for(let k=0;k<8;k++)if(bits[y*W+bx*8+k])byte|=1<<(7-k);
     if(byte)ink=true;hex+=HEX2[byte];}
   if(!ink)return null;
-  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex};
+  const HX=rasterize.HX||(rasterize.HX=Array.from({length:256},(_,v)=>(v<16?'0':'')+v.toString(16).toUpperCase()));
+  const hp=new Array(bytes.length);for(let i=0;i<bytes.length;i++)hp[i]=HX[bytes[i]];
+  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex:hp.join(''),bytes};
 }
 // 各类元素「未旋转」时的尺寸与画法（单位：打印点）
 function painter(el,text,dpi,idx,img){
