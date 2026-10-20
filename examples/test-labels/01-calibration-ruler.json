@@ -1,0 +1,372 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 60,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "box",
+      "x": 0,
+      "y": 0,
+      "w": 100,
+      "h": 60,
+      "border": 0.25,
+      "fill": false,
+      "rot": 0
+    },
+    {
+      "type": "box",
+      "x": 10,
+      "y": 20,
+      "w": 50,
+      "h": 30,
+      "border": 0.25,
+      "fill": false,
+      "rot": 0
+    },
+    {
+      "type": "box",
+      "x": 10,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 10.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "10"
+    },
+    {
+      "type": "box",
+      "x": 20,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 20.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "20"
+    },
+    {
+      "type": "box",
+      "x": 30,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 30.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "30"
+    },
+    {
+      "type": "box",
+      "x": 40,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 40.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "40"
+    },
+    {
+      "type": "box",
+      "x": 50,
+      "y": 0,
+      "w": 0.25,
+      "h": 8,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 50.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "50"
+    },
+    {
+      "type": "box",
+      "x": 60,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 60.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "60"
+    },
+    {
+      "type": "box",
+      "x": 70,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 70.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "70"
+    },
+    {
+      "type": "box",
+      "x": 80,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 80.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "80"
+    },
+    {
+      "type": "box",
+      "x": 90,
+      "y": 0,
+      "w": 0.25,
+      "h": 5,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 90.6,
+      "y": 5.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "90"
+    },
+    {
+      "type": "box",
+      "x": 0,
+      "y": 10,
+      "w": 5,
+      "h": 0.25,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 5.5,
+      "y": 10.4,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "10"
+    },
+    {
+      "type": "box",
+      "x": 0,
+      "y": 20,
+      "w": 5,
+      "h": 0.25,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 5.5,
+      "y": 20.4,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "20"
+    },
+    {
+      "type": "box",
+      "x": 0,
+      "y": 30,
+      "w": 5,
+      "h": 0.25,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 5.5,
+      "y": 30.4,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "30"
+    },
+    {
+      "type": "box",
+      "x": 0,
+      "y": 40,
+      "w": 5,
+      "h": 0.25,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 5.5,
+      "y": 40.4,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "40"
+    },
+    {
+      "type": "box",
+      "x": 0,
+      "y": 50,
+      "w": 8,
+      "h": 0.25,
+      "border": 0.25,
+      "fill": true,
+      "rot": 0
+    },
+    {
+      "type": "text",
+      "x": 5.5,
+      "y": 50.4,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "50"
+    },
+    {
+      "type": "text",
+      "x": 12,
+      "y": 22,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "内框 50.0 × 30.0 mm"
+    },
+    {
+      "type": "text",
+      "x": 12,
+      "y": 26,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "外框 100.0 × 60.0 mm"
+    },
+    {
+      "type": "text",
+      "x": 12,
+      "y": 30,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "刻度间距 10.0 mm"
+    },
+    {
+      "type": "text",
+      "x": 62,
+      "y": 52,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "{#DATE:YYYY-MM-DD HH:mm}"
+    }
+  ]
+}

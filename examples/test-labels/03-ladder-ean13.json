@@ -1,0 +1,140 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 80,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "size": 2.2,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "EAN-13 模块宽梯度（标注为设定值 mm）"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 6,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.250"
+    },
+    {
+      "type": "ean13",
+      "x": 14,
+      "y": 5,
+      "h": 9,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "6925253841665"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 21,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.264"
+    },
+    {
+      "type": "ean13",
+      "x": 14,
+      "y": 20,
+      "h": 9,
+      "module": 0.264,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "6925253841665"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 36,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.330"
+    },
+    {
+      "type": "ean13",
+      "x": 14,
+      "y": 35,
+      "h": 9,
+      "module": 0.33,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "6925253841665"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 51,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.375"
+    },
+    {
+      "type": "ean13",
+      "x": 14,
+      "y": 50,
+      "h": 9,
+      "module": 0.375,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "6925253841665"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 66,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.500"
+    },
+    {
+      "type": "ean13",
+      "x": 14,
+      "y": 65,
+      "h": 9,
+      "module": 0.5,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "6925253841665"
+    }
+  ]
+}

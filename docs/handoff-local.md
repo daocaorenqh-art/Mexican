@@ -1,5 +1,7 @@
 # 交接：本地开发 / 真机测试（v0.11 之后）
 
+> **v0.17 更正**：下文写于两条开发线合并之前，描述的是另一条线的界面。合并（v0.16.0）后界面以主线为准，其中很多功能只在 `src/*.js` 里、界面没有入口。现状以 `docs/print-test-research.md` 开头的进度表和 `docs/integration.md` 为准；真机待测项见 `docs/print-test-matrix.md`。
+
 v0.12（分支 `claude/blissful-wright-35axkd`）已在云端完成，v0.12 新增 GS1 / UPC-E / Code93 / Codabar、TSPL、打印机状态、分批直发、USB 按名称直发、串口参数、数量字段、记录选择、打印日志、车间模式、文字适应宽度（见 CHANGELOG）。下面是只能在本地或真机上完成、以及尚未开始的工作。先读这三份文件：
 
 - `docs/print-test-research.md`：完整评估清单，开头有「进度」表，标明已完成 / 未完成和证据级别。

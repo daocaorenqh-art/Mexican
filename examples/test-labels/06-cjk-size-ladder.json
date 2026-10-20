@@ -1,0 +1,223 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 46,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "size": 2.2,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "中文小字梯度（字号 mm，左常规 右加粗）"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "1.5"
+    },
+    {
+      "type": "text",
+      "x": 10,
+      "y": 5,
+      "size": 1.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 55,
+      "y": 5,
+      "size": 1.5,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 11.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "2.0"
+    },
+    {
+      "type": "text",
+      "x": 10,
+      "y": 11.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 55,
+      "y": 11.5,
+      "size": 2,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 18,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "2.5"
+    },
+    {
+      "type": "text",
+      "x": 10,
+      "y": 18,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 55,
+      "y": 18,
+      "size": 2.5,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 24.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "3.0"
+    },
+    {
+      "type": "text",
+      "x": 10,
+      "y": 24.5,
+      "size": 3,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 55,
+      "y": 24.5,
+      "size": 3,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 31,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "3.5"
+    },
+    {
+      "type": "text",
+      "x": 10,
+      "y": 31,
+      "size": 3.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 55,
+      "y": 31,
+      "size": 3.5,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 37.5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "4.0"
+    },
+    {
+      "type": "text",
+      "x": 10,
+      "y": 37.5,
+      "size": 4,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    },
+    {
+      "type": "text",
+      "x": 55,
+      "y": 37.5,
+      "size": 4,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "合格证 镊铸鑫 B26"
+    }
+  ]
+}

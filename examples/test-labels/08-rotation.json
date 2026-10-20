@@ -1,0 +1,150 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 80,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "text",
+      "x": 5,
+      "y": 5,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "旋转 0°"
+    },
+    {
+      "type": "barcode",
+      "x": 5,
+      "y": 10,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "ROT0"
+    },
+    {
+      "type": "qrcode",
+      "x": 5,
+      "y": 23,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "ROT-QR-0"
+    },
+    {
+      "type": "text",
+      "x": 95,
+      "y": 5,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 90,
+      "content": "旋转 90°"
+    },
+    {
+      "type": "barcode",
+      "x": 90,
+      "y": 5,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 90,
+      "content": "ROT90"
+    },
+    {
+      "type": "qrcode",
+      "x": 77,
+      "y": 5,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 90,
+      "content": "ROT-QR-90"
+    },
+    {
+      "type": "text",
+      "x": 95,
+      "y": 75,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 180,
+      "content": "旋转 180°"
+    },
+    {
+      "type": "barcode",
+      "x": 95,
+      "y": 70,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 180,
+      "content": "ROT180"
+    },
+    {
+      "type": "qrcode",
+      "x": 95,
+      "y": 57,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 180,
+      "content": "ROT-QR-180"
+    },
+    {
+      "type": "text",
+      "x": 5,
+      "y": 75,
+      "size": 2.5,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 270,
+      "content": "旋转 270°"
+    },
+    {
+      "type": "barcode",
+      "x": 10,
+      "y": 75,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 270,
+      "content": "ROT270"
+    },
+    {
+      "type": "qrcode",
+      "x": 23,
+      "y": 75,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 270,
+      "content": "ROT-QR-270"
+    }
+  ]
+}

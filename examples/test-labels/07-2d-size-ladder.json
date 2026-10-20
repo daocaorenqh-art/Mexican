@@ -1,0 +1,245 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 58,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "size": 2.2,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "QR / DataMatrix 尺寸梯度（边长 mm）"
+    },
+    {
+      "type": "text",
+      "x": 3,
+      "y": 5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "QR 8"
+    },
+    {
+      "type": "qrcode",
+      "x": 3,
+      "y": 8,
+      "size": 8,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "https://example.com/合格证?sn=0001"
+    },
+    {
+      "type": "text",
+      "x": 3,
+      "y": 31,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "DM 8"
+    },
+    {
+      "type": "datamatrix",
+      "x": 3,
+      "y": 34,
+      "size": 8,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "合格证 DM-0001"
+    },
+    {
+      "type": "text",
+      "x": 15,
+      "y": 5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "QR 10"
+    },
+    {
+      "type": "qrcode",
+      "x": 15,
+      "y": 8,
+      "size": 10,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "https://example.com/合格证?sn=0001"
+    },
+    {
+      "type": "text",
+      "x": 15,
+      "y": 31,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "DM 10"
+    },
+    {
+      "type": "datamatrix",
+      "x": 15,
+      "y": 34,
+      "size": 10,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "合格证 DM-0001"
+    },
+    {
+      "type": "text",
+      "x": 29,
+      "y": 5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "QR 12"
+    },
+    {
+      "type": "qrcode",
+      "x": 29,
+      "y": 8,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "https://example.com/合格证?sn=0001"
+    },
+    {
+      "type": "text",
+      "x": 29,
+      "y": 31,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "DM 12"
+    },
+    {
+      "type": "datamatrix",
+      "x": 29,
+      "y": 34,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "合格证 DM-0001"
+    },
+    {
+      "type": "text",
+      "x": 45,
+      "y": 5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "QR 15"
+    },
+    {
+      "type": "qrcode",
+      "x": 45,
+      "y": 8,
+      "size": 15,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "https://example.com/合格证?sn=0001"
+    },
+    {
+      "type": "text",
+      "x": 45,
+      "y": 31,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "DM 15"
+    },
+    {
+      "type": "datamatrix",
+      "x": 45,
+      "y": 34,
+      "size": 15,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "合格证 DM-0001"
+    },
+    {
+      "type": "text",
+      "x": 64,
+      "y": 5,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "QR 20"
+    },
+    {
+      "type": "qrcode",
+      "x": 64,
+      "y": 8,
+      "size": 20,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "https://example.com/合格证?sn=0001"
+    },
+    {
+      "type": "text",
+      "x": 64,
+      "y": 31,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "DM 20"
+    },
+    {
+      "type": "datamatrix",
+      "x": 64,
+      "y": 34,
+      "size": 20,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "合格证 DM-0001"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 52,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "size": 2.2,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "静区与贴边（上排贴边，下排留足 10X / 4 模块）"
+    },
+    {
+      "type": "barcode",
+      "x": 0,
+      "y": 5,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "EDGE128"
+    },
+    {
+      "type": "barcode",
+      "x": 68.5,
+      "y": 5,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "EDGE128R"
+    },
+    {
+      "type": "barcode",
+      "x": 3,
+      "y": 22,
+      "h": 8,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "QUIET128"
+    },
+    {
+      "type": "qrcode",
+      "x": 0.2,
+      "y": 38,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "EDGE-QR"
+    },
+    {
+      "type": "qrcode",
+      "x": 30,
+      "y": 38,
+      "size": 12,
+      "ecl": "M",
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "QUIET-QR"
+    },
+    {
+      "type": "ean13",
+      "x": 55,
+      "y": 36,
+      "h": 10,
+      "module": 0.33,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "6925253841665"
+    }
+  ]
+}

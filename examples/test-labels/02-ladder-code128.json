@@ -1,0 +1,163 @@
+{
+  "v": 1,
+  "label": {
+    "w": 100,
+    "h": 77,
+    "dpi": 203,
+    "cols": 0,
+    "gapX": 3,
+    "gapY": 3,
+    "pmode": "roll"
+  },
+  "elements": [
+    {
+      "type": "text",
+      "x": 2,
+      "y": 1,
+      "size": 2.2,
+      "bold": true,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "Code128 模块宽梯度（标注为设定值 mm）"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 6,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.125"
+    },
+    {
+      "type": "barcode",
+      "x": 14,
+      "y": 5,
+      "h": 6,
+      "module": 0.125,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "1234567890"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 18,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.190"
+    },
+    {
+      "type": "barcode",
+      "x": 14,
+      "y": 17,
+      "h": 6,
+      "module": 0.19,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "1234567890"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 30,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.250"
+    },
+    {
+      "type": "barcode",
+      "x": 14,
+      "y": 29,
+      "h": 6,
+      "module": 0.25,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "1234567890"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 42,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.330"
+    },
+    {
+      "type": "barcode",
+      "x": 14,
+      "y": 41,
+      "h": 6,
+      "module": 0.33,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "1234567890"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 54,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.375"
+    },
+    {
+      "type": "barcode",
+      "x": 14,
+      "y": 53,
+      "h": 6,
+      "module": 0.375,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "1234567890"
+    },
+    {
+      "type": "text",
+      "x": 2,
+      "y": 66,
+      "size": 2,
+      "bold": false,
+      "align": "left",
+      "font": "",
+      "rot": 0,
+      "content": "0.500"
+    },
+    {
+      "type": "barcode",
+      "x": 14,
+      "y": 65,
+      "h": 6,
+      "module": 0.5,
+      "showText": true,
+      "color": "#000000",
+      "bg": "",
+      "rot": 0,
+      "content": "1234567890"
+    }
+  ]
+}

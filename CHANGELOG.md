@@ -36,7 +36,8 @@
 **工程**
 - `src/barcodes.js`、`src/textdata.js` 在浏览器里改为命名空间（`Barcodes`、`TextData`），不再往全局塞同名函数。
 - `TextData` 求值环境支持 `fallback`（设计变量），`Job.preflight` 支持界面传入实际尺寸（`size`）和斑马点密度（`dpmm`）。
-- 端到端测试 18 → 20 组；README 改为只描述界面里实际可用的功能，尚未接入界面的列在「编码器已完成、界面尚未接入的功能」。
+- 新增真机测试标签 `examples/test-labels/`（`tests/make-test-labels.cjs` 生成，自动检查能载入、无预检错误、203 / 300dpi 下每个码都能读回）和真机 / 外网待测清单 `docs/print-test-matrix.md`。
+- 端到端测试 18 → 21 组；README 改为只描述界面里实际可用的功能，尚未接入界面的列在「编码器已完成、界面尚未接入的功能」。
 
 ## v0.12.0
 
