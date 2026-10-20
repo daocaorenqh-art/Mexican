@@ -124,6 +124,8 @@
     <a data-cmd="zpl">导出 ZPL（斑马机）…</a>
     <hr>
     <a data-cmd="print">打印…　Ctrl+P</a>
+    <a data-cmd="silentprint">打印到所选打印机（桌面版）</a>
+    <a data-cmd="zplsend">ZPL 直发打印机（桌面版）</a>
   </div></div>
   <div class="menu"><span>编辑</span><div class="dd">
     <a data-cmd="undo">撤消　Ctrl+Z</a>
@@ -220,6 +222,22 @@
         <label class="f"><span>到第几条</span><input id="rTo" type="number" value="0" min="0" step="1"></label>
       </div>
       <p class="hint">「到第几条」填 0 表示到最后一条。预览、打印、导出 ZPL 都按这里的范围和份数出标签；流水号按实际张数逐张递增。</p>
+    </div>
+
+    <div class="panel" id="prnPanel" style="display:none">
+      <h2>打印机（桌面版）</h2>
+      <label class="f"><span>系统打印机</span>
+        <div style="display:flex;gap:6px"><select id="prnList"><option value="">（加载中…）</option></select><button id="prnRefresh" title="刷新打印机列表">↻</button></div></label>
+      <div class="btns"><button id="prnSilent" class="primary">打印到此打印机</button></div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:12px 0">
+      <label class="f"><span>ZPL 直发方式</span>
+        <select id="rawKind"><option value="tcp">网络打印机（IP）</option><option value="share">本机共享打印机（USB）</option><option value="com">串口（COM）</option></select></label>
+      <div class="row">
+        <label class="f"><span id="rawAddrLbl">IP 地址</span><input id="rawAddr" placeholder="192.168.1.50"></label>
+        <label class="f" id="rawPortWrap"><span>端口</span><input id="rawPort" type="number" value="9100"></label>
+      </div>
+      <div class="btns"><button id="rawSend" class="primary">发送 ZPL 到打印机</button></div>
+      <p class="hint" id="prnMsg">USB 打印机：在 Windows 打印机属性里设为「共享」，这里填共享名即可直发。</p>
     </div>
 
     <div class="panel">
@@ -1095,6 +1113,8 @@ document.querySelector('#menubar').addEventListener('click',e=>{
     case 'save':$('#saveBtn').click();break;
     case 'zpl':exportZPL();break;
     case 'print':window.print();break;
+    case 'silentprint':doSilentPrint();break;
+    case 'zplsend':doSendZPL();break;
     case 'undo':undo();break; case 'redo':redo();break;
     case 'cut':cutSel();break; case 'copy':copySel();break; case 'paste':pasteClip();break; case 'del':delSel();break;
     case 'front':zMove('front');break; case 'fwd':zMove('fwd');break; case 'bwd':zMove('bwd');break; case 'back':zMove('back');break;
@@ -1246,6 +1266,7 @@ function exportZPL(){const z=buildZPL();const blob=new Blob([z],{type:'text/plai
 // 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延实际张数，下次接着编号不重号
 function askAdvanceCounters(){
   const cs=elements.filter(e=>e.type==='counter'&&e.persist);if(!cs.length)return;
+  const now=Date.now();if(now-(askAdvanceCounters.last||0)<2000)return;askAdvanceCounters.last=now;
   const n=printList().length;
   if(!confirm('本次共 '+n+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
   cs.forEach(e=>{e.start=(+e.start||0)+n*(+e.step||1);});commit();renderEditor();render();
@@ -1285,6 +1306,47 @@ if(window.labelDB&&window.labelDB.isDesktop){
     if(!r.rows||!r.rows.length){msg('查询无数据',false);return;}
     rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);saveCfg();};
   restoreCfg();syncDb();
+}
+
+/* ---------- 打印机（仅桌面版，window.labelPrinter 存在时） ---------- */
+const hasPrinter=()=>!!(window.labelPrinter&&window.labelPrinter.isDesktop);
+function prnMsg(s,ok){const m=$('#prnMsg');if(m){m.textContent=s;m.style.color=ok?'var(--muted)':'#c00';}}
+async function doSilentPrint(){
+  if(!hasPrinter()){alert('「打印到所选打印机」仅在桌面安装版可用；网页版请用 Ctrl+P。');return;}
+  const dev=$('#prnList').value;if(!dev){prnMsg('请先选择打印机',false);return;}
+  prnMsg('正在打印…',true);
+  const r=await window.labelPrinter.print(dev);
+  if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else prnMsg('打印失败：'+r.error,false);
+}
+function rawTarget(){const k=$('#rawKind').value,a=$('#rawAddr').value.trim();
+  return k==='tcp'?{kind:'tcp',host:a,port:+$('#rawPort').value||9100}:k==='share'?{kind:'share',name:a}:{kind:'com',port:a};}
+async function doSendZPL(){
+  if(!hasPrinter()){alert('「ZPL 直发」仅在桌面安装版可用；网页版请用「文件 → 导出 ZPL」。');return;}
+  if(!$('#rawAddr').value.trim()){prnMsg('请填写打印机 IP / 共享名 / 串口',false);return;}
+  prnMsg('正在发送…',true);
+  const r=await window.labelPrinter.sendRaw(rawTarget(),buildZPL());
+  if(r.ok){prnMsg('已发送 '+printList().length+' 张标签到打印机',true);askAdvanceCounters();}else prnMsg(r.error,false);
+}
+if(hasPrinter()){
+  $('#prnPanel').style.display='';
+  const KEY='label.printer';let saved={};
+  try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){}
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify({dev:$('#prnList').value,kind:$('#rawKind').value,addr:$('#rawAddr').value,port:$('#rawPort').value}));}catch(e){}};
+  const syncRaw=()=>{const k=$('#rawKind').value;
+    $('#rawAddrLbl').textContent=k==='tcp'?'IP 地址':k==='share'?'共享打印机名':'串口';
+    $('#rawAddr').placeholder=k==='tcp'?'192.168.1.50':k==='share'?'ZT410':'COM1';
+    $('#rawPortWrap').style.display=k==='tcp'?'':'none';};
+  const loadPrinters=async()=>{const r=await window.labelPrinter.list(),sel=$('#prnList');
+    if(!r.ok){sel.innerHTML='<option value="">（读取失败）</option>';prnMsg(r.error,false);return;}
+    sel.innerHTML=r.printers.length?r.printers.map(p=>`<option value="${esc(p.name)}">${esc(p.displayName)}${p.isDefault?'（默认）':''}</option>`).join(''):'<option value="">（未找到打印机）</option>';
+    const want=saved.dev||(r.printers.find(p=>p.isDefault)||{}).name;
+    if(want&&r.printers.some(p=>p.name===want))sel.value=want;};
+  if(saved.kind)$('#rawKind').value=saved.kind;if(saved.addr)$('#rawAddr').value=saved.addr;if(saved.port)$('#rawPort').value=saved.port;
+  syncRaw();loadPrinters();
+  $('#prnRefresh').onclick=loadPrinters;
+  $('#rawKind').onchange=()=>{syncRaw();save();};
+  $('#prnList').onchange=save;$('#rawAddr').oninput=save;$('#rawPort').oninput=save;
+  $('#prnSilent').onclick=doSilentPrint;$('#rawSend').onclick=doSendZPL;
 }
 
 /* ---------- 启动 ---------- */

@@ -11,3 +11,11 @@ contextBridge.exposeInMainWorld('labelDB', {
   query: (cfg, sql) => ipcRenderer.invoke('db:query', { cfg, sql }),
   pickFile: (kind) => ipcRenderer.invoke('db:pickFile', kind)
 });
+
+// 打印机：列表、ZPL 直发、指定打印机静默打印
+contextBridge.exposeInMainWorld('labelPrinter', {
+  isDesktop: true,
+  list: () => ipcRenderer.invoke('printer:list'),
+  sendRaw: (target, data) => ipcRenderer.invoke('printer:sendRaw', { target, data }),
+  print: (deviceName) => ipcRenderer.invoke('printer:print', { deviceName })
+});
