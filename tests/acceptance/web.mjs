@@ -169,6 +169,24 @@ console.log('\n[E] 驱动打印分页');
   await page.close();
 }
 
+/* ================= E2. 整页模式（A4 不干胶） ================= */
+{
+  const page = await openApp(browser);
+  if (!(await page.$('#startPos'))) rec.gap('E-sheet', '整页模式：A4 页面、从第 N 个位置开始', '界面尚未提供');
+  else {
+    await loadDesign(page, design([{ type: 'text', x: 3, y: 3, size: 4, content: '{SKU}', rot: 0 }], 60, 40));
+    await setCSV(page, 'SKU\nA1\nA2\nA3\nA4\nA5\nA6');
+    await setField(page, 'pmode', 'sheet'); await setField(page, 'cols', 3); await setField(page, 'startPos', 3);
+    await page.evaluate(() => window.dispatchEvent(new Event('beforeprint'))); await page.emulateMedia({ media: 'print' });
+    const pdf = (await page.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1');
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    const box = (pdf.match(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/) || []).slice(1).map(Number);
+    const slots = await page.locator('#preview .label.slot').count();
+    rec.check('E-sheet', '整页模式：A4 页面、前 2 个位置留空', box.length && Math.abs(box[0] - 595.3) < 2 && Math.abs(box[1] - 841.9) < 2 && slots === 2, `MediaBox ${box.join('×')}；留空 ${slots}`);
+  }
+  await page.close();
+}
+
 /* ================= F. 生产流程功能 ================= */
 console.log('\n[F] 生产流程功能');
 {
@@ -190,6 +208,46 @@ console.log('\n[F] 生产流程功能');
     const z = await exportCmd(page, { choice: 'ok' });
     rec.check('F-qty-out', '数量字段：A×2 + C×3 = 5 张', z.data && zplLabelCount(z.data.toString('utf8')) === 5, z.data ? zplLabelCount(z.data.toString('utf8')) + ' 张' : '未导出');
   }
+  await page.close();
+}
+
+/* ================= I. 设计往返与健壮性 ================= */
+console.log('\n[I] 设计往返与健壮性');
+{
+  const page = await openApp(browser);
+  // 每种元素都用默认值建一个：预览不报错；保存 → 载入后原样
+  const types = await page.evaluate(() => Object.keys(DEFAULTS));
+  const all = await page.evaluate((ts) => ts.map((t, i) => Object.assign(JSON.parse(JSON.stringify(DEFAULTS[t])), { x: 2 + (i % 4) * 18, y: 2 + Math.floor(i / 4) * 14 })), types);
+  await loadDesign(page, { v: 1, label: L(80, 120), elements: all });
+  const warn = await page.evaluate(() => [...document.querySelectorAll('#preview .label:first-child .el')].map((e) => e.textContent).filter((t) => t.includes('⚠')));
+  rec.check('I-defaults', `全部 ${types.length} 种元素的默认值都能正常渲染`, warn.length === 0, warn.join(' / ') || types.join(','));
+  const dl = page.waitForEvent('download');
+  await page.evaluate(() => { const a = document.querySelector('#menubar [data-cmd="save"]'); if (a) a.click(); else document.querySelector('#saveBtn').click(); });
+  const saved = JSON.parse(fs.readFileSync(await (await dl).path(), 'utf8'));
+  await page.evaluate(() => { elements = []; render(); });
+  await loadDesign(page, saved);
+  const back = await page.evaluate(() => JSON.parse(JSON.stringify(elements)));
+  const strip = (arr) => arr.map((e) => { const o = { ...e }; delete o.id; return JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]])); });
+  const diff = strip(all).filter((x, i) => { const a = JSON.parse(x), b = new Map(JSON.parse(strip(back)[i] || '[]')); return a.some(([k, v]) => JSON.stringify(b.get(k)) !== JSON.stringify(v)); });
+  rec.check('I-roundtrip', '保存设计 → 载入后所有元素字段原样', back.length === all.length && diff.length === 0, `${back.length}/${all.length} 个；差异 ${diff.length}：${diff.slice(0, 1).join('')}`);
+  // 撤消 / 重做
+  await page.evaluate(() => { elements = [{ type: 'text', x: 1, y: 1, size: 3, content: 'A', rot: 0 }]; commit(); render();
+    elements[0].x = 5; commit(); elements[0].x = 9; commit(); });
+  const ur = await page.evaluate(() => { undo(); const a = elements[0].x; undo(); const b = elements[0].x; redo(); const c = elements[0].x; return [a, b, c]; });
+  rec.check('I-undo', '撤消 / 重做', JSON.stringify(ur) === '[5,1,5]', JSON.stringify(ur));
+  // 自动保存：刷新后设计还在
+  await page.evaluate(() => { elements = [{ type: 'text', x: 7, y: 7, size: 3, content: '自动保存测试', rot: 0 }]; commit(); render(); });
+  await page.reload(); await page.waitForSelector('#preview .label');
+  rec.check('I-autosave', '意外关闭后重开，设计自动恢复', (await previewTexts(page))[0].includes('自动保存测试'));
+  // 损坏的自动保存 / 损坏的设计文件
+  await page.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/autosave/i.test(k)) localStorage.setItem(k, '{坏数据'); } });
+  page._errors.length = 0;
+  await page.reload(); await page.waitForTimeout(500);
+  rec.check('I-badautosave', '自动保存损坏时仍能正常启动', (await page.locator('#preview .label').count()) > 0 && page._errors.length === 0, page._errors.join(';'));
+  const bad = OUT + 'bad-design.json'; fs.writeFileSync(bad, '{"elements": "不是数组"');
+  page._dialogs.length = 0;
+  await page.setInputFiles('#designIn', bad); await page.waitForTimeout(400);
+  rec.check('I-baddesign', '载入损坏的设计文件：提示错误、原设计不丢', page._dialogs.length > 0 && (await page.locator('#preview .label').count()) > 0 && page._errors.length === 0, page._dialogs.join(' / ').slice(0, 120));
   await page.close();
 }
 
