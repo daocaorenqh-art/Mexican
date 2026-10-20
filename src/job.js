@@ -2,8 +2,8 @@
    浏览器：<script src="src/job.js">（需先加载 barcodes.js、textdata.js）；Node（测试）：require('./src/job.js')。 */
 (function(root){
 const isNode=typeof module!=='undefined'&&module.exports;
-const B=isNode?require('./barcodes.js'):root;
-const T=isNode?require('./textdata.js'):root;
+const B=isNode?require('./barcodes.js'):root.Barcodes;
+const T=isNode?require('./textdata.js'):root.TextData;
 
 /* ---------- 出标签序列 ----------
    每项：{row, rec(第几条记录，无数据为 0), recPos(在本次范围内的第几条，0 起), copy(第几份，1 起), idx(本次第几张，0 起)}
@@ -52,7 +52,7 @@ function labelCtx(elements,e,extra){
   e=e||{row:null,rec:0,recPos:0,copy:1,idx:0};extra=extra||{};
   const vars=Object.assign({},extra.vars||{});
   for(const el of elements)if(el.type==='counter'){const k=counterName(el);if(!(k in vars))vars[k]=counterText(el,e);}
-  return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy});
+  return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy,fallback:extra.fallback||null});
 }
 // 元素在这张标签上的文字内容
 function elementText(el,ctx,e){
@@ -100,9 +100,13 @@ function rotatedBox(x,y,w,h,rot){const a=(+rot||0)*Math.PI/180,c=Math.cos(a),s=M
 
 /* ---------- 打印前预检 ----------
    返回 {errors, warnings}，每项 {n(第几张), rec, ei, el, msg}。错误：内容无法编码、表达式出错、字段不存在；
-   警告：超出标签、静区不足、模块小于 1 个打印点、EAN 尺寸偏离 GS1 推荐 */
+   警告：超出标签、静区不足、模块小于 1 个打印点、EAN 尺寸偏离 GS1 推荐
+   可选：o.size(el,text,ei)→{w,h,dx}（mm，界面按实际画法给出的未旋转尺寸，dx 为相对 x 的左边偏移）；
+         o.dpmm 打印机每 mm 点数（斑马 203/300/600dpi = 8/12/24）；o.fallback 设计变量 */
 function preflight(o){
   const {elements,list,label}=o,dpi=+label.dpi||203,W=+label.w||0,H=+label.h||0;
+  const D=o.dpmm?(mm=>Math.round((+mm||0)*o.dpmm)):(mm=>dots(mm,dpi)),toMM=d=>o.dpmm?d/o.dpmm:d*25.4/dpi;
+  const MD=mm=>Math.max(1,D(mm)),MXD=(mm,n)=>Math.max(1,Math.floor(D(mm)/n));
   const errors=[],warnings=[],cache=new Map(),hasRows=list.some(e=>e.row);
   const encode=(el,text)=>{const k=el.type+'\u0001'+(el.ecl||'')+'\u0001'+text;
     if(!cache.has(k)){let v;try{v={ok:B.BARCODE_2D.includes(el.type)?B.encode2D(el.type,text,el.ecl):B.encode1D(el.type,text)};}
@@ -121,24 +125,26 @@ function preflight(o){
         add(errors,'找不到字段 / 变量：'+[...ctx.missing].join('、'));
       if(ctx.errors.length)return;
       let size;
-      try{size=elementSize(el,text,dpi,()=>encode(el,text),o.measure);}
+      try{if(isCode(el.type))encode(el,text);   // 先确认能编码，错误信息更明确
+        size=o.size?(o.size(el,text,ei)||{w:0,h:0}):elementSize(el,text,dpi,()=>encode(el,text),o.measure);}
       catch(err){add(errors,err.message);return;}
       let ox=+el.x||0;
-      if((el.type==='text'||el.type==='counter'||el.type==='date')&&(el.align==='center'||el.align==='right'))ox-=el.align==='center'?size.w/2:size.w;
+      if(o.size)ox+=+size.dx||0;
+      else if((el.type==='text'||el.type==='counter'||el.type==='date')&&(el.align==='center'||el.align==='right'))ox-=el.align==='center'?size.w/2:size.w;
       const bx=rotatedBox(ox,+el.y||0,size.w,size.h,el.rot);
       // 线框（未填充）常用作外框，不算遮挡
       if(text!==''&&!((el.type==='box'||el.type==='ellipse')&&!el.fill))boxes.push({ei,el,bx,code:isCode(el.type)});
       const tol=0.3;
       if(bx.x0<-tol||bx.y0<-tol||bx.x1>W+tol||bx.y1>H+tol)add(warnings,'超出标签范围（约 '+bx.x1.toFixed(1)+'×'+bx.y1.toFixed(1)+'mm，标签 '+W+'×'+H+'mm）');
       if(!(+el.rot)){
-        if(B.BARCODE_1D.includes(el.type)){const q=10*moduleDots(el.module,dpi)*25.4/dpi;
+        if(B.BARCODE_1D.includes(el.type)){const q=toMM(10*MD(el.module));
           if((+el.x||0)<q-0.05||bx.x1>W-q+0.05)add(warnings,'一维码左右静区不足 10 个模块（约 '+q.toFixed(1)+'mm），可能扫不出');}
-        if(B.BARCODE_2D.includes(el.type)){const m=encode(el,text),md=matrixModuleDots(el.size,m.size,dpi);
-          if(dots(el.size,dpi)/m.size<1)add(warnings,'码图边长太小：每个模块不足 1 个打印点，实际会放大到 '+(m.size*md*25.4/dpi).toFixed(1)+'mm');
-          const q=(el.type==='qrcode'?4:1)*md*25.4/dpi;
+        if(B.BARCODE_2D.includes(el.type)){const m=encode(el,text),md=MXD(el.size,m.size);
+          if(D(el.size)/m.size<1)add(warnings,'码图边长太小：每个模块不足 1 个打印点，实际会放大到 '+toMM(m.size*md).toFixed(1)+'mm');
+          const q=toMM((el.type==='qrcode'?4:1)*md);
           if((+el.x||0)<q-0.05||(+el.y||0)<q-0.05||bx.x1>W-q+0.05||bx.y1>H-q+0.05)add(warnings,(el.type==='qrcode'?'二维码四周静区不足 4 个模块':'DataMatrix 四周静区不足 1 个模块'));}
       }
-      if(['ean13','ean8','upca','upce'].includes(el.type)){const x=moduleDots(el.module,dpi)*25.4/dpi;
+      if(['ean13','ean8','upca','upce'].includes(el.type)){const x=toMM(MD(el.module));
         if(x<0.264-0.001||x>0.66+0.001)add(warnings,'模块宽 '+x.toFixed(3)+'mm 偏离 GS1 零售码推荐范围 0.264–0.66mm');}
     });
     // 条码 / 二维码被其他内容压住会扫不出

@@ -24,8 +24,11 @@ ok('最后一张是第 500 条记录',last==='R500',last);
 await p.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
 ok('打印后恢复 200 张',await cnt()===200);
 
-const sp=await p.evaluate(async()=>{window.confirm=()=>true;document.querySelector('#prnList').value='ZT410';await doSilentPrint();
-  return {at:window.__atPrint,after:document.querySelectorAll('#preview .label').length};});
+const sp=await p.evaluate(async()=>{window.confirm=()=>true;document.querySelector('#prnList').value='ZT410';
+  const run=doSilentPrint();await new Promise(r=>setTimeout(r,100));
+  const pf=document.querySelector('#pfDlg').style.display!=='none';if(pf)document.querySelector('#pfGo').click();   // 预检提醒（条码贴边、静区不足）→ 继续
+  await run;return {at:window.__atPrint,after:document.querySelectorAll('#preview .label').length,pf};});
+ok('静默打印前先预检（条码静区不足的提醒）',sp.pf);
 ok('桌面静默打印调用时刻页面有全部 500 张',sp.at===500,'调用时 '+sp.at);
 ok('静默打印后恢复 200 张',sp.after===200,'之后 '+sp.after);
 

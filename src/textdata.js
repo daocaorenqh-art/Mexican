@@ -1,5 +1,5 @@
 /* 内容求值、变量、日期、CSV 解析（原创实现，无第三方依赖）。
-   浏览器：<script src="src/textdata.js"> 后以全局变量使用；Node（测试）：require('./src/textdata.js')。
+   浏览器：<script src="src/textdata.js"> 后用全局 TextData.*；Node（测试）：require('./src/textdata.js')。
 
    内容写法：
    1) 普通文字 + 插值：{字段}、{表.字段}、{#变量}、{?输入项}，字段名可含中文、空格
@@ -11,7 +11,7 @@
      {#TIME}          HH:mm:ss
      {#N} 本次第几张  {#REC} 第几条记录  {#COPY} 该记录第几份
      {?批号}          打印时弹窗输入
-   ctx：{row, vars, prompts, now, n, rec, copy, missing:Set} */
+   ctx：{row, vars, prompts, now, n, rec, copy, missing:Set, fallback(设计变量 名→值，可选)} */
 (function(root){
 
 /* ---------- 日期 ---------- */
@@ -66,13 +66,17 @@ function fieldVal(name,c){
   if(raw[0]==='?'){const k=raw.slice(1).trim();
     if(ctx.prompts&&k in ctx.prompts)return String(ctx.prompts[k]);
     return (ctx.row||ctx.strict)?(ctx.missing.add(raw),''):'['+raw+']';}  // 预检（strict）时未填视为缺失
-  const row=ctx.row;
-  if(!row)return '['+raw.split('.').pop().trim()+']';
-  if(raw in row)return row[raw];
+  const row=ctx.row,has=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
   const key=raw.split('.').pop().trim(); // 去掉表前缀
-  if(key in row)return row[key];
-  const lk=key.toLowerCase(),hit=Object.keys(row).find(k=>k.toLowerCase()===lk); // 不区分大小写回退
-  if(hit!==undefined)return row[hit];
+  if(row){
+    if(has(row,raw))return row[raw];
+    if(has(row,key))return row[key];
+    const lk=key.toLowerCase(),hit=Object.keys(row).find(k=>k.toLowerCase()===lk); // 不区分大小写回退
+    if(hit!==undefined)return row[hit];
+  }
+  const fb=ctx.fallback;   // 设计里定义的变量（写作 {变量名}），同名时数据字段优先
+  if(fb&&has(fb,key))return fb[key];
+  if(!row)return '['+key+']';
   ctx.missing.add(key);return '';
 }
 // 内容里用到的 {?输入项}（打印前弹窗收集）
@@ -191,5 +195,5 @@ function parseData(text){
 }
 
 const api={fmtDate,addDate,parseDate,makeCtx,fieldVal,evalContent,evalExpr,promptNames,decodeText,parseData};
-if(typeof module!=='undefined'&&module.exports)module.exports=api;else Object.assign(root,api);
+if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TextData=api;   // 浏览器：命名空间，避免与页面同名函数冲突
 })(typeof window!=='undefined'?window:globalThis);

@@ -92,6 +92,19 @@ check('条码被文字压住被警告（外框线不算）', ov.warnings.filter(
 // 旋转后的外框
 const bx = Job.rotatedBox(10, 10, 20, 5, 90);
 check('旋转 90° 外框（绕左上角顺时针）', Math.abs(bx.x0 - 5) < 1e-9 && Math.abs(bx.x1 - 10) < 1e-9 && Math.abs(bx.y1 - 30) < 1e-9, JSON.stringify(bx));
+// 界面给出实际尺寸（o.size）与斑马点密度（o.dpmm），预检按实际画法判断
+{ const label = { w: 60, h: 40, dpi: 300 }, list = Job.makePrintList(null, 1, 0, 1);
+  const r = Job.preflight({ elements: [{ type: 'text', x: 55, y: 5, size: 3, content: 'ABC' }], list, label, now: new Date(),
+    size: () => ({ w: 20, h: 4, dx: -10 }), dpmm: 12 });
+  check('o.size：按界面给出的宽度判断出界', r.warnings.some(w => /超出标签/.test(w.msg)), JSON.stringify(r.warnings));
+  const r2 = Job.preflight({ elements: [{ type: 'text', x: 30, y: 5, size: 3, content: 'ABC' }], list, label, now: new Date(),
+    size: () => ({ w: 20, h: 4, dx: -10 }), dpmm: 12 });
+  eq('o.size：未出界不报', r2.warnings.length, 0);
+  const r3 = Job.preflight({ elements: [{ type: 'ean13', x: 10, y: 5, h: 10, module: 0.33, content: '6925253841665' }], list, label, now: new Date(), dpmm: 12 });
+  check('o.dpmm：300dpi 按 12 点/mm（0.33mm → 4 点 = 0.333mm，在 GS1 范围内）', !r3.warnings.some(w => /GS1/.test(w.msg)), JSON.stringify(r3.warnings));
+  const r4 = Job.preflight({ elements: [{ type: 'text', x: 1, y: 1, size: 3, content: '{批次}' }], list: Job.makePrintList([{ a: 1 }], 1, 0, 1), label, now: new Date(),
+    fallback: { '批次': 'P9' } });
+  eq('设计变量不算缺失字段', r4.errors.length, 0); }
 eq('图片路径转 file 地址', Job.imageSrc({}, 'C:\\img\\a.png'), 'file:///C:/img/a.png');
 
 done();

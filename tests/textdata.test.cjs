@@ -17,6 +17,16 @@ eq('未加载数据时显示占位', T.evalContent('{品名}', null), '[品名]'
 eq('旧表达式写法兼容', T.evalContent('="零售价："+[JYPRICE]+".00"', row), '零售价：558.00');
 eq('表达式里的中文字段', T.evalContent('=[品名]', row), '女包');
 
+// 设计变量（{变量名}）：数据字段优先，未加载数据时也能取到；不存在的仍记为缺失
+{ const c = T.makeCtx({ row, fallback: { '批次': 'P9', 'SKU': '变量值' } });
+  eq('设计变量 {批次}', T.evalContent('{批次}', c), 'P9');
+  eq('同名时数据字段优先', T.evalContent('{SKU}', c), 'A1');
+  eq('表达式里的设计变量', T.evalContent('=[批次]+"-"+[SKU]', c), 'P9-A1');
+  T.evalContent('{无此项}', c); check('不存在的字段仍记为缺失', c.missing.has('无此项') && !c.missing.has('批次')); }
+eq('未加载数据时设计变量取值', T.evalContent('{批次}', T.makeCtx({ fallback: { '批次': 'P9' } })), 'P9');
+eq('未加载数据时未知字段仍显示占位', T.evalContent('{品名}', T.makeCtx({ fallback: { '批次': 'P9' } })), '[品名]');
+eq('原型链上的名字不当作字段', T.evalContent('{constructor}', T.makeCtx({ row: { a: '1' } })), '');
+
 // 变量
 eq('{#SN}', T.evalContent('SN{#SN}', ctx()), 'SN0007');
 eq('{#DATE}', T.evalContent('{#DATE}', ctx()), '2026-10-20');
