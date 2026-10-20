@@ -288,6 +288,8 @@ const W=Math.round(50*8),H=Math.round(30*8);
 async function scanTSPL(lab){const px=new Uint8Array(W*H);
   for(const b of lab.bitmaps)for(let y=0;y<b.h;y++)for(let x=0;x<b.bpr*8;x++){const v=b.bytes[y*b.bpr+(x>>3)],bit=(v>>(7-(x&7)))&1;
     if(!bit){const X=b.x+x,Y=b.y+y;if(X<W&&Y<H)px[Y*W+X]=1;}}
+  // 一维码 / 线条现在用 BAR 精确画出（体积小），也要还原
+  for(const [bx,by,bw,bh] of lab.bars)for(let Y=by;Y<by+bh&&Y<H;Y++)for(let X=bx;X<bx+bw&&X<W;X++)px[Y*W+X]=1;
   return (await decodeBits(W,H,(x,y)=>px[y*W+x],{scale:2})).map(r=>r.text).sort();}
 const sc=await scanTSPL(tl[1]);
 ok('TSPL 点阵扫码：QR（中文）与 Code128 都扫得出',sc.includes('合格证 长裤')&&sc.includes('B200'),JSON.stringify(sc));
