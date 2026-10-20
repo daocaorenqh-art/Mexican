@@ -76,6 +76,7 @@
               background-size:18.9px 18.9px}
   .label .el{position:absolute;white-space:pre;line-height:1;cursor:move}
   .label .el.selel{outline:1px dashed var(--accent);outline-offset:1px}
+  .label.slot{background:transparent;box-shadow:none;outline:1px dashed var(--line)}   /* 整页模式跳过的标签位 */
   .label .el.warnel{outline:1px dashed #c00;outline-offset:1px}   /* 字段找不到 / 表达式出错（只在屏幕上显示） */
   .label .marquee{position:absolute;border:1px dashed var(--accent);background:rgba(47,111,237,.10);pointer-events:none;z-index:5}
   .elitem .top{cursor:pointer}
@@ -107,7 +108,6 @@
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
   @media print{
-    @page{margin:8mm}
     body{background:#fff}
     header, #menubar, .wrap>div:first-child, #pager, #canvasbar{display:none !important}
     .rulerwrap>svg,.rulerwrap>.rcorner{display:none}
@@ -226,11 +226,24 @@
         <label class="f"><span>每行数量</span><input id="cols" type="number" value="0" min="0" step="1"></label>
         <label class="f"><span>单位</span><select id="unit"><option value="mm">mm</option><option value="cm">cm</option></select></label>
       </div>
-      <div class="row">
-        <label class="f"><span>列间距 (<span class="ul">mm</span>)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
-        <label class="f"><span>行间距 (<span class="ul">mm</span>)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
+      <label class="f"><span>打印方式</span>
+        <select id="pmode"><option value="roll">标签机（每张一页，页面 = 标签尺寸）</option><option value="sheet">整页（A4 不干胶等多张/页）</option></select></label>
+      <div id="sheetOpts">
+        <div class="row">
+          <label class="f"><span>纸张</span><select id="paper"><option value="A4">A4</option><option value="A5">A5</option><option value="Letter">Letter</option></select></label>
+          <label class="f"><span>从第几个位置开始</span><input id="startPos" type="number" value="1" min="1" step="1"></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>页上边距 (<span class="ul">mm</span>)</span><input id="mTop" type="number" value="8" min="0" step="0.5"></label>
+          <label class="f"><span>页左边距 (<span class="ul">mm</span>)</span><input id="mLeft" type="number" value="8" min="0" step="0.5"></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>列间距 (<span class="ul">mm</span>)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
+          <label class="f"><span>行间距 (<span class="ul">mm</span>)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
+        </div>
+        <p class="hint">「每行数量」设 N 按 N 列网格排布（如 A4 不干胶多张/页）；设 0 按宽度自动换行。「从第几个位置开始」可接着用打过一部分的不干胶纸。</p>
       </div>
-      <p class="hint">整页套打：「每行数量」设 N 则按 N 列网格排布（如 A4 不干胶多张/页）；设 0 则按宽度自动平铺换行。标签机一般每张一页。</p>
+      <p class="hint" id="rollHint">标签机模式：每张标签单独一页，页面尺寸 = 标签尺寸、无页边距。打印对话框里请选标签机，纸张选与标签同尺寸。</p>
     </div>
 
     <div class="panel">
@@ -655,31 +668,53 @@ function printList(){
   const L=Job.makePrintList(rows,$('#rFrom').value,$('#rTo').value,$('#copies').value,printSkip);
   const out=L.map(e=>e.row);out.items=L;out.error=L.error;return out;
 }
+// 打印页面尺寸：标签机模式每张一页、页面 = 标签尺寸、无边距；整页模式按纸张 + 页边距排版
+function updatePageStyle(){
+  let st=document.getElementById('pageStyle');
+  if(!st){st=document.createElement('style');st.id='pageStyle';document.head.appendChild(st);}
+  const W=toMM($('#lw').value), H=toMM($('#lh').value),sheet=$('#pmode').value==='sheet';
+  $('#sheetOpts').style.display=sheet?'':'none';$('#rollHint').style.display=sheet?'none':'';
+  st.textContent=sheet
+    ?'@page{size:'+$('#paper').value+';margin:'+(+toMM($('#mTop').value)||0)+'mm 0 0 '+(+toMM($('#mLeft').value)||0)+'mm}'
+     +'@media print{.label.slot{visibility:hidden;box-shadow:none}}'
+    :'@page{size:'+W+'mm '+H+'mm;margin:0}'
+     +'@media print{#preview{display:block !important;gap:0 !important}#preview .label{break-after:page;page-break-after:always}'
+     +'#preview .label:last-child{break-after:auto;page-break-after:auto}}';
+}
+// 桌面版静默打印的页面尺寸：标签机模式 = 标签尺寸（微米），整页模式 = 纸张名
+function silentPageSize(){return $('#pmode').value==='sheet'?$('#paper').value
+  :{width:Math.round(toMM($('#lw').value)*1000),height:Math.round(toMM($('#lh').value)*1000)};}
 const PREVIEW_CAP=200;   // 预览最多渲染的张数；打印/导出 ZPL 不受此限
 let printingAll=false;   // 打印期间临时全量渲染
 function render(opt){
   syncSel();
   const pv=$('#preview');
-  const cols=+$('#cols').value||0;
+  const sheet=$('#pmode').value==='sheet', cols=sheet?(+$('#cols').value||0):0;
   const gapX=toMM($('#gapX').value)*PXMM, gapY=toMM($('#gapY').value)*PXMM;
-  const W=toMM($('#lw').value), H=toMM($('#lh').value), rulerOn=$('#rulerChk').checked;
+  const W=toMM($('#lw').value), H=toMM($('#lh').value), rulerOn=$('#rulerChk').checked&&!printingAll;
+  updatePageStyle();
   const list=printList();
   // 范围有误：打印时什么都不出；编辑时仍显示第一张便于继续设计
   const shown=list.error?(printingAll?[]:[rows?rows[0]:null]):printingAll?list:list.slice(0,PREVIEW_CAP);
   const idxOf=i=>list.items[i]?list.items[i].idx:i;   // 跳过的标签不改变后面标签的序号（流水号）
   // 拖动中只重绘正在编辑的第一张，松手后再全量刷新
-  if(opt&&opt.fast&&pv.firstChild){const lab=renderLabel(shown[0],0,list.items[0]);
-    pv.replaceChild(rulerOn?wrapWithRulers(lab,W,H):lab,pv.firstChild);return;}
+  const firstLab=pv.querySelector(':scope>.label:not(.slot),:scope>.rulerwrap');
+  if(opt&&opt.fast&&firstLab){const lab=renderLabel(shown[0],0,list.items[0]);
+    pv.replaceChild(rulerOn?wrapWithRulers(lab,W,H):lab,firstLab);return;}
   pv.innerHTML='';
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
-  pv.style.gap=gapY+'px '+gapX+'px';
+  pv.style.gap=sheet?(gapY+'px '+gapX+'px'):'12px';
   const frag=document.createDocumentFragment();
+  // 整页模式「从第 N 个位置开始」：前面空出 N-1 个标签位（用掉一部分的不干胶纸可接着打）
+  const startAt=sheet&&!list.error?Math.max(1,Math.floor(+$('#startPos').value||1)):1;
+  for(let k=1;k<startAt;k++){const ph=document.createElement('div');ph.className='label slot';
+    ph.style.width=(W*PXMM)+'px';ph.style.height=(H*PXMM)+'px';frag.appendChild(ph);}
   shown.forEach((r,i)=>{const lab=renderLabel(r,idxOf(i),list.error?null:list.items[i]);frag.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
   pv.appendChild(frag);
   $('#pager').style.color=list.error?'#c00':'';
   if(list.error){$('#pager').textContent='⚠ '+list.error+'（不会打印，请修改「从第几条 / 到第几条」）';return;}
-  $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'')
+  $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'')+(sheet?'；整页模式':'；标签机模式（每张一页）')
     +(shown.length<list.length?'；预览前 '+shown.length+' 张，打印/导出为全部 '+list.length+' 张':'');
 }
 
@@ -815,10 +850,12 @@ $('#fileIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.
     $('#csv').value=t;refreshFields();rows=parseData(t);render();
   }catch(err){alert('读取失败：'+err.message);}};
 const onPage=()=>{render();commit();};
-$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=onPage;
+$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=$('#mTop').oninput=$('#mLeft').oninput=onPage;
+$('#pmode').onchange=$('#paper').onchange=onPage;
+$('#startPos').oninput=render;
 function setUnit(u){
   if(u===UNIT)return;
-  const ids=['lw','lh','gapX','gapY'],mm=ids.map(id=>toMM($('#'+id).value));
+  const ids=['lw','lh','gapX','gapY','mTop','mLeft'],mm=ids.map(id=>toMM($('#'+id).value));
   UNIT=u;
   ids.forEach((id,i)=>$('#'+id).value=fromMM(mm[i]));
   document.querySelectorAll('.ul').forEach(s=>s.textContent=u);
@@ -850,7 +887,7 @@ $('#preview').addEventListener('mousedown',e=>{
     document.body.style.userSelect='none';renderEditor();render();e.preventDefault();return;}
   // 第一张标签空白处按下：框选
   const lab=e.target.closest('.label');
-  if(lab&&lab===document.querySelector('#preview .label')){
+  if(lab&&lab===document.querySelector('#preview .label:not(.slot)')){
     const box=document.createElement('div');box.className='marquee';lab.appendChild(box);
     const add=e.shiftKey||e.ctrlKey||e.metaKey;
     drag={mode:'marquee',lab,box,sx:e.clientX,sy:e.clientY,add,base:add?selIds():[]};
@@ -897,7 +934,7 @@ window.addEventListener('afterprint',()=>{if(printingAll){printingAll=false;rend
 /* ---------- 对齐到标签 / 标尺 / 方向键微调 ---------- */
 $('#rulerChk').onchange=render;
 // 第一张标签上各元素的实际外框（mm，含旋转后的外接框）
-function elBoxes(){const out=new Map(),lab=document.querySelector('#preview .label');if(!lab)return out;
+function elBoxes(){const out=new Map(),lab=document.querySelector('#preview .label:not(.slot)');if(!lab)return out;
   const lr=lab.getBoundingClientRect(),z=zf();
   lab.querySelectorAll('.el').forEach(n=>{const r=n.getBoundingClientRect();
     out.set(+n.dataset.ei,{x:(r.left-lr.left)/z/PXMM,y:(r.top-lr.top)/z/PXMM,w:r.width/z/PXMM,h:r.height/z/PXMM});});
@@ -954,13 +991,16 @@ window.addEventListener('keydown',e=>{
 /* ---------- 撤消/重做 · 剪贴板 · 层次 · 菜单 ---------- */
 let history=[],hi=-1,restoring=false,clip=null;
 function snapshot(){return JSON.stringify({e:elements,v:vars,l:{
-  lw:toMM($('#lw').value),lh:toMM($('#lh').value),dpi:$('#dpi').value,cols:$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)}});}
+  lw:toMM($('#lw').value),lh:toMM($('#lh').value),dpi:$('#dpi').value,cols:$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value),
+  pmode:$('#pmode').value,paper:$('#paper').value,mTop:toMM($('#mTop').value),mLeft:toMM($('#mLeft').value)}});}
 function commit(){if(restoring)return;history=history.slice(0,hi+1);history.push(snapshot());
   if(history.length>80)history.shift();hi=history.length-1;
   persistSnap();}
 function applySnap(s){const o=JSON.parse(s);restoring=true;elements=o.e;vars=o.v||[];renderVars();
   $('#lw').value=fromMM(o.l.lw);$('#lh').value=fromMM(o.l.lh);$('#dpi').value=o.l.dpi;
   $('#cols').value=o.l.cols;$('#gapX').value=fromMM(o.l.gapX);$('#gapY').value=fromMM(o.l.gapY);
+  $('#pmode').value=o.l.pmode||((+o.l.cols||0)>0?'sheet':'roll');$('#paper').value=o.l.paper||'A4';
+  $('#mTop').value=fromMM(o.l.mTop??8);$('#mLeft').value=fromMM(o.l.mLeft??8);
   sel=-1;renderEditor();render();restoring=false;}
 // 撤消/恢复后同步自动保存，否则重启会回到撤消前的状态
 const persistSnap=()=>{try{localStorage.setItem('label.autosave',history[hi]);}catch(e){}};
@@ -1082,7 +1122,8 @@ $('#wzNext').onclick=()=>{if(WZ.step===0&&wzHasData(WZ.type)){WZ.step=1;wzRender
 /* ---------- 保存 / 载入设计 ---------- */
 $('#saveBtn').onclick=()=>{
   const design={v:1,label:{w:toMM($('#lw').value),h:toMM($('#lh').value),dpi:+$('#dpi').value,
-    cols:+$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)},elements,vars};
+    cols:+$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value),
+    pmode:$('#pmode').value,paper:$('#paper').value,mTop:toMM($('#mTop').value),mLeft:toMM($('#mLeft').value)},elements,vars};
   const blob=new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
   URL.revokeObjectURL(a.href);
@@ -1090,7 +1131,10 @@ $('#saveBtn').onclick=()=>{
 function loadDesign(d){
   if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
   if(d.label){const L=d.label;$('#lw').value=fromMM(L.w??50);$('#lh').value=fromMM(L.h??30);$('#dpi').value=L.dpi??203;
-    $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);}
+    $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);
+    // 旧设计没有打印方式：设了「每行数量」的按整页，否则按标签机
+    $('#pmode').value=L.pmode||((+L.cols||0)>0?'sheet':'roll');$('#paper').value=L.paper||'A4';
+    $('#mTop').value=fromMM(L.mTop??8);$('#mLeft').value=fromMM(L.mLeft??8);}
   elements=d.elements;vars=Array.isArray(d.vars)?d.vars:[];sel=-1;renderVars();renderEditor();render();commit();
 }
 
@@ -1596,7 +1640,7 @@ async function doSilentPrint(){
   if(!await prepareJob())return;
   prnMsg('正在打印…',true);
   pendingPrintJob=true;printingAll=true;render();   // 静默打印不一定触发 beforeprint，显式全量渲染
-  let r;try{r=await window.labelPrinter.print(dev);}finally{printingAll=false;render();}
+  let r;try{r=await window.labelPrinter.print(dev,{pageSize:silentPageSize()});}finally{printingAll=false;render();}
   if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else prnMsg('打印失败：'+r.error,false);
   endJob();
 }
