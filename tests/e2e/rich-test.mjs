@@ -40,9 +40,14 @@ const cmp=await p.evaluate(async png=>{const e=elements[0],L=richLayout(e,richRe
   const pv=document.querySelector('#preview .el canvas');const a=document.createElement('canvas');a.width=W;a.height=H;const ga=a.getContext('2d');ga.fillStyle='#fff';ga.fillRect(0,0,W,H);ga.drawImage(pv,0,0,W,H);
   const im=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=png;});const z=document.createElement('canvas');z.width=W;z.height=H;z.getContext('2d').drawImage(im,-x0,-y0);
   const da=ga.getImageData(0,0,W,H).data,dz=z.getContext('2d').getImageData(0,0,W,H).data;let I=0,U=0,nz=0;
-  for(let i=0;i<W*H;i++){const A=(0.299*da[i*4]+0.587*da[i*4+1]+0.114*da[i*4+2])<128,Z=dz[i*4]<128;if(Z)nz++;if(A&&Z)I++;if(A||Z)U++;}
-  return {iou:I/Math.max(1,U),nz,lines:L.lines.length};},'data:image/png;base64,'+fs.readFileSync(S+'out/rich-0.png').toString('base64'));
-ok('富文本预览与打印重合',cmp.iou>0.85&&cmp.nz>500,`IoU=${cmp.iou.toFixed(3)} 黑点 ${cmp.nz} 行数 ${cmp.lines}`);
+  const bA=new Uint8Array(W*H),bZ=new Uint8Array(W*H);
+  for(let i=0;i<W*H;i++){const A=(0.299*da[i*4]+0.587*da[i*4+1]+0.114*da[i*4+2])<128,Z=dz[i*4]<128;bA[i]=A;bZ[i]=Z;if(Z)nz++;if(A&&Z)I++;if(A||Z)U++;}
+  // 容差匹配：一侧的黑点在另一侧 1 点范围内有黑点即算对上（不同缩放下的抗锯齿只差边缘 1 点；错行 / 错位会大量对不上）
+  const near=(B,x,y)=>{for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<W&&Y<H&&B[Y*W+X])return true;}return false;};
+  let ma=0,na=0,mz=0,nz2=0;for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
+    if(bA[i]){na++;if(near(bZ,x,y))ma++;}if(bZ[i]){nz2++;if(near(bA,x,y))mz++;}}
+  return {iou:I/Math.max(1,U),nz,lines:L.lines.length,prec:ma/Math.max(1,na),rec:mz/Math.max(1,nz2)};},'data:image/png;base64,'+fs.readFileSync(S+'out/rich-0.png').toString('base64'));
+ok('富文本预览与打印重合（1 点容差）',cmp.prec>0.97&&cmp.rec>0.97&&cmp.nz>500,`预览→打印 ${cmp.prec.toFixed(3)} 打印→预览 ${cmp.rec.toFixed(3)} IoU=${cmp.iou.toFixed(3)} 黑点 ${cmp.nz} 行数 ${cmp.lines}`);
 ok('预览里套入了字段值',await p.evaluate(()=>{const e=elements[0];return richLayout(e,richResolve(e.content,rows[0])).lines[0].items.some(t=>t.t.includes('纯棉衬衫')||t.t==='纯');}));
 ok('红色在热敏打印里为黑（ZPL 有该区域黑点）',cmp.nz>500);
 
