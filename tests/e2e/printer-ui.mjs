@@ -20,6 +20,7 @@ await ctx.addInitScript(()=>{
   window.labelPrinter={isDesktop:true,
     list:async()=>({ok:true,printers:[{name:'Office-HP',displayName:'Office HP',isDefault:false},{name:'ZT410',displayName:'Zebra ZT410',isDefault:true}]}),
     print:async(d)=>{window.__calls.push(['print',d]);return {ok:true};},
+    status:async()=>({ok:false,error:'模拟打印机不支持状态查询'}),   // 读不到状态时照常发送
     sendRaw:async(t,data)=>{window.__calls.push(['raw',t,data]);return window.__failRaw?{ok:false,error:'无法连接打印机：ECONNREFUSED'}:{ok:true};}};
 });
 const p=await ctx.newPage();p.on('pageerror',e=>errors.push(e.message));
