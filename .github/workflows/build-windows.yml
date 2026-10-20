@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       # 安装依赖（含可选的原生数据库驱动，编译失败的会被跳过而不中断）
       - name: Install dependencies

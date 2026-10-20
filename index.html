@@ -213,6 +213,16 @@
     </div>
 
     <div class="panel">
+      <h2>打印设置</h2>
+      <div class="row3">
+        <label class="f"><span>每条份数</span><input id="copies" type="number" value="1" min="1" step="1"></label>
+        <label class="f"><span>从第几条</span><input id="rFrom" type="number" value="1" min="1" step="1"></label>
+        <label class="f"><span>到第几条</span><input id="rTo" type="number" value="0" min="0" step="1"></label>
+      </div>
+      <p class="hint">「到第几条」填 0 表示到最后一条。预览、打印、导出 ZPL 都按这里的范围和份数出标签；流水号按实际张数逐张递增。</p>
+    </div>
+
+    <div class="panel">
       <h2>元素</h2>
       <div id="elist"></div>
       <div class="btns">
@@ -852,6 +862,15 @@ function wrapWithRulers(lab,Wmm,Hmm){
   wrap.appendChild(c);wrap.appendChild(rulerSVG(Wmm,true));wrap.appendChild(rulerSVG(Hmm,false));wrap.appendChild(lab);
   return wrap;
 }
+// 实际要出的标签序列：按「从/到第几条」截取记录，每条重复「份数」次
+function printList(){
+  const base=rows?rows:[null], n=base.length;
+  const from=Math.min(n,Math.max(1,+$('#rFrom').value||1));
+  const toRaw=+$('#rTo').value||0, to=toRaw>0?Math.min(n,toRaw):n;
+  const copies=Math.max(1,Math.floor(+$('#copies').value||1)), out=[];
+  for(let i=from-1;i<Math.max(from-1,to);i++)for(let c=0;c<copies;c++)out.push(base[i]);
+  return out.length?out:[base[0]];
+}
 function render(){
   const pv=$('#preview');pv.innerHTML='';
   const cols=+$('#cols').value||0;
@@ -860,9 +879,9 @@ function render(){
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
   pv.style.gap=gapY+'px '+gapX+'px';
-  const list=rows?rows:[null];
+  const list=printList();
   list.forEach((r,i)=>{const lab=renderLabel(r,i);pv.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
-  $('#pager').textContent=rows?('共 '+rows.length+' 张标签'+(cols>0?('（每行 '+cols+'）'):'')):'单张预览（未加载数据）';
+  $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'');
 }
 
 /* ---------- 元素编辑 UI ---------- */
@@ -878,7 +897,7 @@ const FIELDS={
   itf:BC('内容(数字,奇数自动补0)'),
   qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['ecl','纠错等级','sel',['L','M','Q','H']],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   datamatrix:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
-  counter:[['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['suffix','后缀','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
+  counter:[['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['suffix','后缀','text'],['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
   date:[['format','格式','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
   image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],['rot','旋转°','num']],
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
@@ -931,7 +950,7 @@ const DEFAULTS={
   itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567890'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,ecl:'M',color:'#000000',bg:'',rot:0,content:'https://'},
   datamatrix:{type:'datamatrix',x:3,y:3,size:12,color:'#000000',bg:'',rot:0,content:'DM-0001'},
-  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,prefix:'',start:1,step:1,pad:4,suffix:''},
+  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,prefix:'',start:1,step:1,pad:4,suffix:'',persist:false},
   date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD'},
   image:{type:'image',x:3,y:3,w:15,h:15,src:'',rot:0},
   box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0},
@@ -945,7 +964,7 @@ $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
     if(['x','y','size','h','module','w','border','rot','start','step','pad'].includes(k)){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
-    if(['bold','showText','fill'].includes(k))v=v==='1';
+    if(['bold','showText','fill','persist'].includes(k))v=v==='1';
     elements[i][k]=v;render();commit();return;}
   const img=e.target.dataset.img;
   if(img!=null&&e.target.files[0]){const fr=new FileReader();
@@ -983,6 +1002,7 @@ function setUnit(u){
   renderEditor();render();
 }
 $('#unit').onchange=e=>setUnit(e.target.value);
+$('#copies').oninput=$('#rFrom').oninput=$('#rTo').oninput=render;
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
 $('#zoom').oninput=()=>{try{$('#preview').style.zoom=(+$('#zoom').value/100);}catch(e){}};
@@ -1042,7 +1062,8 @@ let history=[],hi=-1,restoring=false,clip=null;
 function snapshot(){return JSON.stringify({e:elements,l:{
   lw:toMM($('#lw').value),lh:toMM($('#lh').value),dpi:$('#dpi').value,cols:$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)}});}
 function commit(){if(restoring)return;history=history.slice(0,hi+1);history.push(snapshot());
-  if(history.length>80)history.shift();hi=history.length-1;}
+  if(history.length>80)history.shift();hi=history.length-1;
+  try{localStorage.setItem('label.autosave',history[hi]);}catch(e){}}
 function applySnap(s){const o=JSON.parse(s);restoring=true;elements=o.e;
   $('#lw').value=fromMM(o.l.lw);$('#lh').value=fromMM(o.l.lh);$('#dpi').value=o.l.dpi;
   $('#cols').value=o.l.cols;$('#gapX').value=fromMM(o.l.gapX);$('#gapY').value=fromMM(o.l.gapY);
@@ -1183,7 +1204,7 @@ function textGF(text,sizeMM,bold,font,dpi){
 function buildZPL(){
   const dpi=+$('#dpi').value||203;
   const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
-  const list=rows?rows:[null];let out='';
+  const list=printList();let out='';
   list.forEach((row,idx)=>{
     out+='^XA\n^CI28\n^PW'+Wd+'\n^LL'+Hd+'\n';
     elements.forEach(el=>{
@@ -1220,7 +1241,16 @@ function buildZPL(){
   return out;
 }
 function exportZPL(){const z=buildZPL();const blob=new Blob([z],{type:'text/plain'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);
+  askAdvanceCounters();}
+// 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延实际张数，下次接着编号不重号
+function askAdvanceCounters(){
+  const cs=elements.filter(e=>e.type==='counter'&&e.persist);if(!cs.length)return;
+  const n=printList().length;
+  if(!confirm('本次共 '+n+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
+  cs.forEach(e=>{e.start=(+e.start||0)+n*(+e.step||1);});commit();renderEditor();render();
+}
+window.addEventListener('afterprint',askAdvanceCounters);
 $('#loadBtn').onclick=()=>$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
   fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));}catch(err){alert('读取失败: '+err.message);}};fr.readAsText(f);};
@@ -1258,6 +1288,7 @@ if(window.labelDB&&window.labelDB.isDesktop){
 }
 
 /* ---------- 启动 ---------- */
+try{const s=localStorage.getItem('label.autosave');if(s)applySnap(s);}catch(e){}
 renderEditor();render();commit();
 </script>
 </body>
