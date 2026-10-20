@@ -54,10 +54,11 @@ const ROOT = path.join(__dirname, '..');
   check('会员价计算', t2.includes('会员价：358.20'), t2);
   dl = page.waitForEvent('download');
   await page.evaluate(() => { exportZPL(); });
-  await page.waitForSelector('#dlg[style*="flex"]');
-  check('弹出打印时输入', (await page.locator('#dlgHd').innerText()) === '打印时输入');
-  await page.fill('#dlgBody input', 'B2610');
-  await page.click('#dlgFt button.primary');
+  // 主线界面：打印时输入（{?名} 与变量面板的变量）在 #varDlg 里一起填写
+  await page.waitForSelector('#varDlg[style*="flex"]');
+  check('弹出打印时输入', (await page.locator('#varDlgHd').innerText()) === '打印前请输入');
+  await page.fill('#varDlgBody input', 'B2610');
+  await page.click('#varDlgOk');
   z = fs.readFileSync(await (await dl).path(), 'utf8');
   check('追溯标签 ZPL 2 张', (z.match(/\^XA/g) || []).length === 2);
   const t3 = await page.locator('#preview .label').first().innerText();
@@ -68,8 +69,9 @@ const ROOT = path.join(__dirname, '..');
     elements.push({ type: 'ean13', x: 3, y: 33, h: 5, module: 0.33, showText: false, content: '{商品码}', rot: 0 }); render(); });
   dl = page.waitForEvent('download');
   await page.evaluate(() => { exportZPL(); });
+  await page.waitForSelector('#varDlg[style*="flex"]');
+  await page.click('#varDlgOk');
   await page.waitForSelector('#dlg[style*="flex"]');
-  if ((await page.locator('#dlgHd').innerText()) === '打印时输入') { await page.click('#dlgFt button.primary'); await page.waitForTimeout(100); }
   const body = await page.locator('#dlgBody').innerText();
   check('预检指出第 1 张校验位错误', body.includes('第 1 张') && body.includes('校验位'), body);
   await page.click('#dlgFt button.primary'); // 跳过出错的 1 张

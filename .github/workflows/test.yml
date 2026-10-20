@@ -49,6 +49,12 @@ jobs:
         env:
           E2E_OUT: ${{ runner.temp }}/label-e2e
 
+      # 桌面版端到端：下载 Electron 本体，在虚拟显示器里启动整个应用，连模拟的网络标签机走「检测 → 分批直发」
+      - name: Desktop end-to-end test
+        run: |
+          node node_modules/electron/install.js
+          xvfb-run -a npm run test:desktop
+
       # 失败时把截图、生成的 ZPL 和渲染图传上来便于排查
       - name: Upload test output
         if: failure()

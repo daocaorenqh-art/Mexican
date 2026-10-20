@@ -76,5 +76,21 @@ for (let t = 0; t < 300; t++) { let str = ''; const n = Math.floor(rnd() * 200);
   if (crc16x(str) !== tableCrc(str)) { crcOk = false; console.log('    mismatch', str); break; } }
 check('300 个随机 base64 串：与 zpl-image 表驱动算法结果一致', crcOk);
 
+
+// Z64 用的同步 zlib 压缩：各种位图都能被 Node 自带 zlib 原样解回
+{
+  const zlib = require('zlib');
+  const a = html.indexOf('const ZL_LBASE'), b = html.indexOf('async function z64Of');
+  const zlibDeflate = new Function(html.slice(a, b) + '; return zlibDeflate;')();
+  const R = (n) => Math.floor(Math.random() * n);
+  const cases = [new Uint8Array(0), new Uint8Array(1), new Uint8Array(70000).fill(255), Uint8Array.from({ length: 5000 }, () => R(256))];
+  for (let t = 0; t < 150; t++) { const w = 1 + R(40), h = 1 + R(150), u = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) u[y * w + x] = R(4) ? (y % 3 ? 0 : 255) : R(256); cases.push(u); }
+  let okN = 0;
+  for (const c of cases) { const z = zlibDeflate(c); try { if (Buffer.compare(zlib.inflateSync(Buffer.from(z)), Buffer.from(c)) === 0) okN++; } catch (e) {} }
+  check('zlib 压缩：' + cases.length + ' 组数据都能被 zlib 原样解回', okN === cases.length, okN + '/' + cases.length);
+  const blank = zlibDeflate(new Uint8Array(20000));
+  check('整块空白位图压到很小（2 万字节 → < 200 字节）', blank.length < 200, blank.length);
+}
 console.log(`ZPL 压缩往返校验：通过 ${pass} / 失败 ${fail}`);
 process.exit(fail ? 1 : 0);

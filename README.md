@@ -168,6 +168,7 @@ npm start
 
 - `npm test`：编码器（二维码/DataMatrix 用独立解码器扫回）、ZPL 压缩往返、直发、数据源。
 - `npm run test:e2e`：18 组界面与打印端到端测试（Playwright 驱动真实页面）。打印结果用独立的斑马渲染器（Zebrash）还原成出纸图像，逐元素比对位置、逐像素比对预览，再用扫码库扫出条码内容核对。可只跑部分：`node tests/e2e/run.mjs rich wordart`。
+- `npm run test:desktop`：启动 Electron 桌面版，连本机模拟的网络标签机（9100 端口）走「检测打印机 → DPI 不符提示 → 分批直发」，ZPL 和 TSPL 各一遍（Linux 无桌面时用 `xvfb-run -a`）。
 - 每次推送 GitHub 自动跑以上全部（Actions → Test）；失败时可下载截图与生成的 ZPL。
 
 ## 编码器正确性

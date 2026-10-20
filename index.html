@@ -510,6 +510,11 @@ const fromMM=mm=>UNIT==='cm'?+(mm/10).toFixed(3):+(+mm).toFixed(3); // mm→显�
 
 const $=s=>document.querySelector(s);
 
+// 同一批标签里，预检和生成会用同样的内容各编码一次：按内容缓存编码结果（结果只读，出错不缓存）
+(function(){const memo=(fn,lim)=>{const m=new Map();return function(...a){const k=a.join('\u0001');let v=m.get(k);
+  if(v===undefined){v=fn.apply(this,a);if(m.size>=lim)m.clear();m.set(k,v);}return v;};};
+  window.encode1D=memo(window.encode1D,20000);window.encode2D=memo(window.encode2D,20000);})();
+
 /* ---------- 内容求值 ----------
    写法见 src/textdata.js：{字段}、{#SN}、{#DATE+30:YYYY-MM-DD}、{#TIME}、{#N}/{#REC}/{#COPY}、打印时输入 {?名}，
    以 = 开头为表达式（[字段]、"文字"、+ 拼接、left/mid/padl/add/if/mod10… 等函数）。
@@ -1267,6 +1272,8 @@ function loadImage(src){
 }
 // 通用栅格化：paint 以「元素未旋转、左上角为原点、单位=打印点」作画；按元素旋转（绕左上角，与预览一致）
 // 求外接框，超出标签左/上边的部分裁掉。返回相对元素原点的偏移与 1-bit 位图。
+let _rasterCanvas=null,_rasterCtx=null;
+const HEX2=Array.from({length:256},(_,v)=>(v<16?'0':'')+v.toString(16).toUpperCase());
 function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
   const th=(+rotDeg||0)*Math.PI/180,c=Math.cos(th),s=Math.sin(th);
   const pts=[[0,0],[Wd,0],[0,Hd],[Wd,Hd]].map(([x,y])=>[x*c-y*s,x*s+y*c]);
@@ -1274,23 +1281,33 @@ function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
   const cw=Math.ceil(Math.max(...pts.map(p=>p[0])))-minX, ch=Math.ceil(Math.max(...pts.map(p=>p[1])))-minY;
   if(cw<1||ch<1)return null;
   const bpr=Math.ceil(cw/8),W=bpr*8;
-  // 复用同一块画布（逐张新建画布 + 读像素是大批量时的主要耗时）
-  const cv=rasterize.cv||(rasterize.cv=document.createElement('canvas'));cv.width=W;cv.height=ch;
-  const g=rasterize.g&&rasterize.g.canvas===cv?rasterize.g:(rasterize.g=cv.getContext('2d',{willReadFrequently:true}));
+  // 复用同一块 CPU 画布（willReadFrequently）：大批量时比每次新建 + GPU 回读快很多
+  const cv=_rasterCanvas||(_rasterCanvas=document.createElement('canvas'));
+  if(cv.width<W)cv.width=W;if(cv.height<ch)cv.height=ch;
+  const g=_rasterCtx||(_rasterCtx=cv.getContext('2d',{willReadFrequently:true}));
   g.setTransform(1,0,0,1,0,0);g.fillStyle='#fff';g.fillRect(0,0,W,ch);
   g.save();g.translate(-minX,-minY);if(th)g.rotate(th);g.fillStyle='#000';g.strokeStyle='#000';paint(g);g.restore();
-  const d=g.getImageData(0,0,W,ch).data, lum=new Float32Array(W*ch);
+  const d=g.getImageData(0,0,W,ch).data;
+  const cut=+threshold>0&&+threshold<256?+threshold:128;
+  if(!dither){   // 快速路径：一遍算出每个字节（与下面的通用路径结果逐位相同），大批量导出时省掉中间数组
+    let hex='',ink=false,o=0;const bytes=new Uint8Array(bpr*ch);
+    for(let y=0;y<ch;y++){let i=y*W*4;
+      for(let bx=0;bx<bpr;bx++){let byte=0;
+        for(let k=0;k<8;k++,i+=4){const a=d[i+3]/255;if(255-a*(255-(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]))<cut)byte|=128>>k;}
+        if(byte)ink=true;bytes[o++]=byte;hex+=HEX2[byte];}}
+    return ink?{dx:minX,dy:minY,bpr,total:bpr*ch,hex,bytes}:null;
+  }
+  const lum=new Float32Array(W*ch);
   for(let i=0;i<W*ch;i++){const a=d[i*4+3]/255;lum[i]=255-a*(255-(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]));}
   const bits=new Uint8Array(W*ch);
-  const cut=+threshold>0&&+threshold<256?+threshold:128;
   for(let y=0;y<ch;y++)for(let x=0;x<W;x++){const i=y*W+x,v=lum[i],b=v<cut?1:0;bits[i]=b;
     if(dither){const e=v-(b?0:255);   // Floyd–Steinberg 误差扩散：照片/Logo 灰度转成黑白点阵
       if(x+1<W)lum[i+1]+=e*7/16;
       if(y+1<ch){if(x>0)lum[i+W-1]+=e*3/16;lum[i+W]+=e*5/16;if(x+1<W)lum[i+W+1]+=e/16;}}}
-  const bytes=new Uint8Array(bpr*ch);let ink=false;
-  for(let y=0,o=0;y<ch;y++)for(let bx=0;bx<bpr;bx++,o++){let byte=0;const i0=y*W+bx*8;
-    for(let k=0;k<8;k++)if(bits[i0+k])byte|=1<<(7-k);
-    if(byte)ink=true;bytes[o]=byte;}
+  let hex='',ink=false;
+  for(let y=0;y<ch;y++)for(let bx=0;bx<bpr;bx++){let byte=0;
+    for(let k=0;k<8;k++)if(bits[y*W+bx*8+k])byte|=1<<(7-k);
+    if(byte)ink=true;hex+=HEX2[byte];}
   if(!ink)return null;
   const HX=rasterize.HX||(rasterize.HX=Array.from({length:256},(_,v)=>(v<16?'0':'')+v.toString(16).toUpperCase()));
   const hp=new Array(bytes.length);for(let i=0;i<bytes.length;i++)hp[i]=HX[bytes[i]];
@@ -1622,10 +1639,6 @@ async function buildZPL(list){
   for(const [key,cnt] of L.use)if(cnt>1&&n<999){const r=L.cache.get(key),nm='R:G'+String(++n).padStart(3,'0')+'.GRF';
     names.set(key,nm);out+='~DG'+nm+','+dgBody(r)+'\n';}
   const head='^XA\n^CI28\n^PW'+L.Wd+'\n^LL'+L.Hd+'\n^LH0,0\n'+zplSetup(pr);
-  // Z64：所有要内联的位图先并行压缩（逐个串行 await 是大批量时的主要耗时）
-  if(zplMode()==='z64'){const todo=new Set();
-    for(const parts of L.labels)for(const p of parts){if(p.gf)todo.add(p.gf);else if(p.r&&!names.has(p.r.key))todo.add(p.r);}
-    const arr=[...todo];for(let i=0;i<arr.length;i+=256)await Promise.all(arr.slice(i,i+256).map(z64Of));}
   const bodies=[];
   for(const parts of L.labels){let b='';
     for(const p of parts){
@@ -1711,14 +1724,57 @@ function acsEncode(hex,bpr){
 // 文字位图通常比 ACS 再小 2～4 倍。老机型请在「打印设置」里改用 ACS。
 function crc16x(s){let c=0;for(let i=0;i<s.length;i++){c^=s.charCodeAt(i)<<8;
   for(let k=0;k<8;k++)c=(c&0x8000)?((c<<1)^0x1021)&0xffff:(c<<1)&0xffff;}return c.toString(16).padStart(4,'0');}
+// zlib 压缩（RFC 1950/1951）：固定 Huffman + LZ77（3 字节哈希、贪心匹配）。同步执行，没有浏览器压缩流逐个等待的开销；
+// 标签位图大段空白 / 重复行，距离 1 的匹配就能把整段连续点压成几个字节。1 万张标签导出因此快一倍以上
+const ZL_LBASE=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+const ZL_LEXT=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+const ZL_DBASE=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+const ZL_DEXT=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+const ZL_LCODE=new Uint8Array(259);for(let c=0,l=3;l<=258;l++){while(c<28&&ZL_LBASE[c+1]<=l)c++;ZL_LCODE[l]=c;}
+// 固定 Huffman 码表（已按位反转，可直接低位先写）与距离→距离码查表
+const ZL_REV=(v,n)=>{let r=0;for(let i=0;i<n;i++){r=(r<<1)|(v&1);v>>=1;}return r;};
+const ZL_LITC=new Uint16Array(288),ZL_LITN=new Uint8Array(288);
+for(let v=0;v<288;v++){const [c,n]=v<144?[0x30+v,8]:v<256?[0x190+v-144,9]:v<280?[v-256,7]:[0xC0+v-280,8];ZL_LITC[v]=ZL_REV(c,n);ZL_LITN[v]=n;}
+const ZL_DREV=new Uint8Array(30).map((_,i)=>ZL_REV(i,5));
+const ZL_DCODE=new Uint8Array(32769);for(let c=0,d=1;d<=32768;d++){while(c<29&&ZL_DBASE[c+1]<=d)c++;ZL_DCODE[d]=c;}
+// 哈希表全局复用：位置按「基准 + 下标」存，基准每次往后挪，旧数据自然失效，不用每次分配、清零 256KB
+const ZL_HEAD=new Int32Array(65536).fill(-1),ZL_PREV=new Int32Array(32768);let ZL_BASE=0;
+function zlibDeflate(src){
+  const n=src.length;
+  if(ZL_BASE>1e9){ZL_HEAD.fill(-1);ZL_BASE=0;}
+  const base=ZL_BASE;ZL_BASE+=n+1;
+  const out=new Uint8Array(Math.ceil(n*1.15)+64);let op=0,bb=0,bc=0;
+  out[op++]=0x78;out[op++]=0x01;
+  const put=(v,k)=>{bb|=v<<bc;bc+=k;while(bc>=8){out[op++]=bb&255;bb>>>=8;bc-=8;}};
+  put(3,3);   // BFINAL=1，BTYPE=01（固定 Huffman）
+  const H=ZL_HEAD,P=ZL_PREV;
+  for(let i=0;i<n;){
+    let len=0,dist=0;
+    if(i+2<n){
+      const h=((src[i]<<10)^(src[i+1]<<5)^src[i+2])&65535,max=n-i<258?n-i:258;
+      let c=H[h]-base;
+      for(let chain=32;c>=0&&i-c<=32768&&chain>0;chain--){
+        if(src[c+len]===src[i+len]){let l=0;while(l<max&&src[c+l]===src[i+l])l++;if(l>len){len=l;dist=i-c;if(l===max)break;}}
+        const nc=P[(base+c)&32767]-base;if(nc>=c)break;c=nc;}
+      P[(base+i)&32767]=H[h];H[h]=base+i;
+      if(len<3)len=0;
+    }
+    if(!len){const v=src[i++];put(ZL_LITC[v],ZL_LITN[v]);continue;}
+    const lc=ZL_LCODE[len],ls=257+lc;put(ZL_LITC[ls],ZL_LITN[ls]);if(ZL_LEXT[lc])put(len-ZL_LBASE[lc],ZL_LEXT[lc]);
+    const dc=ZL_DCODE[dist];put(ZL_DREV[dc],5);if(ZL_DEXT[dc])put(dist-ZL_DBASE[dc],ZL_DEXT[dc]);
+    for(let k=1;k<len;k++){const j=i+k;if(j+2>=n)break;const h=((src[j]<<10)^(src[j+1]<<5)^src[j+2])&65535;P[(base+j)&32767]=H[h];H[h]=base+j;}   // 匹配内的位置也进哈希
+    i+=len;
+  }
+  put(ZL_LITC[256],ZL_LITN[256]);if(bc)out[op++]=bb&255;
+  let a=1,b2=0;for(let i=0;i<n;i++){a+=src[i];if(a>=65521)a-=65521;b2+=a;if(b2>=65521)b2-=65521;}
+  out[op++]=b2>>>8&255;out[op++]=b2&255;out[op++]=a>>>8&255;out[op++]=a&255;
+  return out.subarray(0,op);
+}
 async function z64Of(r){
   if(r.z64)return r.z64;
-  // 同步纯 JS 压缩（src/zpl.js）：省去逐个位图的 CompressionStream 异步开销，结果是标准 zlib
-  if(window.ZPL&&ZPL.z64){let b=r.bytes;if(!b){b=new Uint8Array(r.hex.length/2);for(let i=0;i<b.length;i++)b[i]=parseInt(r.hex.substr(i*2,2),16);}
-    return (r.z64=ZPL.z64(b));}
-  let bytes=r.bytes;
+  let bytes=r.bytes;   // 栅格化时已保留字节；裁边后的位图只有 hex，再换算
   if(!bytes){bytes=new Uint8Array(r.hex.length/2);for(let i=0;i<bytes.length;i++)bytes[i]=parseInt(r.hex.substr(i*2,2),16);}
-  const z=new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+  const z=zlibDeflate(bytes);
   let bin='';for(let i=0;i<z.length;i+=0x8000)bin+=String.fromCharCode.apply(null,z.subarray(i,i+0x8000));
   const b64=btoa(bin);return (r.z64=':Z64:'+b64+':'+crc16x(b64));
 }

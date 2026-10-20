@@ -1,6 +1,6 @@
 {
   "name": "label-print-tool",
-  "version": "0.16.0",
+  "version": "0.17.1",
   "description": "本地安装运行的标签/条码设计与批量打印客户端，支持多种数据库套打",
   "main": "main.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "postinstall": "electron-builder install-app-deps || echo \"native database driver rebuild failed: that database type is unavailable, everything else works\"",
     "dist": "electron-builder --win --publish never",
     "dist:dir": "electron-builder --win --dir",
-    "test:e2e": "node tests/e2e/run.mjs"
+    "test:e2e": "node tests/e2e/run.mjs && node tests/e2e-smoke.cjs",
+    "test:desktop": "node tests/e2e-electron.cjs"
   },
   "author": "",
   "license": "MIT",
