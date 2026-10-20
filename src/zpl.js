@@ -205,6 +205,15 @@ function ellipseBitmap(w,h,th,fill){const bm=Bitmap(w,h),a=w/2,b=h/2,ai=Math.max
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){const dx=x+0.5-a,dy=y+0.5-b;
     if(dx*dx/(a*a)+dy*dy/(b*b)<=1&&(fill||ai<=0||bi<=0||dx*dx/(ai*ai)+dy*dy/(bi*bi)>1))setPx(bm,x,y);}
   return bm;}
+// 把位图拆成实心矩形（相同的连续行合成一块，每块里每段黑点一个 BAR）；一维码、线条这类位图用 BAR 比 BITMAP 小得多。
+// 返回矩形数组 [[x,y,w,h]…]，超过 limit 个就放弃（返回 null，改用 BITMAP）
+function bitmapRects(bm,limit){const rects=[];let y=0;
+  const rowKey=(r)=>{let k='';for(let b=0;b<bm.bpr;b++)k+=String.fromCharCode(bm.data[r*bm.bpr+b]);return k;};
+  while(y<bm.h){const k=rowKey(y);let y2=y+1;while(y2<bm.h&&rowKey(y2)===k)y2++;
+    for(let x=0;x<bm.w;){if(!getPx(bm,x,y)){x++;continue;}let x2=x;while(x2<bm.w&&getPx(bm,x2,y))x2++;
+      rects.push([x,y,x2-x,y2-y]);if(rects.length>limit)return null;x=x2;}
+    y=y2;}
+  return rects;}
 function tsplBitmapBytes(bm,invert){let s='';for(let i=0;i<bm.data.length;i++)s+=String.fromCharCode(invert?(~bm.data[i])&0xFF:bm.data[i]);return s;}
 function buildTSPL(o){
   const pr=(o.options&&o.options.printer)||{},dpi=+o.label.dpi||203,invert=pr.invert!==false;
@@ -219,7 +228,11 @@ function buildTSPL(o){
   head+='CLS\r\n';
   const ser=(items)=>{let body='';
     for(const it of items){
-      if(it.k==='bm')body+='BITMAP '+it.x+','+it.y+','+it.bm.bpr+','+it.bm.h+',0,'+tsplBitmapBytes(it.bm,invert)+'\r\n';
+      if(it.k==='bm'){
+        // BITMAP 无压缩：能用更少字节的 BAR 矩形精确画出时（一维码、横竖线）改用 BAR
+        const bytes=it.bm.bpr*it.bm.h,rects=bitmapRects(it.bm,Math.floor(bytes/14));
+        if(rects)for(const [rx,ry,rw,rh] of rects)body+='BAR '+(it.x+rx)+','+(it.y+ry)+','+rw+','+rh+'\r\n';
+        else body+='BITMAP '+it.x+','+it.y+','+it.bm.bpr+','+it.bm.h+',0,'+tsplBitmapBytes(it.bm,invert)+'\r\n';}
       else if(it.k==='box')body+=it.fill?'BAR '+it.x+','+it.y+','+it.w+','+it.h+'\r\n':'BOX '+it.x+','+it.y+','+(it.x+it.w)+','+(it.y+it.h)+','+Math.min(it.th,it.w,it.h)+'\r\n';
       else if(it.k==='ellipse'){const bm=ellipseBitmap(it.w,it.h,it.th,it.fill);
         body+='BITMAP '+it.x+','+it.y+','+bm.bpr+','+bm.h+',0,'+tsplBitmapBytes(bm,invert)+'\r\n';}
@@ -249,6 +262,6 @@ function parseTSPL(u8){
   return labels;
 }
 
-const api={build,buildTSPL,parseTSPL,ellipseBitmap,Bitmap,setPx,getPx,fillRect,blit,barsBitmap,matrixBitmap,rotateBitmap,rotOffset,gfa,gfaDecode,compressRow,fd};
+const api={build,buildTSPL,parseTSPL,ellipseBitmap,bitmapRects,Bitmap,setPx,getPx,fillRect,blit,barsBitmap,matrixBitmap,rotateBitmap,rotOffset,gfa,gfaDecode,compressRow,fd};
 if(isNode)module.exports=api;else root.ZPL=api;
 })(typeof window!=='undefined'?window:globalThis);
