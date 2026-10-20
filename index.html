@@ -88,6 +88,14 @@
   .rulerwrap{display:inline-grid;grid-template-columns:auto auto;grid-template-rows:auto auto}
   .rulerwrap .rcorner{background:var(--bg)}
   .rulerwrap svg{display:block;color:var(--muted)}
+  .wzmask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100}
+  .wzbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:430px;max-width:92vw;box-shadow:0 12px 44px rgba(0,0,0,.35)}
+  .wzhd{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
+  .wzbody{padding:16px;max-height:62vh;overflow:auto}
+  .wzbody p{margin:0 0 10px;color:var(--muted)}
+  .wzbody .opt label{display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer}
+  .wzbody .opt label:hover{background:var(--bg)}
+  .wzft{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
   @media print{
@@ -132,6 +140,8 @@
     <a data-cmd="back">置于底层</a>
   </div></div>
   <div class="menu"><span>插入</span><div class="dd">
+    <a data-cmd="wizard">对象向导…　Ins</a>
+    <hr>
     <a data-ins="text">文字</a>
     <a data-ins="para">段落（多行）</a>
     <a data-ins="barcode">条码 Code128</a>
@@ -180,22 +190,23 @@
     <div class="panel">
       <h2>标签 & 纸张</h2>
       <div class="row">
-        <label class="f"><span>标签宽 (mm)</span><input id="lw" type="number" value="50" min="5" step="1"></label>
-        <label class="f"><span>标签高 (mm)</span><input id="lh" type="number" value="30" min="5" step="1"></label>
+        <label class="f"><span>标签宽 (<span class="ul">mm</span>)</span><input id="lw" type="number" value="50" min="1" step="1"></label>
+        <label class="f"><span>标签高 (<span class="ul">mm</span>)</span><input id="lh" type="number" value="30" min="1" step="1"></label>
       </div>
-      <div class="row">
-        <label class="f"><span>打印精度 DPI</span>
+      <div class="row3">
+        <label class="f"><span>精度 DPI</span>
           <select id="dpi">
-            <option value="96">96 (屏幕)</option>
-            <option value="203" selected>203 (常见标签机)</option>
-            <option value="300">300 (高精标签机)</option>
+            <option value="96">96</option>
+            <option value="203" selected>203</option>
+            <option value="300">300</option>
           </select>
         </label>
-        <label class="f"><span>每行数量（0=自动）</span><input id="cols" type="number" value="0" min="0" step="1"></label>
+        <label class="f"><span>每行数量</span><input id="cols" type="number" value="0" min="0" step="1"></label>
+        <label class="f"><span>单位</span><select id="unit"><option value="mm">mm</option><option value="cm">cm</option></select></label>
       </div>
       <div class="row">
-        <label class="f"><span>列间距 (mm)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
-        <label class="f"><span>行间距 (mm)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
+        <label class="f"><span>列间距 (<span class="ul">mm</span>)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
+        <label class="f"><span>行间距 (<span class="ul">mm</span>)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
       </div>
       <p class="hint">整页套打：「每行数量」设 N 则按 N 列网格排布（如 A4 不干胶多张/页）；设 0 则按宽度自动平铺换行。标签机一般每张一页。</p>
     </div>
@@ -289,6 +300,18 @@ A1002,香蕉,2.20"></textarea>
       </div>
       <div class="pager" id="pager"></div>
       <div class="preview-area" id="preview"></div>
+    </div>
+  </div>
+</div>
+
+<div id="wizard" class="wzmask" style="display:none">
+  <div class="wzbox">
+    <div class="wzhd">添加新对象</div>
+    <div class="wzbody" id="wzbody"></div>
+    <div class="wzft">
+      <button id="wzPrev">上一步</button>
+      <button id="wzNext" class="primary">下一步</button>
+      <button id="wzCancel">取消</button>
     </div>
   </div>
 </div>
@@ -430,6 +453,10 @@ let elements=[
 ];
 let rows=null, sel=-1;
 const PXMM=3.78; // 屏幕预览 1mm≈3.78px(96dpi)
+let UNIT='mm'; // 显示单位；内部一律用 mm 存储
+const LENKEYS=new Set(['x','y','size','h','module','w','border']); // 需随单位换算的长度字段
+const toMM=v=>UNIT==='cm'?(+v||0)*10:(+v||0);      // 输入(显示单位)→mm
+const fromMM=mm=>UNIT==='cm'?+(mm/10).toFixed(3):+(+mm).toFixed(3); // mm→显示单位
 
 const $=s=>document.querySelector(s);
 
@@ -532,7 +559,7 @@ function fmtDate(d,f){const p=(n,l=2)=>String(n).padStart(l,'0');
 
 function renderLabel(row,idx){
   idx=idx||0;
-  const W=+$('#lw').value,H=+$('#lh').value;
+  const W=toMM($('#lw').value),H=toMM($('#lh').value);
   const d=document.createElement('div');
   d.className='label'+($('#showGrid').checked?' grid':'');
   d.style.width=(W*PXMM)+'px';d.style.height=(H*PXMM)+'px';
@@ -623,7 +650,7 @@ function rulerSVG(lenMm,horizontal){
     if(horizontal){ln.setAttribute('x1',p);ln.setAttribute('x2',p);ln.setAttribute('y1',thick);ln.setAttribute('y2',thick-len);}
     else{ln.setAttribute('y1',p);ln.setAttribute('y2',p);ln.setAttribute('x1',thick);ln.setAttribute('x2',thick-len);}
     ln.setAttribute('stroke','currentColor');ln.setAttribute('stroke-width','0.5');svg.appendChild(ln);
-    if(long&&mm>0){const t=document.createElementNS(ns,'text');t.textContent=mm;
+    if(long&&mm>0){const t=document.createElementNS(ns,'text');t.textContent=UNIT==='cm'?mm/10:mm;
       t.setAttribute('font-size','6');t.setAttribute('fill','currentColor');
       if(horizontal){t.setAttribute('x',p+1);t.setAttribute('y',7);}else{t.setAttribute('x',1);t.setAttribute('y',p+2);}
       svg.appendChild(t);}}
@@ -638,8 +665,8 @@ function wrapWithRulers(lab,Wmm,Hmm){
 function render(){
   const pv=$('#preview');pv.innerHTML='';
   const cols=+$('#cols').value||0;
-  const gapX=(+$('#gapX').value||0)*PXMM, gapY=(+$('#gapY').value||0)*PXMM;
-  const W=+$('#lw').value, H=+$('#lh').value, rulerOn=$('#rulerChk').checked;
+  const gapX=toMM($('#gapX').value)*PXMM, gapY=toMM($('#gapY').value)*PXMM;
+  const W=toMM($('#lw').value), H=toMM($('#lh').value), rulerOn=$('#rulerChk').checked;
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
   pv.style.gap=gapY+'px '+gapX+'px';
@@ -682,7 +709,9 @@ function renderEditor(){
     const flush=()=>{if(numBuf.length){h+='<div class="row">'+numBuf.join('')+'</div>';numBuf=[];}};
     for(const f of fs){
       const k=f[0],label=f[1],t=f[2],opts=f[3];
-      if(t==='num'){numBuf.push(`<label class="f"><span>${label}</span><input type="number" step="0.01" data-k="${k}" data-i="${idx}" value="${el[k]??0}"></label>`);
+      if(t==='num'){const lbl=LENKEYS.has(k)?label.replace('(mm)','('+UNIT+')'):label;
+        const val=LENKEYS.has(k)?fromMM(el[k]??0):(el[k]??0);
+        numBuf.push(`<label class="f"><span>${lbl}</span><input type="number" step="0.01" data-k="${k}" data-i="${idx}" value="${val}"></label>`);
         if(numBuf.length===2)flush();}
       else{flush();
         if(t==='text')h+=`<label class="f"><span>${label}</span><input data-k="${k}" data-i="${idx}" value="${esc(el[k]??'')}"></label>`;
@@ -723,7 +752,7 @@ document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
 $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
-    if(['x','y','size','h','module','w','border','rot','start','step','pad'].includes(k))v=parseFloat(v)||0;
+    if(['x','y','size','h','module','w','border','rot','start','step','pad'].includes(k)){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
     if(['bold','showText','fill'].includes(k))v=v==='1';
     elements[i][k]=v;render();commit();return;}
   const img=e.target.dataset.img;
@@ -753,6 +782,15 @@ $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new Fi
   fr.onload=()=>{$('#csv').value=fr.result;refreshFields();rows=parseData(fr.result);render();};fr.readAsText(f);};
 const onPage=()=>{render();commit();};
 $('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=onPage;
+function setUnit(u){
+  if(u===UNIT)return;
+  const ids=['lw','lh','gapX','gapY'],mm=ids.map(id=>toMM($('#'+id).value));
+  UNIT=u;
+  ids.forEach((id,i)=>$('#'+id).value=fromMM(mm[i]));
+  document.querySelectorAll('.ul').forEach(s=>s.textContent=u);
+  renderEditor();render();
+}
+$('#unit').onchange=e=>setUnit(e.target.value);
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
 $('#zoom').oninput=()=>{try{$('#preview').style.zoom=(+$('#zoom').value/100);}catch(e){}};
@@ -789,7 +827,7 @@ $('#canvasbar').addEventListener('click',e=>{
   const al=e.target.dataset.al;if(!al||sel<0||sel>=elements.length)return;
   const node=document.querySelector('#preview .el[data-ei="'+sel+'"]');if(!node)return;
   const z=zf(),r=node.getBoundingClientRect(),ew=r.width/z/PXMM,eh=r.height/z/PXMM;
-  const W=+$('#lw').value,H=+$('#lh').value,el=elements[sel];
+  const W=toMM($('#lw').value),H=toMM($('#lh').value),el=elements[sel];
   if(al==='L')el.x=0; else if(al==='R')el.x=+(W-ew).toFixed(1); else if(al==='C')el.x=+((W-ew)/2).toFixed(1);
   else if(al==='T')el.y=0; else if(al==='B')el.y=+(H-eh).toFixed(1); else if(al==='M')el.y=+((H-eh)/2).toFixed(1);
   el.x=Math.max(0,el.x);el.y=Math.max(0,el.y);commit();render();renderEditor();
@@ -810,12 +848,12 @@ window.addEventListener('keydown',e=>{
 /* ---------- 撤消/重做 · 剪贴板 · 层次 · 菜单 ---------- */
 let history=[],hi=-1,restoring=false,clip=null;
 function snapshot(){return JSON.stringify({e:elements,l:{
-  lw:$('#lw').value,lh:$('#lh').value,dpi:$('#dpi').value,cols:$('#cols').value,gapX:$('#gapX').value,gapY:$('#gapY').value}});}
+  lw:toMM($('#lw').value),lh:toMM($('#lh').value),dpi:$('#dpi').value,cols:$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)}});}
 function commit(){if(restoring)return;history=history.slice(0,hi+1);history.push(snapshot());
   if(history.length>80)history.shift();hi=history.length-1;}
 function applySnap(s){const o=JSON.parse(s);restoring=true;elements=o.e;
-  $('#lw').value=o.l.lw;$('#lh').value=o.l.lh;$('#dpi').value=o.l.dpi;
-  $('#cols').value=o.l.cols;$('#gapX').value=o.l.gapX;$('#gapY').value=o.l.gapY;
+  $('#lw').value=fromMM(o.l.lw);$('#lh').value=fromMM(o.l.lh);$('#dpi').value=o.l.dpi;
+  $('#cols').value=o.l.cols;$('#gapX').value=fromMM(o.l.gapX);$('#gapY').value=fromMM(o.l.gapY);
   sel=-1;renderEditor();render();restoring=false;}
 function undo(){if(hi>0){hi--;applySnap(history[hi]);}}
 function redo(){if(hi<history.length-1){hi++;applySnap(history[hi]);}}
@@ -838,6 +876,7 @@ document.querySelector('#menubar').addEventListener('click',e=>{
   if(ins){elements.push(JSON.parse(JSON.stringify(DEFAULTS[ins])));sel=elements.length-1;commit();renderEditor();render();return;}
   if(!cmd)return;
   switch(cmd){
+    case 'wizard':wzOpen();break;
     case 'new':newDesign();break;
     case 'open':$('#loadBtn').click();break;
     case 'save':$('#saveBtn').click();break;
@@ -866,20 +905,66 @@ window.addEventListener('keydown',e=>{
     else if(k==='p'){e.preventDefault();window.print();}
     return;}
   if(!inField&&e.key==='Delete'){e.preventDefault();delSel();}
+  if(!inField&&e.key==='Insert'){e.preventDefault();wzOpen();}
 });
+
+/* ---------- 添加对象向导 ---------- */
+const WZ={step:0,type:'text',source:'const',value:''};
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const wzHasData=t=>['text','para','barcode','ean13','ean8','upca','code39','itf','qrcode'].includes(t);
+function wzFields(){const r=parseData($('#csv').value);if(r&&r.length)return Object.keys(r[0]);
+  if(rows&&rows.length)return Object.keys(rows[0]);return [];}
+function wzOpen(){WZ.step=0;WZ.type='text';WZ.source='const';WZ.value='';$('#wizard').style.display='flex';wzRender();}
+function wzClose(){$('#wizard').style.display='none';}
+function wzRender(){
+  const body=$('#wzbody');
+  if(WZ.step===0){
+    body.innerHTML='<p>第一步：选择对象类型</p>'+WZTYPES.map(([v,l])=>
+      `<div class="opt"><label><input type="radio" name="wzt" value="${v}"${WZ.type===v?' checked':''}> ${l}</label></div>`).join('');
+    body.querySelectorAll('input[name=wzt]').forEach(r=>r.onchange=()=>WZ.type=r.value);
+    $('#wzNext').textContent=wzHasData(WZ.type)?'下一步':'完成';$('#wzPrev').disabled=true;
+  } else {
+    const fs=wzFields();
+    body.innerHTML='<p>第二步：数据来源</p>'+
+      `<label class="f"><span>来源</span><select id="wzsrc">
+        <option value="const"${WZ.source==='const'?' selected':''}>常量（固定内容）</option>
+        <option value="field"${WZ.source==='field'?' selected':''}>数据字段</option>
+        <option value="expr"${WZ.source==='expr'?' selected':''}>公式/表达式</option>
+      </select></label><div id="wzval"></div>`;
+    const renderVal=()=>{WZ.source=$('#wzsrc').value;const vb=$('#wzval');
+      if(WZ.source==='field')vb.innerHTML=`<label class="f"><span>选择字段</span><select id="wzf">${fs.length?fs.map(f=>`<option value="${f}">${f}</option>`).join(''):'<option value="">(无字段，请先加载 CSV/数据库)</option>'}</select></label>`;
+      else vb.innerHTML=`<label class="f"><span>${WZ.source==='expr'?'表达式（如 =[A]+"元"）':'内容'}</span><input id="wzv" value="${esc(WZ.value)}"></label>`;
+      const vi=$('#wzv');if(vi)vi.oninput=()=>WZ.value=vi.value;};
+    $('#wzsrc').onchange=renderVal;renderVal();
+    $('#wzNext').textContent='完成';$('#wzPrev').disabled=false;
+  }
+}
+function wzFinish(){
+  const el=JSON.parse(JSON.stringify(DEFAULTS[WZ.type]));
+  if(wzHasData(WZ.type)){
+    if(WZ.source==='field'){const f=$('#wzf')?$('#wzf').value:'';if(f)el.content='{'+f+'}';}
+    else if(WZ.source==='expr')el.content=WZ.value||el.content;
+    else if(WZ.value)el.content=WZ.value;
+  }
+  elements.push(el);sel=elements.length-1;commit();renderEditor();render();wzClose();
+}
+$('#wzCancel').onclick=wzClose;
+$('#wizard').onclick=e=>{if(e.target.id==='wizard')wzClose();};
+$('#wzPrev').onclick=()=>{if(WZ.step>0){WZ.step=0;wzRender();}};
+$('#wzNext').onclick=()=>{if(WZ.step===0&&wzHasData(WZ.type)){WZ.step=1;wzRender();}else wzFinish();};
 
 /* ---------- 保存 / 载入设计 ---------- */
 $('#saveBtn').onclick=()=>{
-  const design={v:1,label:{w:+$('#lw').value,h:+$('#lh').value,dpi:+$('#dpi').value,
-    cols:+$('#cols').value,gapX:+$('#gapX').value,gapY:+$('#gapY').value},elements};
+  const design={v:1,label:{w:toMM($('#lw').value),h:toMM($('#lh').value),dpi:+$('#dpi').value,
+    cols:+$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)},elements};
   const blob=new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
   URL.revokeObjectURL(a.href);
 };
 function loadDesign(d){
   if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
-  if(d.label){const L=d.label;$('#lw').value=L.w??50;$('#lh').value=L.h??30;$('#dpi').value=L.dpi??203;
-    $('#cols').value=L.cols??0;$('#gapX').value=L.gapX??L.tile??3;$('#gapY').value=L.gapY??L.tile??3;}
+  if(d.label){const L=d.label;$('#lw').value=fromMM(L.w??50);$('#lh').value=fromMM(L.h??30);$('#dpi').value=L.dpi??203;
+    $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);}
   elements=d.elements;sel=-1;renderEditor();render();commit();
 }
 $('#loadBtn').onclick=()=>$('#designIn').click();
