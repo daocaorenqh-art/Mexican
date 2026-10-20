@@ -68,6 +68,7 @@
                 padding:24px;display:flex;flex-wrap:wrap;gap:var(--tile,12px);justify-content:center;
                 width:100%;min-height:200px;align-content:flex-start}
   .label{background:#fff;color:#000;position:relative;overflow:hidden;
+          font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",sans-serif;
           box-shadow:0 1px 4px rgba(0,0,0,.18);flex:0 0 auto}
   .label.grid{background-image:linear-gradient(to right,#eee 1px,transparent 1px),
                                linear-gradient(to bottom,#eee 1px,transparent 1px);
@@ -211,6 +212,7 @@
             <option value="96">96</option>
             <option value="203" selected>203</option>
             <option value="300">300</option>
+            <option value="600">600</option>
           </select>
         </label>
         <label class="f"><span>每行数量</span><input id="cols" type="number" value="0" min="0" step="1"></label>
@@ -230,6 +232,8 @@
         <label class="f"><span>从第几条</span><input id="rFrom" type="number" value="1" min="1" step="1"></label>
         <label class="f"><span>到第几条</span><input id="rTo" type="number" value="0" min="0" step="1"></label>
       </div>
+      <label class="f"><span>ZPL 位图压缩</span>
+        <select id="zplComp"><option value="z64">Z64（新款斑马机，体积最小）</option><option value="acs">ACS（兼容所有斑马机）</option></select></label>
       <p class="hint">「到第几条」填 0 表示到最后一条。预览、打印、导出 ZPL 都按这里的范围和份数出标签；流水号按实际张数逐张递增。</p>
     </div>
 
@@ -689,6 +693,8 @@ function setSelection(ids,primary){
 }
 const selIds=()=>{syncSel();return [...selSet].sort((a,b)=>a-b);};
 const PXMM=3.78; // 屏幕预览 1mm≈3.78px(96dpi)
+// 标签内容默认字体：预览与 ZPL 栅格化用同一字体，度量与换行才一致
+const LABEL_FONT='"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",sans-serif';
 let UNIT='mm'; // 显示单位；内部一律用 mm 存储
 const LENKEYS=new Set(['x','y','size','h','module','w','border']); // 需随单位换算的长度字段
 const toMM=v=>UNIT==='cm'?(+v||0)*10:(+v||0);      // 输入(显示单位)→mm
@@ -768,33 +774,54 @@ function parseData(text){
   return lines.slice(1).map(l=>{const c=split(l);const o={};head.forEach((h,i)=>o[h]=c[i]??'');return o;});
 }
 
-/* ---------- 条码绘制 ---------- */
-function barsSVG(bits, modPx, heightPx, color){
-  color=color||'#000';
-  const ns='http://www.w3.org/2000/svg';
-  const svg=document.createElementNS(ns,'svg');
-  svg.setAttribute('width',bits.length*modPx);
-  svg.setAttribute('height',heightPx);
-  svg.setAttribute('shape-rendering','crispEdges');
-  let x=0,i=0;
-  while(i<bits.length){
-    if(bits[i]==='1'){let w=0;while(i<bits.length&&bits[i]==='1'){w++;i++;}
-      const r=document.createElementNS(ns,'rect');
-      r.setAttribute('x',x*modPx);r.setAttribute('y',0);
-      r.setAttribute('width',w*modPx);r.setAttribute('height',heightPx);
-      r.setAttribute('fill',color);svg.appendChild(r);x+=w;}
-    else {x++;i++;}
-  }
-  return svg;
-}
 /* ---- 打印机点换算 / 条码整点对齐（保证热敏机上可扫） ---- */
-function mm2dots(mm,dpi){return Math.round((+mm||0)*dpi/25.4);}
-function moduleDots(moduleMM,dpi){return Math.max(1,Math.round((+moduleMM||0)*dpi/25.4));}
-function snapModulePx(moduleMM){const dpi=+$('#dpi').value||203;const d=moduleDots(moduleMM,dpi);return (d*25.4/dpi)*PXMM;}
+// 斑马打印机的实际点密度：「203dpi」=8 点/mm，「300dpi」=12 点/mm（即 304.8dpi），「600dpi」=24 点/mm。
+// 不能用 dpi/25.4：300/25.4=11.81，会让整张标签缩小 1.6%（70mm 高的标签底部偏 1.1mm）
+function dpmmOf(dpi){return {203:8,300:12,600:24}[+dpi]||(+dpi||203)/25.4;}
+// 一维条码几何：给定模块宽 m、条高 bh、字高 fs（任意同一单位），返回要画的矩形与文字。
+// 预览和 ZPL 栅格化都调用它，保证两边完全一致。EAN-13/UPC-A/EAN-8 按 GS1 标准排版：
+// 护线下延、数字分组居中在左右两半下方，EAN-13 首位数字放在起始护线左侧，UPC-A 首末位放在两侧。
+function barcodeGeometry(type,res,m,bh,fs,showText){
+  const bits=res.bits,txt=String(res.text||'');
+  const isEAN=type==='ean13'||type==='ean8'||type==='upca';
+  const q=type==='ean13'?8:type==='upca'?8:0;            // 左侧留给首位数字的模块数
+  const qr=type==='upca'?8:0;                           // UPC-A 右侧留给末位数字
+  const ext=isEAN&&showText?Math.round(fs*0.55/m):0;     // 护线下延的模块数
+  const guard=new Set();
+  if(isEAN){const n=bits.length;[0,1,2,n-3,n-2,n-1].forEach(i=>guard.add(i));
+    const mid=Math.floor(n/2);for(let i=mid-2;i<=mid+2;i++)guard.add(i);
+    if(type==='upca'){for(let i=3;i<10;i++)guard.add(i);for(let i=n-10;i<n-3;i++)guard.add(i);}}  // UPC-A 首末字符条也下延
+  const rects=[];
+  for(let i=0;i<bits.length;){if(bits[i]!=='1'){i++;continue;}let j=i;while(bits[j]==='1')j++;
+    let k=i;while(k<j){const g=guard.has(k);let e=k;while(e<j&&guard.has(e)===g)e++;
+      rects.push([(q+k)*m,0,(e-k)*m,bh+(g?ext*m:0)]);k=e;}i=j;}
+  const texts=[],W=(q+bits.length+qr)*m,ty=bh+Math.max(1,m*0.6);
+  if(showText){
+    if(type==='ean13'&&txt.length===13){
+      texts.push([txt[0],q*m/2,ty]);
+      for(let i=0;i<6;i++)texts.push([txt[1+i],(q+3+7*i+3.5)*m,ty]);
+      for(let i=0;i<6;i++)texts.push([txt[7+i],(q+50+7*i+3.5)*m,ty]);
+    }else if(type==='ean8'&&txt.length===8){
+      for(let i=0;i<4;i++)texts.push([txt[i],(3+7*i+3.5)*m,ty]);
+      for(let i=0;i<4;i++)texts.push([txt[4+i],(36+7*i+3.5)*m,ty]);
+    }else if(type==='upca'&&txt.length===12){
+      texts.push([txt[0],q*m/2,ty,0.75]);
+      for(let i=1;i<6;i++)texts.push([txt[i],(q+3+7*i+3.5)*m,ty]);
+      for(let i=6;i<11;i++)texts.push([txt[i],(q+50+7*(i-6)+3.5)*m,ty]);
+      texts.push([txt[11],(q+95+qr/2)*m,ty,0.75]);
+    }else texts.push([txt,W/2,ty]);
+  }
+  return {w:W,h:bh+(showText?Math.max(ty-bh+fs*1.15,ext*m):0),rects,texts,fs};
+}
+// HRI 字高：随模块宽缩放，避免小码时数字挤在一起（上限 2.7mm）
+const hriMM=el=>Math.min(2.7,Math.max(1.2,9*(+el.module||0.33)));
+function mm2dots(mm,dpi){return Math.round((+mm||0)*dpmmOf(dpi));}
+function moduleDots(moduleMM,dpi){return Math.max(1,Math.round((+moduleMM||0)*dpmmOf(dpi)));}
+function snapModulePx(moduleMM){const dpi=+$('#dpi').value||203;return moduleDots(moduleMM,dpi)/dpmmOf(dpi)*PXMM;}
 // 二维码矩阵 → SVG（单条 path；模块宽对齐到整数打印点）
 function qr2dModuleDots(sizeMM,n,dpi){return Math.max(1,Math.floor(mm2dots(sizeMM,dpi)/n));}
 function matrixSVG(mods,n,sizeMM,color){
-  const dpi=+$('#dpi').value||203, mpx=(qr2dModuleDots(sizeMM,n,dpi)*25.4/dpi)*PXMM, tot=n*mpx;
+  const dpi=+$('#dpi').value||203, mpx=qr2dModuleDots(sizeMM,n,dpi)/dpmmOf(dpi)*PXMM, tot=n*mpx;
   const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
   svg.setAttribute('width',tot);svg.setAttribute('height',tot);svg.setAttribute('shape-rendering','crispEdges');
   let d='';for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(mods[y][x])d+='M'+(x*mpx)+' '+(y*mpx)+'h'+mpx+'v'+mpx+'h-'+mpx+'z';
@@ -830,28 +857,27 @@ function renderLabel(row,idx){
         if(el.align&&el.align!=='left'){node.style.textAlign=el.align;node.style.display='inline-block';}
       }
       else if(el.type==='para'){
-        node.textContent=text;
-        node.style.fontSize=(el.size*PXMM)+'px';
+        // 换行结果与 ZPL 栅格化共用 wrapLines，屏幕上在哪断行，打出来就在哪断行
+        node.textContent=wrapLines(text,el).join('\n');
+        node.style.fontSize=(el.size*PXMM)+'px';node.style.lineHeight='1.25';
         node.style.fontWeight=el.bold?'700':'400';
-        node.style.width=(el.w*PXMM)+'px';
-        node.style.whiteSpace='pre-wrap';node.style.wordBreak='break-word';
-        if(el.font)node.style.fontFamily=el.font;
+        node.style.width=(el.w*PXMM)+'px';node.style.whiteSpace='pre';
+        node.style.fontFamily=el.font||LABEL_FONT;
         if(el.align)node.style.textAlign=el.align;
       }
       else if(['barcode','ean13','ean8','upca','code39','itf'].includes(el.type)){
-        const draw1D=(res,gap)=>{
-          if(el.bg)node.style.background=el.bg;
-          node.appendChild(barsSVG(res.bits,snapModulePx(el.module),el.h*PXMM,el.color));
-          if(el.showText){const t=document.createElement('div');t.textContent=res.text;
-            t.style.cssText='text-align:center;font:'+(2.7*PXMM)+'px/1.1 monospace;'+(gap?'letter-spacing:'+gap+';':'')+'margin-top:1px;width:100%;color:'+(el.color||'#000');
-            node.appendChild(t);}
-        };
-        if(el.type==='barcode')     draw1D({bits:C128.modules(text),text});
-        else if(el.type==='ean13')  draw1D(EAN13.modules(text),'2px');
-        else if(el.type==='ean8')   draw1D(EAN8.modules(text),'2px');
-        else if(el.type==='upca')   draw1D(UPCA.modules(text),'1px');
-        else if(el.type==='code39') draw1D(C39.modules(text));
-        else if(el.type==='itf')    draw1D(ITF.modules(text),'1px');
+        const enc={barcode:()=>({bits:C128.modules(text),text}),ean13:()=>EAN13.modules(text),ean8:()=>EAN8.modules(text),
+          upca:()=>UPCA.modules(text),code39:()=>C39.modules(text),itf:()=>ITF.modules(text)}[el.type]();
+        const gm=barcodeGeometry(el.type,enc,snapModulePx(el.module),el.h*PXMM,hriMM(el)*PXMM,el.showText);
+        if(el.bg)node.style.background=el.bg;
+        const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),col=el.color||'#000';
+        svg.setAttribute('width',gm.w);svg.setAttribute('height',gm.h);svg.setAttribute('shape-rendering','crispEdges');
+        const path=document.createElementNS(ns,'path');
+        path.setAttribute('d',gm.rects.map(r=>'M'+r[0]+' '+r[1]+'h'+r[2]+'v'+r[3]+'h-'+r[2]+'z').join(''));path.setAttribute('fill',col);svg.appendChild(path);
+        gm.texts.forEach(([t,cx,ty,sc])=>{const e=document.createElementNS(ns,'text');e.textContent=t;
+          e.setAttribute('x',cx);e.setAttribute('y',ty);e.setAttribute('text-anchor','middle');e.setAttribute('dominant-baseline','hanging');
+          e.setAttribute('font-family','monospace');e.setAttribute('font-size',gm.fs*(sc||1));e.setAttribute('fill',col);svg.appendChild(e);});
+        node.appendChild(svg);
       }
       else if(el.type==='qrcode'||el.type==='datamatrix'){
         const m=el.type==='qrcode'?Codes2D.encodeQR(text||' ',el.ecl||'M'):Codes2D.encodeDM(text||' ');
@@ -1066,6 +1092,8 @@ function setUnit(u){
 }
 $('#unit').onchange=e=>setUnit(e.target.value);
 $('#copies').oninput=$('#rFrom').oninput=$('#rTo').oninput=render;
+try{const z=localStorage.getItem('label.zplComp');if(z)$('#zplComp').value=z;}catch(e){}
+$('#zplComp').onchange=()=>{try{localStorage.setItem('label.zplComp',$('#zplComp').value);}catch(e){}};
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
 $('#zoom').oninput=()=>{try{$('#preview').style.zoom=(+$('#zoom').value/100);}catch(e){}};
@@ -1331,63 +1359,220 @@ function loadDesign(d){
 
 /* ---------- 导出 ZPL（Zebra 指令，直发热敏机） ---------- */
 function zEsc(s){return String(s).replace(/[\^~]/g,' ');}
-// 把文字栅格化成 1-bit 位图用 ^GFA 输出：中文/任意字体都能准确打印
-function textGF(text,sizeMM,bold,font,dpi){
-  const px=Math.max(8,Math.round(sizeMM*dpi/25.4));
-  const probe=document.createElement('canvas').getContext('2d');
-  const ff=(bold?'bold ':'')+px+'px '+(font||'sans-serif');
-  probe.font=ff;const w=Math.max(1,Math.ceil(probe.measureText(text).width));
-  const h=Math.ceil(px*1.25), bytesPerRow=Math.ceil(w/8), W=bytesPerRow*8;
-  const cv=document.createElement('canvas');cv.width=W;cv.height=h;
-  const c=cv.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,W,h);
-  c.fillStyle='#000';c.textBaseline='top';c.font=ff;c.fillText(text,0,0);
-  const d=c.getImageData(0,0,W,h).data;let hex='';const total=bytesPerRow*h;
-  for(let y=0;y<h;y++)for(let bx=0;bx<bytesPerRow;bx++){let byte=0;
-    for(let bit=0;bit<8;bit++){const px2=bx*8+bit,i=(y*W+px2)*4;
-      if((d[i]+d[i+1]+d[i+2])/3<128)byte|=(1<<(7-bit));}
-    hex+=byte.toString(16).padStart(2,'0').toUpperCase();}
-  return {gf:'^GFA,'+total+','+total+','+bytesPerRow+','+hex,w,h};
-}
-function buildZPL(){
-  const dpi=+$('#dpi').value||203;
-  const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
-  const list=printList();let out='';
-  list.forEach((row,idx)=>{
-    out+='^XA\n^CI28\n^PW'+Wd+'\n^LL'+Hd+'\n';
-    elements.forEach(el=>{
-      const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
-      let text;try{text=evalContent(el.content,row);}catch(e){text='';}
-      const bh=mm2dots(el.h,dpi), by=Math.min(10,moduleDots(el.module,dpi));
-      switch(el.type){
-        case 'text': case 'counter': case 'date':{
-          let t=text;
-          if(el.type==='counter'){const n=(+el.start||0)+idx*(+el.step||1);t=(el.prefix||'')+String(n).padStart(+el.pad||0,'0')+(el.suffix||'');}
-          if(el.type==='date')t=fmtDate(new Date(),el.format||'YYYY-MM-DD');
-          if(!t)break;const g=textGF(t,el.size,el.bold,el.font,dpi);
-          out+='^FO'+x+','+y+g.gf+'^FS\n';break;}
-        case 'para':{if(!text)break;const fh=mm2dots(el.size,dpi),wd=mm2dots(el.w,dpi);
-          out+='^FO'+x+','+y+'^A0N,'+fh+','+fh+'^FB'+wd+',30,0,L,0^FD'+zEsc(text)+'^FS\n';break;}
-        case 'barcode':out+='^FO'+x+','+y+'^BY'+by+'^BCN,'+bh+','+(el.showText?'Y':'N')+',N,N^FD'+zEsc(text)+'^FS\n';break;
-        case 'ean13':out+='^FO'+x+','+y+'^BY'+by+'^BEN,'+bh+','+(el.showText?'Y':'N')+',N^FD'+String(text).replace(/\D/g,'').slice(0,12)+'^FS\n';break;
-        case 'ean8':out+='^FO'+x+','+y+'^BY'+by+'^B8N,'+bh+','+(el.showText?'Y':'N')+',N^FD'+String(text).replace(/\D/g,'').slice(0,7)+'^FS\n';break;
-        case 'upca':out+='^FO'+x+','+y+'^BY'+by+'^BUN,'+bh+','+(el.showText?'Y':'N')+',N^FD'+String(text).replace(/\D/g,'').slice(0,11)+'^FS\n';break;
-        case 'code39':out+='^FO'+x+','+y+'^BY'+by+'^B3N,N,'+bh+','+(el.showText?'Y':'N')+',N^FD'+text+'^FS\n';break;
-        case 'itf':out+='^FO'+x+','+y+'^BY'+by+'^B2N,'+bh+','+(el.showText?'Y':'N')+',N,N^FD'+String(text).replace(/\D/g,'')+'^FS\n';break;
-        case 'qrcode':{const q=Codes2D.encodeQR(text||' ',el.ecl||'M');const mag=Math.min(10,qr2dModuleDots(el.size,q.size,dpi));
-          out+='^FO'+x+','+y+'^BQN,2,'+mag+'^FD'+(el.ecl||'M')+'A,'+zEsc(text)+'^FS\n';break;}
-        case 'datamatrix':{const dm=Codes2D.encodeDM(text||' ');const md=qr2dModuleDots(el.size,dm.size,dpi);
-          out+='^FO'+x+','+y+'^BXN,'+md+',200^FD'+zEsc(text)+'^FS\n';break;}
-        case 'box':{const w=mm2dots(el.w,dpi),hh=mm2dots(el.h,dpi),th=Math.max(1,mm2dots(el.border,dpi));
-          out+='^FO'+x+','+y+'^GB'+w+','+hh+','+(el.fill?Math.min(w,hh):th)+',B^FS\n';break;}
-        case 'ellipse':{const w=mm2dots(el.w,dpi),hh=mm2dots(el.h,dpi),th=Math.max(1,mm2dots(el.border,dpi));
-          out+='^FO'+x+','+y+'^GE'+w+','+hh+','+th+',B^FS\n';break;}
-      }
-    });
-    out+='^PQ1\n^XZ\n';
+// 文字度量画布（段落换行在预览与打印两边共用，保证在同一处断行）
+const _measureCtx=document.createElement('canvas').getContext('2d');
+const fontOf=(el,px)=>(el.bold?'bold ':'')+px+'px '+(el.font||LABEL_FONT);
+// 段落换行：按字号 100px 度量后按比例换算到 mm，与实际字号/DPI 无关；英文单词不拆，中文可在任意字间断开
+function wrapLines(text,el){
+  _measureCtx.font=fontOf(el,100);
+  const k=(+el.size||1)/100, maxW=+el.w||1, wOf=t=>_measureCtx.measureText(t).width*k, out=[];
+  String(text).split('\n').forEach(par=>{
+    const toks=par.match(/[A-Za-z0-9_\-.,:;!?'"()\/%#@&+*=<>]+|\s+|[^\s]/gu)||[''];
+    let line='';
+    for(const tk of toks){
+      if(line===''&&/^\s+$/.test(tk))continue;
+      if(wOf(line+tk)<=maxW){line+=tk;continue;}
+      if(line!==''){out.push(line.replace(/\s+$/,''));line='';if(/^\s+$/.test(tk))continue;}
+      if(wOf(tk)<=maxW){line=tk;continue;}
+      for(const ch of tk){if(line!==''&&wOf(line+ch)>maxW){out.push(line);line='';}line+=ch;}   // 单词超宽：逐字拆
+    }
+    out.push(line.replace(/\s+$/,''));
   });
   return out;
 }
-function exportZPL(){const z=buildZPL();const blob=new Blob([z],{type:'text/plain'});
+// 图片：按 src 缓存已解码的 Image
+const _imgCache=new Map();
+function loadImage(src){
+  if(!_imgCache.has(src))_imgCache.set(src,new Promise(res=>{const im=new Image();
+    im.onload=()=>res(im);im.onerror=()=>res(null);im.src=src;}));
+  return _imgCache.get(src);
+}
+// 通用栅格化：paint 以「元素未旋转、左上角为原点、单位=打印点」作画；按元素旋转（绕左上角，与预览一致）
+// 求外接框，超出标签左/上边的部分裁掉。返回相对元素原点的偏移与 1-bit 位图。
+function rasterize(Wd,Hd,rotDeg,paint,dither){
+  const th=(+rotDeg||0)*Math.PI/180,c=Math.cos(th),s=Math.sin(th);
+  const pts=[[0,0],[Wd,0],[0,Hd],[Wd,Hd]].map(([x,y])=>[x*c-y*s,x*s+y*c]);
+  const minX=Math.floor(Math.min(...pts.map(p=>p[0]))),minY=Math.floor(Math.min(...pts.map(p=>p[1])));
+  const cw=Math.ceil(Math.max(...pts.map(p=>p[0])))-minX, ch=Math.ceil(Math.max(...pts.map(p=>p[1])))-minY;
+  if(cw<1||ch<1)return null;
+  const bpr=Math.ceil(cw/8),W=bpr*8;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=ch;
+  const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,W,ch);
+  g.save();g.translate(-minX,-minY);if(th)g.rotate(th);g.fillStyle='#000';g.strokeStyle='#000';paint(g);g.restore();
+  const d=g.getImageData(0,0,W,ch).data, lum=new Float32Array(W*ch);
+  for(let i=0;i<W*ch;i++){const a=d[i*4+3]/255;lum[i]=255-a*(255-(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]));}
+  const bits=new Uint8Array(W*ch);
+  for(let y=0;y<ch;y++)for(let x=0;x<W;x++){const i=y*W+x,v=lum[i],b=v<128?1:0;bits[i]=b;
+    if(dither){const e=v-(b?0:255);   // Floyd–Steinberg 误差扩散：照片/Logo 灰度转成黑白点阵
+      if(x+1<W)lum[i+1]+=e*7/16;
+      if(y+1<ch){if(x>0)lum[i+W-1]+=e*3/16;lum[i+W]+=e*5/16;if(x+1<W)lum[i+W+1]+=e/16;}}}
+  let hex='',ink=false;
+  for(let y=0;y<ch;y++)for(let bx=0;bx<bpr;bx++){let byte=0;
+    for(let k=0;k<8;k++)if(bits[y*W+bx*8+k])byte|=1<<(7-k);
+    if(byte)ink=true;hex+=(byte<16?'0':'')+byte.toString(16).toUpperCase();}
+  if(!ink)return null;
+  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex};
+}
+// 各类元素「未旋转」时的尺寸与画法（单位：打印点）
+function painter(el,text,dpi,idx,img){
+  const D=mm=>(+mm||0)*dpmmOf(dpi);
+  switch(el.type){
+    case 'text':case 'counter':case 'date':{
+      let t=text;
+      if(el.type==='counter'){const n=(+el.start||0)+idx*(+el.step||1);t=(el.prefix||'')+String(n).padStart(+el.pad||0,'0')+(el.suffix||'');}
+      if(el.type==='date')t=fmtDate(new Date(),el.format||'YYYY-MM-DD');
+      if(!t)return null;const px=D(el.size);_measureCtx.font=fontOf(el,px);
+      return {w:_measureCtx.measureText(t).width,h:px*1.25,paint:g=>{g.font=fontOf(el,px);g.textBaseline='top';g.fillText(t,0,0);}};}
+    case 'para':{if(!text)return null;
+      const px=D(el.size),lh=px*1.25,wd=D(el.w),lines=wrapLines(text,el);
+      return {w:wd,h:lines.length*lh,paint:g=>{g.font=fontOf(el,px);g.textBaseline='top';
+        lines.forEach((ln,i)=>{const lw=g.measureText(ln).width;
+          const x0=el.align==='center'?(wd-lw)/2:el.align==='right'?wd-lw:0;g.fillText(ln,x0,i*lh);});}};}
+    case 'image':{if(!img)return null;const w=D(el.w),h=D(el.h);
+      const r=Math.min(w/img.naturalWidth,h/img.naturalHeight),iw=img.naturalWidth*r,ih=img.naturalHeight*r;
+      return {w,h,dither:true,paint:g=>g.drawImage(img,(w-iw)/2,(h-ih)/2,iw,ih)};}   // 等比居中，同预览 object-fit:contain
+    case 'box':case 'ellipse':{const w=D(el.w),h=D(el.h),t=Math.max(1,D(el.border));
+      return {w,h,paint:g=>{g.beginPath();
+        if(el.type==='box'){if(el.fill)g.rect(0,0,w,h);else g.rect(t/2,t/2,w-t,h-t);}
+        else{if(el.fill)g.ellipse(w/2,h/2,w/2,h/2,0,0,Math.PI*2);else g.ellipse(w/2,h/2,Math.max(0,(w-t)/2),Math.max(0,(h-t)/2),0,0,Math.PI*2);}
+        if(el.fill)g.fill();else{g.lineWidth=t;g.stroke();}}};}
+    case 'barcode':case 'ean13':case 'ean8':case 'upca':case 'code39':case 'itf':{
+      const enc={barcode:()=>({bits:C128.modules(text),text}),ean13:()=>EAN13.modules(text),ean8:()=>EAN8.modules(text),
+        upca:()=>UPCA.modules(text),code39:()=>C39.modules(text),itf:()=>ITF.modules(text)}[el.type]();
+      const gm=barcodeGeometry(el.type,enc,moduleDots(el.module,dpi),Math.round(D(el.h)),D(hriMM(el)),el.showText);
+      return {w:gm.w,h:gm.h,paint:g=>{gm.rects.forEach(r=>g.fillRect(r[0],r[1],r[2],r[3]));
+        g.textAlign='center';g.textBaseline='hanging';
+        gm.texts.forEach(([t,cx,ty,sc])=>{g.font=gm.fs*(sc||1)+'px monospace';g.fillText(t,cx,ty);});}};}
+    case 'qrcode':case 'datamatrix':{
+      const mx=el.type==='qrcode'?Codes2D.encodeQR(text||' ',el.ecl||'M'):Codes2D.encodeDM(text||' ');
+      const md=qr2dModuleDots(el.size,mx.size,dpi);
+      return {w:mx.size*md,h:mx.size*md,paint:g=>{for(let y=0;y<mx.size;y++)for(let x=0;x<mx.size;x++)if(mx.modules[y][x])g.fillRect(x*md,y*md,md,md);}};}
+  }
+  return null;
+}
+// 文字模板分段：返回 [{text,dx(mm)}]；表达式(=开头)或不含 {字段} 的返回 null（整体处理）
+function textSegments(el,row){
+  const src=String(el.content==null?'':el.content);
+  if(src[0]==='='||src.indexOf('{')<0)return null;
+  const parts=[];let last=0;const re=/\{([^{}\n]+)\}/g;let m;
+  while((m=re.exec(src))){if(m.index>last)parts.push(src.slice(last,m.index));parts.push(String(fieldVal(m[1],row)));last=re.lastIndex;}
+  if(last<src.length)parts.push(src.slice(last));
+  _measureCtx.font=fontOf(el,100);const k=(+el.size||1)/100;let acc='';const out=[];
+  for(const t of parts){if(t)out.push({text:t,dx:_measureCtx.measureText(acc).width*k});acc+=t;}
+  return out;
+}
+const isRot=el=>((+el.rot||0)%360+360)%360!==0;
+// 原生指令（未旋转的条码/二维码/方框/椭圆）：打印机自己画，最清晰
+function nativeZPL(el,text,dpi,x,y){
+  const o='^FO'+x+','+y;
+  if(el.type==='box'){const w=mm2dots(el.w,dpi),h=mm2dots(el.h,dpi),t=Math.max(1,mm2dots(el.border,dpi));
+    return o+'^GB'+w+','+h+','+(el.fill?Math.min(w,h):t)+',B^FS\n';}
+  if(el.type==='ellipse'){const w=mm2dots(el.w,dpi),h=mm2dots(el.h,dpi),t=Math.max(1,mm2dots(el.border,dpi));
+    return o+'^GE'+w+','+h+','+t+',B^FS\n';}
+  return null;
+}
+const RASTER_ONLY=new Set(['text','counter','date','para','image','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix']);
+async function buildZPL(){
+  const dpi=+$('#dpi').value||203;
+  const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
+  const list=printList();
+  const imgs=new Map();
+  for(const el of elements)if(el.type==='image'&&el.src&&!imgs.has(el.src))imgs.set(el.src,await loadImage(el.src));
+  // 第一遍：生成每张标签的指令；相同输入的位图只算一次
+  const cache=new Map(), use=new Map(), labels=[];
+  list.forEach((row,idx)=>{
+    const parts=[];
+    elements.forEach(el=>{
+      const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
+      let text;try{text=evalContent(el.content,row);}catch(e){text='';}
+      if(!RASTER_ONLY.has(el.type)&&!isRot(el)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
+      // 「品名：{字段}」这类模板：静态文字与字段值分开转位图，静态部分全批只发一次（串口打印快很多）
+      const segs=el.type==='text'?textSegments(el,row):null;
+      if(segs&&segs.length>1){
+        const th=(+el.rot||0)*Math.PI/180;
+        segs.forEach(sg=>{const sub={...el,content:sg.text,x:el.x+sg.dx*Math.cos(th),y:el.y+sg.dx*Math.sin(th)};
+          placeRaster(sub,sg.text,mm2dots(sub.x,dpi),mm2dots(sub.y,dpi));});
+        return;}
+      placeRaster(el,text,x,y);
+    });
+    function placeRaster(el,text,x,y){
+      let shown=text;
+      if(el.type==='counter'){const n=(+el.start||0)+idx*(+el.step||1);shown=(el.prefix||'')+String(n).padStart(+el.pad||0,'0')+(el.suffix||'');}
+      if(el.type==='date')shown=fmtDate(new Date(),el.format||'YYYY-MM-DD');
+      const key=JSON.stringify([el.type,shown,el.size,el.bold,el.font,el.w,el.h,el.align,el.rot,el.border,el.fill,el.module,el.showText,el.ecl,
+        el.type==='image'?el.src:0,dpi]);
+      let r=cache.get(key);
+      if(r===undefined){let pt=null;try{pt=painter(el,text,dpi,idx,el.type==='image'?imgs.get(el.src):null);}catch(e){pt=null;}
+        r=pt?rasterize(pt.w,pt.h,el.rot,pt.paint,pt.dither):null;if(r)r.key=key;cache.set(key,r);}
+      if(!r)return;
+      const fx=x+r.dx,fy=y+r.dy;
+      const cx=Math.max(0,-fx),cy=Math.max(0,-fy);   // 超出左/上边缘的部分裁掉（预览中同样被标签边裁掉）
+      if(cx||cy){const c=cropGF(r,cx,cy);if(c)parts.push({gf:c,x:fx+cx,y:fy+cy});return;}
+      use.set(key,(use.get(key)||0)+1);parts.push({r,x:fx,y:fy});
+    }
+    labels.push(parts);
+  });
+  // 第二遍：重复出现的位图用 ~DG 存进打印机内存一次，各张用 ^XG 调用
+  const names=new Map();let n=0,head='';
+  for(const [key,cnt] of use)if(cnt>1&&n<999){const r=cache.get(key),nm='R:G'+String(++n).padStart(3,'0')+'.GRF';
+    names.set(key,nm);head+='~DG'+nm+','+dgBody(r)+'\n';}
+  let out=head;
+  for(const parts of labels){
+    out+='^XA\n^CI28\n^PW'+Wd+'\n^LL'+Hd+'\n';
+    for(const p of parts){
+      if(typeof p==='string'){out+=p;continue;}
+      if(p.gf){out+='^FO'+p.x+','+p.y+'^GFA,'+await gfBody(p.gf)+'^FS\n';continue;}
+      const nm=names.get(p.r.key);
+      out+='^FO'+p.x+','+p.y+(nm?'^XG'+nm+',1,1':'^GFA,'+await gfBody(p.r))+'^FS\n';
+    }
+    out+='^PQ1\n^XZ\n';
+  }
+  return out;
+}
+// ZPL 位图压缩（ZPL 手册「Alternative Data Compression Scheme」，所有斑马机通用）：
+//   G–Y=重复1–19次、g–y=20–380、z=400，可叠加；按行再用 ,(本行余下全0) !(全F) :(同上一行)
+// 文字位图多为空白行/重复行，通常可压到原来的 1/5～1/20，串口打印时尤其关键
+function acsRun(n){let s='';while(n>=400){s+='z';n-=400;}if(n>=20){s+='_ghijklmnopqrstuvwxy'[(n/20)|0];n%=20;}if(n)s+='_GHIJKLMNOPQRSTUVWXY'[n];return s;}
+function acsEncode(hex,bpr){
+  const L=bpr*2;let out='',prev=null;
+  for(let i=0;i<hex.length;i+=L){
+    const row=hex.substr(i,L);
+    if(row===prev){out+=':';continue;}
+    prev=row;
+    let body=row,tail='';
+    const z=row.match(/0+$/),f=row.match(/F+$/);
+    if(z&&z[0].length>=2){body=row.slice(0,-z[0].length);tail=',';}
+    else if(f&&f[0].length>=2){body=row.slice(0,-f[0].length);tail='!';}
+    out+=body.replace(/([0-9A-F])\1{2,}/g,(m,c)=>acsRun(m.length)+c)+tail;
+  }
+  return out;
+}
+// Z64：zlib 压缩后 base64，附 CRC-16/XMODEM（与 zpl-image 等生产库一致）。新款斑马机（Link-OS，如 ZT410/ZD 系列）支持，
+// 文字位图通常比 ACS 再小 2～4 倍。老机型请在「打印设置」里改用 ACS。
+function crc16x(s){let c=0;for(let i=0;i<s.length;i++){c^=s.charCodeAt(i)<<8;
+  for(let k=0;k<8;k++)c=(c&0x8000)?((c<<1)^0x1021)&0xffff:(c<<1)&0xffff;}return c.toString(16).padStart(4,'0');}
+async function z64Of(r){
+  if(r.z64)return r.z64;
+  const bytes=new Uint8Array(r.hex.length/2);for(let i=0;i<bytes.length;i++)bytes[i]=parseInt(r.hex.substr(i*2,2),16);
+  const z=new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+  let bin='';for(let i=0;i<z.length;i+=0x8000)bin+=String.fromCharCode.apply(null,z.subarray(i,i+0x8000));
+  const b64=btoa(bin);return (r.z64=':Z64:'+b64+':'+crc16x(b64));
+}
+const zplMode=()=>{const e=document.querySelector('#zplComp');return e&&e.value==='acs'?'acs':'z64';};
+// 注意两种格式不同：^GFA 是「总字节,总字节,每行字节,数据」，~DG 是「总字节,每行字节,数据」
+async function gfBody(r){return r.total+','+r.total+','+r.bpr+','+(zplMode()==='z64'?await z64Of(r):acsEncode(r.hex,r.bpr));}
+const dgBody=r=>r.total+','+r.bpr+','+acsEncode(r.hex,r.bpr);   // 存入打印机的静态图始终用兼容性最好的 ACS
+// 位图左/上裁切（元素部分伸出标签外时）
+function cropGF(r,cx,cy){
+  const rows=r.total/r.bpr, W=r.bpr*8; if(cy>=rows||cx>=W)return null;
+  const nw=W-cx,nbpr=Math.ceil(nw/8),nrows=rows-cy;let hex='';
+  for(let y=cy;y<rows;y++){const rowHex=r.hex.substr(y*r.bpr*2,r.bpr*2);let bitsStr='';
+    for(let i=0;i<r.bpr;i++)bitsStr+=parseInt(rowHex.substr(i*2,2),16).toString(2).padStart(8,'0');
+    bitsStr=bitsStr.slice(cx).padEnd(nbpr*8,'0');
+    for(let i=0;i<nbpr;i++){const v=parseInt(bitsStr.substr(i*8,8),2);hex+=(v<16?'0':'')+v.toString(16).toUpperCase();}}
+  return {total:nbpr*nrows,bpr:nbpr,hex};
+}
+async function exportZPL(){const z=await buildZPL();const blob=new Blob([z],{type:'text/plain'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);
   pendingPrintJob=true;askAdvanceCounters();}
 // 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延实际张数，下次接着编号不重号
@@ -1473,7 +1658,7 @@ async function doSendZPL(){
   if(!hasPrinter()){alert('「ZPL 直发」仅在桌面安装版可用；网页版请用「文件 → 导出 ZPL」。');return;}
   if(!$('#rawAddr').value.trim()){prnMsg('请填写打印机 IP / 共享名 / 串口',false);return;}
   prnMsg('正在发送…',true);
-  const r=await window.labelPrinter.sendRaw(rawTarget(),buildZPL());
+  const r=await window.labelPrinter.sendRaw(rawTarget(),await buildZPL());
   if(r.ok){prnMsg('已发送 '+printList().length+' 张标签到打印机',true);pendingPrintJob=true;askAdvanceCounters();}else prnMsg(r.error,false);
 }
 if(hasPrinter()){
