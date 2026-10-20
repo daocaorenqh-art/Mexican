@@ -23,8 +23,18 @@
   *{box-sizing:border-box}
   body{margin:0;font:14px/1.5 system-ui,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;
        background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  #menubar{display:flex;background:var(--panel);border-bottom:1px solid var(--line);font-size:13px;user-select:none}
+  #menubar .menu{position:relative}
+  #menubar .menu>span{display:block;padding:7px 13px;cursor:default}
+  #menubar .menu:hover>span{background:var(--bg)}
+  #menubar .dd{display:none;position:absolute;left:0;top:100%;min-width:170px;background:var(--panel);
+               border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.18);z-index:30;padding:4px 0}
+  #menubar .menu:hover .dd{display:block}
+  #menubar .dd a{display:block;padding:6px 16px;cursor:pointer;white-space:nowrap;color:var(--ink)}
+  #menubar .dd a:hover{background:var(--accent);color:var(--accent-ink)}
+  #menubar .dd hr{border:none;border-top:1px solid var(--line);margin:4px 0}
   header{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);
-         display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+         display:flex;align-items:center;gap:12px;flex-wrap:wrap;z-index:5}
   header h1{font-size:16px;margin:0;font-weight:650}
   header .sp{flex:1}
   .wrap{display:grid;grid-template-columns:320px 1fr;gap:16px;padding:16px;align-items:start}
@@ -83,7 +93,7 @@
   @media print{
     @page{margin:8mm}
     body{background:#fff}
-    header, .wrap>div:first-child, #pager, #canvasbar{display:none !important}
+    header, #menubar, .wrap>div:first-child, #pager, #canvasbar{display:none !important}
     .rulerwrap>svg,.rulerwrap>.rcorner{display:none}
     .wrap{display:block;padding:0}
     .wrap>.panel{border:0;padding:0;background:#fff}
@@ -99,6 +109,56 @@
 </style>
 </head>
 <body>
+<div id="menubar">
+  <div class="menu"><span>文件</span><div class="dd">
+    <a data-cmd="new">新建</a>
+    <a data-cmd="open">打开设计…</a>
+    <a data-cmd="save">保存设计</a>
+    <hr>
+    <a data-cmd="print">打印…　Ctrl+P</a>
+  </div></div>
+  <div class="menu"><span>编辑</span><div class="dd">
+    <a data-cmd="undo">撤消　Ctrl+Z</a>
+    <a data-cmd="redo">恢复　Ctrl+Y</a>
+    <hr>
+    <a data-cmd="cut">剪切　Ctrl+X</a>
+    <a data-cmd="copy">复制　Ctrl+C</a>
+    <a data-cmd="paste">粘贴　Ctrl+V</a>
+    <a data-cmd="del">删除　Del</a>
+    <hr>
+    <a data-cmd="front">置于顶层</a>
+    <a data-cmd="fwd">上移一层</a>
+    <a data-cmd="bwd">下移一层</a>
+    <a data-cmd="back">置于底层</a>
+  </div></div>
+  <div class="menu"><span>插入</span><div class="dd">
+    <a data-ins="text">文字</a>
+    <a data-ins="para">段落（多行）</a>
+    <a data-ins="barcode">条码 Code128</a>
+    <a data-ins="ean13">条码 EAN-13</a>
+    <a data-ins="ean8">条码 EAN-8</a>
+    <a data-ins="upca">条码 UPC-A</a>
+    <a data-ins="code39">条码 Code39</a>
+    <a data-ins="itf">条码 ITF-25</a>
+    <a data-ins="qrcode">二维码</a>
+    <a data-ins="counter">流水号</a>
+    <a data-ins="date">日期</a>
+    <a data-ins="image">图片 / Logo</a>
+    <a data-ins="box">矩形 / 线条</a>
+    <a data-ins="ellipse">椭圆</a>
+  </div></div>
+  <div class="menu"><span>视图</span><div class="dd">
+    <a data-cmd="ruler">标尺 开/关</a>
+    <a data-cmd="grid">网格 开/关</a>
+    <a data-cmd="zoomin">放大</a>
+    <a data-cmd="zoomout">缩小</a>
+    <a data-cmd="zoomreset">实际大小</a>
+  </div></div>
+  <div class="menu"><span>工具</span><div class="dd">
+    <a data-cmd="dbfocus">数据库套打</a>
+    <a data-cmd="csvfocus">CSV 数据套打</a>
+  </div></div>
+</div>
 <header>
   <h1>标签打印工具</h1>
   <span class="sp"></span>
@@ -492,6 +552,15 @@ function renderLabel(row,idx){
         if(el.font)node.style.fontFamily=el.font;
         if(el.align&&el.align!=='left'){node.style.textAlign=el.align;node.style.display='inline-block';}
       }
+      else if(el.type==='para'){
+        node.textContent=text;
+        node.style.fontSize=(el.size*PXMM)+'px';
+        node.style.fontWeight=el.bold?'700':'400';
+        node.style.width=(el.w*PXMM)+'px';
+        node.style.whiteSpace='pre-wrap';node.style.wordBreak='break-word';
+        if(el.font)node.style.fontFamily=el.font;
+        if(el.align)node.style.textAlign=el.align;
+      }
       else if(['barcode','ean13','ean8','upca','code39','itf'].includes(el.type)){
         const draw1D=(res,gap)=>{
           if(el.bg)node.style.background=el.bg;
@@ -583,6 +652,7 @@ function render(){
 const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']];
 const FIELDS={
   text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   barcode:BC('内容'),
   ean13:BC('内容(12/13位数字)'),
   ean8:BC('内容(7/8位数字)'),
@@ -596,7 +666,7 @@ const FIELDS={
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   const box=$('#elist');box.innerHTML='';
@@ -616,6 +686,7 @@ function renderEditor(){
         if(numBuf.length===2)flush();}
       else{flush();
         if(t==='text')h+=`<label class="f"><span>${label}</span><input data-k="${k}" data-i="${idx}" value="${esc(el[k]??'')}"></label>`;
+        else if(t==='area')h+=`<label class="f"><span>${label}</span><textarea data-k="${k}" data-i="${idx}" style="min-height:48px">${esc(el[k]??'')}</textarea></label>`;
         else if(t==='bool')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}"><option value="1"${el[k]?' selected':''}>是</option><option value="0"${!el[k]?' selected':''}>否</option></select></label>`;
         else if(t==='sel')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}">`+opts.map(o=>`<option value="${o}"${(el[k]??'')===o?' selected':''}>${o||'默认'}</option>`).join('')+`</select></label>`;
         else if(t==='color')h+=`<label class="f"><span>${label}</span><input type="color" data-k="${k}" data-i="${idx}" value="${el[k]||(k==='bg'?'#ffffff':'#000000')}"></label>`;
@@ -631,6 +702,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 /* ---------- 事件 ---------- */
 const DEFAULTS={
   text:{type:'text',x:3,y:3,size:4,bold:false,align:'left',font:'',rot:0,content:'文字'},
+  para:{type:'para',x:3,y:3,w:40,size:3.5,bold:false,align:'left',font:'',rot:0,content:'多行文字\n第二行'},
   barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'123456'},
   ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'690123456789'},
   ean8:{type:'ean8',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567'},
@@ -646,22 +718,22 @@ const DEFAULTS={
 };
 document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
   elements.push(JSON.parse(JSON.stringify(DEFAULTS[b.dataset.add])));
-  sel=elements.length-1;renderEditor();render();
+  sel=elements.length-1;commit();renderEditor();render();
 });
 $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
     if(['x','y','size','h','module','w','border','rot','start','step','pad'].includes(k))v=parseFloat(v)||0;
     if(['bold','showText','fill'].includes(k))v=v==='1';
-    elements[i][k]=v;render();return;}
+    elements[i][k]=v;render();commit();return;}
   const img=e.target.dataset.img;
   if(img!=null&&e.target.files[0]){const fr=new FileReader();
     fr.onload=()=>{elements[img].src=fr.result;render();};fr.readAsDataURL(e.target.files[0]);}
 });
 $('#elist').addEventListener('click',e=>{
-  if(e.target.dataset.del!=null){elements.splice(+e.target.dataset.del,1);sel=-1;renderEditor();render();}
-  if(e.target.dataset.dup!=null){const i=+e.target.dataset.dup;elements.splice(i+1,0,JSON.parse(JSON.stringify(elements[i])));sel=i+1;renderEditor();render();}
-  if(e.target.dataset.up!=null){const i=+e.target.dataset.up;if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];sel=i-1;renderEditor();render();}}
+  if(e.target.dataset.del!=null){elements.splice(+e.target.dataset.del,1);sel=-1;commit();renderEditor();render();}
+  if(e.target.dataset.dup!=null){const i=+e.target.dataset.dup;elements.splice(i+1,0,JSON.parse(JSON.stringify(elements[i])));sel=i+1;commit();renderEditor();render();}
+  if(e.target.dataset.up!=null){const i=+e.target.dataset.up;if(i>0){[elements[i-1],elements[i]]=[elements[i],elements[i-1]];sel=i-1;commit();renderEditor();render();}}
 });
 
 function showFieldTags(keys){
@@ -679,7 +751,8 @@ $('#clearCsv').onclick=()=>{rows=null;render();};
 $('#importFile').onclick=()=>$('#fileIn').click();
 $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
   fr.onload=()=>{$('#csv').value=fr.result;refreshFields();rows=parseData(fr.result);render();};fr.readAsText(f);};
-$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=render;
+const onPage=()=>{render();commit();};
+$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=onPage;
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
 $('#zoom').oninput=()=>{try{$('#preview').style.zoom=(+$('#zoom').value/100);}catch(e){}};
@@ -708,7 +781,7 @@ window.addEventListener('mousemove',e=>{
     else if('size' in o){el.size=Math.max(1,snap(o.size+dy));}}
   render();
 });
-window.addEventListener('mouseup',()=>{if(drag){drag=null;document.body.style.userSelect='';renderEditor();}});
+window.addEventListener('mouseup',()=>{if(drag){drag=null;document.body.style.userSelect='';commit();renderEditor();}});
 
 /* ---------- 对齐到标签 / 标尺 / 方向键微调 ---------- */
 $('#rulerChk').onchange=render;
@@ -719,7 +792,7 @@ $('#canvasbar').addEventListener('click',e=>{
   const W=+$('#lw').value,H=+$('#lh').value,el=elements[sel];
   if(al==='L')el.x=0; else if(al==='R')el.x=+(W-ew).toFixed(1); else if(al==='C')el.x=+((W-ew)/2).toFixed(1);
   else if(al==='T')el.y=0; else if(al==='B')el.y=+(H-eh).toFixed(1); else if(al==='M')el.y=+((H-eh)/2).toFixed(1);
-  el.x=Math.max(0,el.x);el.y=Math.max(0,el.y);render();renderEditor();
+  el.x=Math.max(0,el.x);el.y=Math.max(0,el.y);commit();render();renderEditor();
 });
 window.addEventListener('keydown',e=>{
   if(sel<0||sel>=elements.length)return;
@@ -731,7 +804,68 @@ window.addEventListener('keydown',e=>{
   else if(e.key==='ArrowUp')el.y=Math.max(0,+(el.y-step).toFixed(1));
   else if(e.key==='ArrowDown')el.y=+(el.y+step).toFixed(1);
   else hit=false;
-  if(hit){e.preventDefault();render();renderEditor();}
+  if(hit){e.preventDefault();render();renderEditor();commit();}
+});
+
+/* ---------- 撤消/重做 · 剪贴板 · 层次 · 菜单 ---------- */
+let history=[],hi=-1,restoring=false,clip=null;
+function snapshot(){return JSON.stringify({e:elements,l:{
+  lw:$('#lw').value,lh:$('#lh').value,dpi:$('#dpi').value,cols:$('#cols').value,gapX:$('#gapX').value,gapY:$('#gapY').value}});}
+function commit(){if(restoring)return;history=history.slice(0,hi+1);history.push(snapshot());
+  if(history.length>80)history.shift();hi=history.length-1;}
+function applySnap(s){const o=JSON.parse(s);restoring=true;elements=o.e;
+  $('#lw').value=o.l.lw;$('#lh').value=o.l.lh;$('#dpi').value=o.l.dpi;
+  $('#cols').value=o.l.cols;$('#gapX').value=o.l.gapX;$('#gapY').value=o.l.gapY;
+  sel=-1;renderEditor();render();restoring=false;}
+function undo(){if(hi>0){hi--;applySnap(history[hi]);}}
+function redo(){if(hi<history.length-1){hi++;applySnap(history[hi]);}}
+function copySel(){if(sel>=0&&sel<elements.length)clip=JSON.parse(JSON.stringify(elements[sel]));}
+function pasteClip(){if(clip){const c=JSON.parse(JSON.stringify(clip));c.x=(+c.x||0)+2;c.y=(+c.y||0)+2;
+  elements.push(c);sel=elements.length-1;commit();renderEditor();render();}}
+function cutSel(){if(sel>=0){copySel();elements.splice(sel,1);sel=-1;commit();renderEditor();render();}}
+function delSel(){if(sel>=0){elements.splice(sel,1);sel=-1;commit();renderEditor();render();}}
+function zMove(dir){if(sel<0)return;const i=sel;
+  if(dir==='fwd'&&i<elements.length-1){[elements[i],elements[i+1]]=[elements[i+1],elements[i]];sel=i+1;}
+  else if(dir==='bwd'&&i>0){[elements[i],elements[i-1]]=[elements[i-1],elements[i]];sel=i-1;}
+  else if(dir==='front'){elements.push(elements.splice(i,1)[0]);sel=elements.length-1;}
+  else if(dir==='back'){elements.unshift(elements.splice(i,1)[0]);sel=0;}
+  commit();renderEditor();render();}
+function newDesign(){if(!confirm('新建将清空当前设计，继续？'))return;
+  elements=[];rows=null;sel=-1;$('#csv').value='';showFieldTags([]);commit();renderEditor();render();}
+
+document.querySelector('#menubar').addEventListener('click',e=>{
+  const ins=e.target.dataset.ins, cmd=e.target.dataset.cmd;
+  if(ins){elements.push(JSON.parse(JSON.stringify(DEFAULTS[ins])));sel=elements.length-1;commit();renderEditor();render();return;}
+  if(!cmd)return;
+  switch(cmd){
+    case 'new':newDesign();break;
+    case 'open':$('#loadBtn').click();break;
+    case 'save':$('#saveBtn').click();break;
+    case 'print':window.print();break;
+    case 'undo':undo();break; case 'redo':redo();break;
+    case 'cut':cutSel();break; case 'copy':copySel();break; case 'paste':pasteClip();break; case 'del':delSel();break;
+    case 'front':zMove('front');break; case 'fwd':zMove('fwd');break; case 'bwd':zMove('bwd');break; case 'back':zMove('back');break;
+    case 'ruler':$('#rulerChk').checked=!$('#rulerChk').checked;render();break;
+    case 'grid':$('#showGrid').checked=!$('#showGrid').checked;render();break;
+    case 'zoomin':$('#zoom').value=Math.min(200,(+$('#zoom').value)+10);$('#zoom').oninput();break;
+    case 'zoomout':$('#zoom').value=Math.max(50,(+$('#zoom').value)-10);$('#zoom').oninput();break;
+    case 'zoomreset':$('#zoom').value=100;$('#zoom').oninput();break;
+    case 'dbfocus':{const p=$('#dbPanel');if(p&&p.style.display!=='none')p.scrollIntoView({behavior:'smooth'});else alert('数据库套打仅在桌面安装版可用');break;}
+    case 'csvfocus':$('#csv').scrollIntoView({behavior:'smooth'});$('#csv').focus();break;
+  }
+});
+window.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase();
+  const inField=tag==='input'||tag==='textarea'||tag==='select';
+  if(e.ctrlKey||e.metaKey){const k=e.key.toLowerCase();
+    if(k==='z'&&!inField){e.preventDefault();undo();}
+    else if(k==='y'&&!inField){e.preventDefault();redo();}
+    else if(k==='c'&&!inField){e.preventDefault();copySel();}
+    else if(k==='x'&&!inField){e.preventDefault();cutSel();}
+    else if(k==='v'&&!inField){e.preventDefault();pasteClip();}
+    else if(k==='p'){e.preventDefault();window.print();}
+    return;}
+  if(!inField&&e.key==='Delete'){e.preventDefault();delSel();}
 });
 
 /* ---------- 保存 / 载入设计 ---------- */
@@ -746,7 +880,7 @@ function loadDesign(d){
   if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
   if(d.label){const L=d.label;$('#lw').value=L.w??50;$('#lh').value=L.h??30;$('#dpi').value=L.dpi??203;
     $('#cols').value=L.cols??0;$('#gapX').value=L.gapX??L.tile??3;$('#gapY').value=L.gapY??L.tile??3;}
-  elements=d.elements;sel=-1;renderEditor();render();
+  elements=d.elements;sel=-1;renderEditor();render();commit();
 }
 $('#loadBtn').onclick=()=>$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
@@ -785,7 +919,7 @@ if(window.labelDB&&window.labelDB.isDesktop){
 }
 
 /* ---------- 启动 ---------- */
-renderEditor();render();
+renderEditor();render();commit();
 </script>
 </body>
 </html>
