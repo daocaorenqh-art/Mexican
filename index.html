@@ -1304,11 +1304,12 @@ function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
     if(dither){const e=v-(b?0:255);   // Floyd–Steinberg 误差扩散：照片/Logo 灰度转成黑白点阵
       if(x+1<W)lum[i+1]+=e*7/16;
       if(y+1<ch){if(x>0)lum[i+W-1]+=e*3/16;lum[i+W]+=e*5/16;if(x+1<W)lum[i+W+1]+=e/16;}}}
-  const bytes=new Uint8Array(bpr*ch);let hex='',ink=false,o=0;
+  let hex='',ink=false,o=0;const bytes=new Uint8Array(bpr*ch);
   for(let y=0;y<ch;y++)for(let bx=0;bx<bpr;bx++){let byte=0;
     for(let k=0;k<8;k++)if(bits[y*W+bx*8+k])byte|=1<<(7-k);
     if(byte)ink=true;bytes[o++]=byte;hex+=HEX2[byte];}
-  return ink?{dx:minX,dy:minY,bpr,total:bpr*ch,hex,bytes}:null;
+  if(!ink)return null;
+  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex,bytes};
 }
 // 各类元素「未旋转」时的尺寸与画法（单位：打印点）
 function painter(el,text,dpi,idx,img){
@@ -1809,7 +1810,8 @@ function askAdvanceCounters(done){
 window.addEventListener('afterprint',()=>{if(jobNow)logJob('浏览器打印',printList());askAdvanceCounters();endJob();});
 $('#loadBtn').onclick=()=>$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
-  fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));designName=f.name.replace(/\.json$/i,'');}catch(err){alert('读取失败: '+err.message);}e.target.value='';};fr.readAsText(f);};
+  fr.onload=()=>{let d;try{d=JSON.parse(fr.result);}catch(err){alert('读取失败：「'+f.name+'」不是有效的设计文件（文件内容损坏或不是本软件保存的 .json）。当前设计未改动。');e.target.value='';return;}
+    try{loadDesign(d);designName=f.name.replace(/\.json$/i,'');}catch(err){alert('读取失败：'+err.message);}e.target.value='';};fr.readAsText(f);};
 $('#themeBtn').onclick=()=>{const r=document.documentElement;
   const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
   r.setAttribute('data-theme',cur==='dark'?'light':'dark');};
