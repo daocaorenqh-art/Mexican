@@ -1,0 +1,45 @@
+name: Test
+
+# 每次推送 / PR 自动跑：单元测试 + 界面与打印端到端测试（独立斑马渲染器出纸 + 扫码校验）
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'   # 测试不需要 Electron 本体
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # 中文字体（标签预览与栅格化要用）、ODBC 头文件（编译 odbc 驱动）
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk unixodbc-dev
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Unit tests
+        run: npm test
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+        env:
+          E2E_OUT: ${{ runner.temp }}/label-e2e
+
+      # 失败时把截图、生成的 ZPL 和渲染图传上来便于排查
+      - name: Upload test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output
+          path: ${{ runner.temp }}/label-e2e/out

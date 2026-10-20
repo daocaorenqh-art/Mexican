@@ -125,6 +125,12 @@ npm start
 > Access 连接需本机已安装「Microsoft Access Database Engine / ODBC 驱动」。
 > 各数据库驱动（better-sqlite3 / odbc / mysql2 / pg / mssql）为原生模块，由 `npm install` 自动编译安装；没用到的类型即使未成功安装也不影响其它功能。
 
+## 自动测试
+
+- `npm test`：编码器（二维码/DataMatrix 用独立解码器扫回）、ZPL 压缩往返、直发、数据源。
+- `npm run test:e2e`：18 组界面与打印端到端测试（Playwright 驱动真实页面）。打印结果用独立的斑马渲染器（Zebrash）还原成出纸图像，逐元素比对位置、逐像素比对预览，再用扫码库扫出条码内容核对。可只跑部分：`node tests/e2e/run.mjs rich wordart`。
+- 每次推送 GitHub 自动跑以上全部（Actions → Test）；失败时可下载截图与生成的 ZPL。
+
 ## 编码器正确性
 
 所有条码/二维码编码器均为自写，无第三方依赖、完全离线。二维码编码器由仓库内测试用两个独立解码器（jsQR、ZXing）校验：
