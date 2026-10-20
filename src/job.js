@@ -52,7 +52,7 @@ function labelCtx(elements,e,extra){
   e=e||{row:null,rec:0,recPos:0,copy:1,idx:0};extra=extra||{};
   const vars=Object.assign({},extra.vars||{});
   for(const el of elements)if(el.type==='counter'){const k=counterName(el);if(!(k in vars))vars[k]=counterText(el,e);}
-  return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy});
+  return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},defs:extra.defs||null,now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy});
 }
 // 元素在这张标签上的文字内容
 function elementText(el,ctx,e){

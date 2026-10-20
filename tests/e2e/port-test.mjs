@@ -1,6 +1,9 @@
 // 移植自另一开发线的界面功能（docs/integration.md）逐项验收
 import { S, APP } from './_lib.mjs';
 import pw from 'playwright';
+import { createRequire } from 'node:module';
+const require=createRequire(import.meta.url);
+const { makeZip }=require('../helpers.cjs');
 const { chromium } = pw;
 let pass=0,fail=0;const ok=(n,c,x='')=>{c?(pass++,console.log('  ✓',n,x)):(fail++,console.log('  ✗',n,x));};
 const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:1000}});
@@ -56,6 +59,83 @@ for(const t of ['gs1128','upce','code93','codabar','gs1dm']){
 }
 const z=await p.evaluate(async()=>{document.querySelector('#zplComp').value='acs';return buildZPL();});
 ok('新条码导出 ZPL（位图）',/\^GFA/.test(z)&&(z.match(/\^XA/g)||[]).length===1);
+
+console.log('\n[4] CSV 编码 / 引号内换行 / 分号 / .xlsx');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'text',x:1,y:1,size:3,content:'{品名}'}]});});
+await p.setInputFiles('#fileIn',{name:'gbk.csv',mimeType:'text/csv',buffer:Buffer.from('c6b7c3fb2c534b550ad3eac9a12c41310a','hex')}); // 品名,SKU\n雨伞,A1（GBK）
+await p.waitForTimeout(200);
+ok('GBK CSV 中文不乱码',(await p.inputValue('#csv')).startsWith('品名,SKU\n雨伞')&&(await p.evaluate(()=>document.querySelector('#preview .label').innerText.trim()))==='雨伞',await p.inputValue('#csv'));
+await p.setInputFiles('#fileIn',{name:'utf8.csv',mimeType:'text/csv',buffer:Buffer.from('\uFEFF品名,备注\n"衬衫","第一行\n第二行"\n长裤,x\n')});
+await p.waitForTimeout(200);
+const q=await p.evaluate(()=>({n:rows.length,note:rows[0]['备注'],first:Object.keys(rows[0])[0]}));
+ok('UTF-8 带 BOM、引号内换行不拆成两条',q.n===2&&q.note==='第一行\n第二行'&&q.first==='品名',JSON.stringify(q));
+const semi=await p.evaluate(()=>{const r=parseData('品名;价格\n衬衫;99');return r&&r[0]['价格'];});
+ok('分号分隔自动识别',semi==='99',semi);
+await p.setInputFiles('#fileIn',{name:'a.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:makeZip({
+  'xl/workbook.xml':'<workbook><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>',
+  'xl/_rels/workbook.xml.rels':'<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+  'xl/sharedStrings.xml':'<sst><si><t>品名</t></si><si><t>SKU</t></si><si><t>台灯</t></si></sst>',
+  'xl/worksheets/sheet1.xml':'<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+    +'<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>1001</v></c></row></sheetData></worksheet>'})});
+await p.waitForTimeout(300);
+ok('.xlsx 直接导入',(await p.inputValue('#csv'))==='品名\tSKU\n台灯\t1001'&&(await p.evaluate(()=>document.querySelector('#preview .label').innerText.trim()))==='台灯',await p.inputValue('#csv'));
+await p.evaluate(()=>{window.__alert='';window.alert=x=>{window.__alert=x;};});
+await p.setInputFiles('#fileIn',{name:'b.xlsx',mimeType:'application/octet-stream',buffer:Buffer.from('not a zip')});
+await p.waitForTimeout(300);
+const am=await p.evaluate(()=>window.__alert);
+ok('损坏的 .xlsx 给出提示不崩溃',am.includes('读取失败')&&errors.length===0,am);
+
+console.log('\n[8] 变量 / 打印时输入 / 表达式函数 / 流水号选项 / 日期偏移');
+const texts=()=>p.evaluate(()=>[...document.querySelectorAll('#preview .label')].map(l=>[...l.querySelectorAll('.el')].map(n=>n.textContent)));
+await p.evaluate(()=>{loadDesign({v:1,label:{w:60,h:30,dpi:203},elements:[
+  {type:'counter',x:1,y:1,size:3,name:'SN',prefix:'A',start:9,step:1,pad:3,per:'record',radix:'10'},
+  {type:'text',x:1,y:6,size:3,content:'{#SN}/{#N}/{#REC}/{#COPY}'},
+  {type:'text',x:1,y:11,size:3,content:'=padl([品名],4,"*")+"|"+add([价],1)'},
+  {type:'date',x:1,y:16,size:3,format:'YYYY-MM-DD',offset:30,unit:'d'},
+  {type:'text',x:1,y:21,size:3,content:'{#DATE+30:YYYY-MM-DD}'}]});
+  document.querySelector('#copies').value='2';setRows(parseData('品名,价\n衬,9\n裤,19'));});
+const t1=await texts();
+ok('4 张（2 条 × 2 份）',t1.length===4,t1.length);
+ok('流水号按记录递增（同一记录多份同号）、{#SN}/{#N}/{#REC}/{#COPY}',JSON.stringify(t1.map(t=>t[0]+' '+t[1]))===JSON.stringify(['A009 A009/1/1/1','A009 A009/2/1/2','A010 A010/3/2/1','A010 A010/4/2/2']),JSON.stringify(t1.map(t=>t[0]+' '+t[1])));
+ok('表达式函数 padl / add',t1[0][2]==='***衬|10'&&t1[2][2]==='***裤|20',t1[0][2]+' '+t1[2][2]);
+const d30=await p.evaluate(()=>fmtDate(addDate(new Date(),30,'d'),'YYYY-MM-DD'));
+ok('日期偏移 +30 天（日期元素与 {#DATE+30} 一致）',t1[0][3]===d30&&t1[0][4]===d30,t1[0][3]+' '+t1[0][4]+' / '+d30);
+await p.evaluate(()=>{const c=elements[0];c.per='label';c.every=2;c.radix='16';c.start=254;c.pad=0;c.prefix='';render();});
+ok('每 2 张递增、十六进制',JSON.stringify((await texts()).map(t=>t[0]))===JSON.stringify(['FE','FE','FF','FF']),JSON.stringify((await texts()).map(t=>t[0])));
+ok('流水号属性面板有名称 / 递增方式 / 进制',await p.evaluate(()=>{renderEditor();return ['name','per','every','radix'].every(k=>document.querySelector(`#elist [data-i="0"][data-k="${k}"]`))&&document.querySelector('#elist [data-i="0"][data-k="per"] option[value="record"]').textContent.includes('每条记录');}));
+// 打印时输入 {?批号}（未在变量面板定义）与面板变量一起弹框
+await p.evaluate(()=>{localStorage.removeItem('label.prompts');jobPrompts={};document.querySelector('#copies').value='1';
+  loadDesign({v:1,label:{w:60,h:30,dpi:203},elements:[{type:'text',x:1,y:1,size:3,content:'批号:{?批号} 线:{线别}'}],
+    vars:[{name:'线别',kind:'pick',options:['A线','B线'],ask:true}]});setRows(null);window.__p=0;window.print=()=>window.__p++;});
+ok('未输入时预览显示占位',(await texts())[0][0]==='批号:[?批号] 线:',(await texts())[0][0]);
+await p.evaluate(()=>{doPrint();});await p.waitForTimeout(100);
+const dl=await p.evaluate(()=>[...document.querySelectorAll('#varDlgBody label span')].map(x=>x.textContent));
+ok('弹框同时包含面板变量与 {?批号}',dl.length===2&&dl.includes('批号'),JSON.stringify(dl));
+await p.evaluate(()=>{document.querySelector('#varDlgBody select').value='B线';document.querySelector('#varDlgBody input').value='L0926';document.querySelector('#varDlgOk').click();});
+await p.waitForTimeout(100);
+ok('确定后打印，内容用输入值',await p.evaluate(()=>window.__p)===1&&(await texts())[0][0]==='批号:L0926 线:B线',(await texts())[0][0]);
+ok('输入值记住',await p.evaluate(()=>JSON.parse(localStorage.getItem('label.prompts'))['批号'])==='L0926');
+
+console.log('\n[5] 数量字段 / 选择记录');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'text',x:1,y:1,size:3,content:'{品名}'}]});
+  document.querySelector('#csv').value='品名,数量\n衬衫,2\n长裤,0\n帽子,3';document.querySelector('#applyCsv').click();});
+const qf=await p.evaluate(()=>({v:document.querySelector('#qtyField').value,n:document.querySelectorAll('#preview .label').length,info:document.querySelector('#selInfo').textContent}));
+ok('自动识别「数量」列：2+0+3=5 张',qf.v==='数量'&&qf.n===5,JSON.stringify(qf));
+ok('记录数提示',qf.info==='全部 3 条',qf.info);
+await p.evaluate(()=>{pickRecords();});await p.waitForTimeout(100);
+await p.fill('#recQ','帽');await p.waitForTimeout(50);
+const vis=await p.evaluate(()=>document.querySelectorAll('#recTbl [data-ri]').length);
+ok('搜索过滤记录',vis===1,vis);
+await p.evaluate(()=>{document.querySelector('#recQ').value='';document.querySelector('#recQ').dispatchEvent(new Event('input'));
+  document.querySelector('[data-sa="none"]').click();const c=document.querySelector('#recTbl [data-ri="2"]');c.checked=true;c.dispatchEvent(new Event('change',{bubbles:true}));
+  [...document.querySelectorAll('#dlgFt button')].find(b=>b.textContent==='确定').click();});
+await p.waitForTimeout(100);
+const ps=await p.evaluate(()=>({n:document.querySelectorAll('#preview .label').length,t:[...document.querySelectorAll('#preview .label')].map(l=>l.innerText.trim()),info:document.querySelector('#selInfo').textContent}));
+ok('只打选中的「帽子」（数量 3）',ps.n===3&&ps.t.every(x=>x==='帽子')&&ps.info==='已选 1 / 3 条',JSON.stringify(ps));
+await p.evaluate(()=>{document.querySelector('#qtyField').value='';document.querySelector('#qtyField').onchange();});
+ok('不用数量字段 → 按每条份数（选中 1 条 × 1）',await p.evaluate(()=>document.querySelectorAll('#preview .label').length)===1);
+await p.evaluate(()=>{document.querySelector('#csv').value='品名\n甲\n乙';document.querySelector('#applyCsv').click();});
+ok('换数据后清空选择',await p.evaluate(()=>selectedRecs===null&&document.querySelectorAll('#preview .label').length===2));
 
 ok('全程无 JS 错误',errors.length===0,errors.join(';'));
 console.log(`\n==== 移植功能验收：通过 ${pass} / 失败 ${fail} ====`);

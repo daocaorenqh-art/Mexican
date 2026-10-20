@@ -26,8 +26,9 @@ await setPrint(1,1,0);
 const all=await p.evaluate(()=>document.querySelectorAll('#preview .label').length);
 ok('到第0条=全部 → 5 张',all===5,'实得'+all);
 await setPrint(1,9,0);
-const clamp=await p.evaluate(()=>document.querySelectorAll('#preview .label').length);
-ok('起始越界被夹住（不崩、至少1张）',clamp>=1,'实得'+clamp);
+const clamp=await p.evaluate(async()=>{let m='',printed=0;window.alert=x=>m=x;const pr=window.print;window.print=()=>printed++;
+  await doPrint();window.print=pr;return {n:document.querySelectorAll('#preview .label').length,pager:document.querySelector('#pager').textContent,m,printed};});
+ok('起始越界：不悄悄改打第 1 条，提示错误且不打印',clamp.n===0&&clamp.pager.includes('超出')&&clamp.m.includes('超出')&&clamp.printed===0,JSON.stringify(clamp));
 await setPrint(1,1,0);
 
 console.log('\n[流水号续号]');
