@@ -69,12 +69,22 @@
                  border:1px solid #fff;border-radius:2px;cursor:nwse-resize}
   .label .el img{display:block;width:100%;height:100%;object-fit:contain}
   .pager{color:var(--muted);font-size:13px}
+  #canvasbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;width:100%;padding:0 0 2px;font-size:12px;color:var(--muted)}
+  #canvasbar .cbl{font-weight:600}
+  #canvasbar .cbsp{flex:1}
+  #canvasbar button{padding:3px 8px;font-size:14px;line-height:1}
+  #canvasbar label{display:flex;align-items:center;gap:4px}
+  #canvasbar input[type=number]{width:52px;padding:4px}
+  .rulerwrap{display:inline-grid;grid-template-columns:auto auto;grid-template-rows:auto auto}
+  .rulerwrap .rcorner{background:var(--bg)}
+  .rulerwrap svg{display:block;color:var(--muted)}
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
   @media print{
     @page{margin:8mm}
     body{background:#fff}
-    header, .wrap>div:first-child, #pager{display:none !important}
+    header, .wrap>div:first-child, #pager, #canvasbar{display:none !important}
+    .rulerwrap>svg,.rulerwrap>.rcorner{display:none}
     .wrap{display:block;padding:0}
     .wrap>.panel{border:0;padding:0;background:#fff}
     #preview{zoom:1 !important}
@@ -204,6 +214,19 @@ A1002,香蕉,2.20"></textarea>
   <!-- 右侧预览 -->
   <div class="panel">
     <div class="stage">
+      <div id="canvasbar">
+        <span class="cbl">对齐</span>
+        <button data-al="L" title="左对齐">⇤</button>
+        <button data-al="C" title="水平居中">⇔</button>
+        <button data-al="R" title="右对齐">⇥</button>
+        <button data-al="T" title="顶对齐">⤒</button>
+        <button data-al="M" title="垂直居中">↕</button>
+        <button data-al="B" title="底对齐">⤓</button>
+        <span class="cbsp"></span>
+        <label><input type="checkbox" id="rulerChk"> 标尺</label>
+        <label><input type="checkbox" id="snapChk"> 吸附</label>
+        <input type="number" id="snapStep" value="1" min="0.1" step="0.1" title="吸附步距(mm)">
+      </div>
       <div class="pager" id="pager"></div>
       <div class="preview-area" id="preview"></div>
     </div>
@@ -423,7 +446,8 @@ function parseData(text){
 }
 
 /* ---------- 条码绘制 ---------- */
-function barsSVG(bits, modPx, heightPx){
+function barsSVG(bits, modPx, heightPx, color){
+  color=color||'#000';
   const ns='http://www.w3.org/2000/svg';
   const svg=document.createElementNS(ns,'svg');
   svg.setAttribute('width',bits.length*modPx);
@@ -435,7 +459,7 @@ function barsSVG(bits, modPx, heightPx){
       const r=document.createElementNS(ns,'rect');
       r.setAttribute('x',x*modPx);r.setAttribute('y',0);
       r.setAttribute('width',w*modPx);r.setAttribute('height',heightPx);
-      r.setAttribute('fill','#000');svg.appendChild(r);x+=w;}
+      r.setAttribute('fill',color);svg.appendChild(r);x+=w;}
     else {x++;i++;}
   }
   return svg;
@@ -470,9 +494,10 @@ function renderLabel(row,idx){
       }
       else if(['barcode','ean13','ean8','upca','code39','itf'].includes(el.type)){
         const draw1D=(res,gap)=>{
-          node.appendChild(barsSVG(res.bits,el.module*PXMM,el.h*PXMM));
+          if(el.bg)node.style.background=el.bg;
+          node.appendChild(barsSVG(res.bits,el.module*PXMM,el.h*PXMM,el.color));
           if(el.showText){const t=document.createElement('div');t.textContent=res.text;
-            t.style.cssText='text-align:center;font:'+(2.7*PXMM)+'px/1.1 monospace;'+(gap?'letter-spacing:'+gap+';':'')+'margin-top:1px;width:100%';
+            t.style.cssText='text-align:center;font:'+(2.7*PXMM)+'px/1.1 monospace;'+(gap?'letter-spacing:'+gap+';':'')+'margin-top:1px;width:100%;color:'+(el.color||'#000');
             node.appendChild(t);}
         };
         if(el.type==='barcode')     draw1D({bits:C128.modules(text),text});
@@ -520,21 +545,42 @@ function renderLabel(row,idx){
   return d;
 }
 
+function rulerSVG(lenMm,horizontal){
+  const ns='http://www.w3.org/2000/svg',thick=16,L=lenMm*PXMM;
+  const svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('width',horizontal?L:thick);svg.setAttribute('height',horizontal?thick:L);
+  for(let mm=0;mm<=lenMm;mm++){const p=mm*PXMM,long=mm%10===0,med=mm%5===0,len=long?8:med?5:3;
+    const ln=document.createElementNS(ns,'line');
+    if(horizontal){ln.setAttribute('x1',p);ln.setAttribute('x2',p);ln.setAttribute('y1',thick);ln.setAttribute('y2',thick-len);}
+    else{ln.setAttribute('y1',p);ln.setAttribute('y2',p);ln.setAttribute('x1',thick);ln.setAttribute('x2',thick-len);}
+    ln.setAttribute('stroke','currentColor');ln.setAttribute('stroke-width','0.5');svg.appendChild(ln);
+    if(long&&mm>0){const t=document.createElementNS(ns,'text');t.textContent=mm;
+      t.setAttribute('font-size','6');t.setAttribute('fill','currentColor');
+      if(horizontal){t.setAttribute('x',p+1);t.setAttribute('y',7);}else{t.setAttribute('x',1);t.setAttribute('y',p+2);}
+      svg.appendChild(t);}}
+  return svg;
+}
+function wrapWithRulers(lab,Wmm,Hmm){
+  const wrap=document.createElement('div');wrap.className='rulerwrap';
+  const c=document.createElement('div');c.className='rcorner';
+  wrap.appendChild(c);wrap.appendChild(rulerSVG(Wmm,true));wrap.appendChild(rulerSVG(Hmm,false));wrap.appendChild(lab);
+  return wrap;
+}
 function render(){
   const pv=$('#preview');pv.innerHTML='';
   const cols=+$('#cols').value||0;
   const gapX=(+$('#gapX').value||0)*PXMM, gapY=(+$('#gapY').value||0)*PXMM;
-  const W=+$('#lw').value;
+  const W=+$('#lw').value, H=+$('#lh').value, rulerOn=$('#rulerChk').checked;
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
   pv.style.gap=gapY+'px '+gapX+'px';
   const list=rows?rows:[null];
-  list.forEach((r,i)=>pv.appendChild(renderLabel(r,i)));
+  list.forEach((r,i)=>{const lab=renderLabel(r,i);pv.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
   $('#pager').textContent=rows?('共 '+rows.length+' 张标签'+(cols>0?('（每行 '+cols+'）'):'')):'单张预览（未加载数据）';
 }
 
 /* ---------- 元素编辑 UI ---------- */
-const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['rot','旋转°','num']];
+const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']];
 const FIELDS={
   text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   barcode:BC('内容'),
@@ -572,6 +618,7 @@ function renderEditor(){
         if(t==='text')h+=`<label class="f"><span>${label}</span><input data-k="${k}" data-i="${idx}" value="${esc(el[k]??'')}"></label>`;
         else if(t==='bool')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}"><option value="1"${el[k]?' selected':''}>是</option><option value="0"${!el[k]?' selected':''}>否</option></select></label>`;
         else if(t==='sel')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}">`+opts.map(o=>`<option value="${o}"${(el[k]??'')===o?' selected':''}>${o||'默认'}</option>`).join('')+`</select></label>`;
+        else if(t==='color')h+=`<label class="f"><span>${label}</span><input type="color" data-k="${k}" data-i="${idx}" value="${el[k]||(k==='bg'?'#ffffff':'#000000')}"></label>`;
         else if(t==='file')h+=`<label class="f"><span>${label}</span><input type="file" accept="image/*" data-img="${idx}"></label>`;
       }
     }
@@ -584,12 +631,12 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 /* ---------- 事件 ---------- */
 const DEFAULTS={
   text:{type:'text',x:3,y:3,size:4,bold:false,align:'left',font:'',rot:0,content:'文字'},
-  barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,rot:0,content:'123456'},
-  ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,rot:0,content:'690123456789'},
-  ean8:{type:'ean8',x:3,y:12,h:14,module:0.33,showText:true,rot:0,content:'1234567'},
-  upca:{type:'upca',x:3,y:12,h:14,module:0.33,showText:true,rot:0,content:'03600029145'},
-  code39:{type:'code39',x:3,y:12,h:12,module:0.3,showText:true,rot:0,content:'CODE39'},
-  itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,rot:0,content:'1234567890'},
+  barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'123456'},
+  ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'690123456789'},
+  ean8:{type:'ean8',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567'},
+  upca:{type:'upca',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'03600029145'},
+  code39:{type:'code39',x:3,y:12,h:12,module:0.3,showText:true,color:'#000000',bg:'',rot:0,content:'CODE39'},
+  itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567890'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,rot:0,content:'https://'},
   counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,prefix:'',start:1,step:1,pad:4,suffix:''},
   date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD'},
@@ -649,18 +696,43 @@ $('#preview').addEventListener('mousedown',e=>{
     drag={mode:'move',ei,sx:e.clientX,sy:e.clientY,ox:elements[ei].x,oy:elements[ei].y};
     document.body.style.userSelect='none';renderEditor();render();e.preventDefault();}
 });
+const snap=v=>{if($('#snapChk').checked){const s=+$('#snapStep').value||1;return +(Math.round(v/s)*s).toFixed(2);}return +v.toFixed(1);};
 window.addEventListener('mousemove',e=>{
   if(!drag)return;
   const z=zf(),dx=(e.clientX-drag.sx)/z/PXMM,dy=(e.clientY-drag.sy)/z/PXMM,el=elements[drag.ei];
-  if(drag.mode==='move'){el.x=Math.max(0,+(drag.ox+dx).toFixed(1));el.y=Math.max(0,+(drag.oy+dy).toFixed(1));}
+  if(drag.mode==='move'){el.x=Math.max(0,snap(drag.ox+dx));el.y=Math.max(0,snap(drag.oy+dy));}
   else{const o=drag.o;
-    if('w' in o){el.w=Math.max(1,+(o.w+dx).toFixed(1));el.h=Math.max(1,+(o.h+dy).toFixed(1));}
-    else if(el.type==='qrcode'){el.size=Math.max(3,+(o.size+Math.max(dx,dy)).toFixed(1));}
-    else if('h' in o){el.h=Math.max(2,+(o.h+dy).toFixed(1));}
-    else if('size' in o){el.size=Math.max(1,+(o.size+dy).toFixed(1));}}
+    if('w' in o){el.w=Math.max(1,snap(o.w+dx));el.h=Math.max(1,snap(o.h+dy));}
+    else if(el.type==='qrcode'){el.size=Math.max(3,snap(o.size+Math.max(dx,dy)));}
+    else if('h' in o){el.h=Math.max(2,snap(o.h+dy));}
+    else if('size' in o){el.size=Math.max(1,snap(o.size+dy));}}
   render();
 });
 window.addEventListener('mouseup',()=>{if(drag){drag=null;document.body.style.userSelect='';renderEditor();}});
+
+/* ---------- 对齐到标签 / 标尺 / 方向键微调 ---------- */
+$('#rulerChk').onchange=render;
+$('#canvasbar').addEventListener('click',e=>{
+  const al=e.target.dataset.al;if(!al||sel<0||sel>=elements.length)return;
+  const node=document.querySelector('#preview .el[data-ei="'+sel+'"]');if(!node)return;
+  const z=zf(),r=node.getBoundingClientRect(),ew=r.width/z/PXMM,eh=r.height/z/PXMM;
+  const W=+$('#lw').value,H=+$('#lh').value,el=elements[sel];
+  if(al==='L')el.x=0; else if(al==='R')el.x=+(W-ew).toFixed(1); else if(al==='C')el.x=+((W-ew)/2).toFixed(1);
+  else if(al==='T')el.y=0; else if(al==='B')el.y=+(H-eh).toFixed(1); else if(al==='M')el.y=+((H-eh)/2).toFixed(1);
+  el.x=Math.max(0,el.x);el.y=Math.max(0,el.y);render();renderEditor();
+});
+window.addEventListener('keydown',e=>{
+  if(sel<0||sel>=elements.length)return;
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select')return;
+  const step=e.shiftKey?2:0.5,el=elements[sel];let hit=true;
+  if(e.key==='ArrowLeft')el.x=Math.max(0,+(el.x-step).toFixed(1));
+  else if(e.key==='ArrowRight')el.x=+(el.x+step).toFixed(1);
+  else if(e.key==='ArrowUp')el.y=Math.max(0,+(el.y-step).toFixed(1));
+  else if(e.key==='ArrowDown')el.y=+(el.y+step).toFixed(1);
+  else hit=false;
+  if(hit){e.preventDefault();render();renderEditor();}
+});
 
 /* ---------- 保存 / 载入设计 ---------- */
 $('#saveBtn').onclick=()=>{
