@@ -8,7 +8,7 @@
    位图默认用 ZPL 的 ASCII 压缩（: 重复上一行，, 补零，G–Y/g–z 重复计数）。 */
 (function(root){
 const isNode=typeof module!=='undefined'&&module.exports;
-const B=isNode?require('./barcodes.js'):root.Barcodes;
+const B=isNode?require('./barcodes.js'):root;
 const Job=isNode?require('./job.js'):root.Job;
 
 /* ---------- 1-bit 位图 ---------- */

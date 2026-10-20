@@ -45,7 +45,7 @@ ok('逐条列出出错的第 2、3 张及原因',/校验位错误[^\n]*应为 5[
 ok('取消则不导出',r.zpl===null);
 r=await withPreflight('exportZPL','skip');
 ok('跳过出错的标签后只导出 1 张',r.zpl&&(r.zpl.match(/\^XA/g)||[]).length===1,r.zpl&&r.zpl.slice(0,200));
-ok('导出后不再残留跳过状态',await p.evaluate(()=>printSkip===null&&document.querySelectorAll('#preview .label').length===3));
+ok('导出后不再残留跳过状态',await p.evaluate(()=>jobSkip===null&&document.querySelectorAll('#preview .label').length===3));
 const pr=await p.evaluate(async()=>{let printed=0;const keep=window.print;window.print=()=>{printed=document.querySelectorAll('#preview .label').length;};
   const run=doPrint();await new Promise(r=>setTimeout(r,150));document.querySelector('#pfSkip').click();await run;
   window.dispatchEvent(new Event('beforeprint'));printed=document.querySelectorAll('#preview .label').length;
@@ -95,7 +95,7 @@ await design([{type:'counter',x:40,y:30,size:3,start:7,step:1,pad:4,prefix:'',su
   {type:'text',x:2,y:2,size:3,content:'{#SN}/{#N}/{#REC}/{#COPY} 到期{#DATE+30:YYYYMMDD}'},
   {type:'qrcode',x:5,y:10,size:16,ecl:'M',content:'SN{#SN}'}],'N\n1\n2');
 await p.evaluate(()=>{document.querySelector('#copies').value=2;render();});
-const exp=await p.evaluate(()=>{const d=new Date();d.setDate(d.getDate()+30);return TextData.fmtDate(d,'YYYYMMDD');});
+const exp=await p.evaluate(()=>{const d=new Date();d.setDate(d.getDate()+30);return fmtDate(d,'YYYYMMDD');});
 ok('第 3 张：流水号 0009、第 3 张、第 2 条第 1 份、到期 +30 天',(await labelText(2)).includes('0009/3/2/1 到期'+exp),await labelText(2));
 const zs=await p.evaluate(async()=>{document.querySelector('#zplComp').value='acs';const keep=window.acsEncode;window.acsEncode=h=>h;
   const z=await buildZPL();window.acsEncode=keep;return z.split('^XZ').filter(x=>x.includes('^XA'));});

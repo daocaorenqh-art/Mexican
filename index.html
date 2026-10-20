@@ -76,8 +76,8 @@
               background-size:18.9px 18.9px}
   .label .el{position:absolute;white-space:pre;line-height:1;cursor:move}
   .label .el.selel{outline:1px dashed var(--accent);outline-offset:1px}
-  .label.slot{background:transparent;box-shadow:none;outline:1px dashed var(--line)}   /* 整页模式跳过的标签位 */
   .label .el.warnel{outline:1px dashed #c00;outline-offset:1px}   /* 字段找不到 / 表达式出错（只在屏幕上显示） */
+  .label.slot{background:transparent;box-shadow:none;outline:1px dashed var(--line)}   /* 整页模式跳过的标签位 */
   .label .marquee{position:absolute;border:1px dashed var(--accent);background:rgba(47,111,237,.10);pointer-events:none;z-index:5}
   .elitem .top{cursor:pointer}
   .gtag{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 4px;margin-left:6px}
@@ -165,13 +165,18 @@
     <a data-ins="rich">富文本（混排粗体/斜体/颜色/字号）</a>
     <a data-ins="wordart">艺术字（弧形/描边/阴影）</a>
     <a data-ins="barcode">条码 Code128</a>
+    <a data-ins="gs1128">条码 GS1-128</a>
     <a data-ins="ean13">条码 EAN-13</a>
     <a data-ins="ean8">条码 EAN-8</a>
     <a data-ins="upca">条码 UPC-A</a>
+    <a data-ins="upce">条码 UPC-E</a>
     <a data-ins="code39">条码 Code39</a>
+    <a data-ins="code93">条码 Code93</a>
+    <a data-ins="codabar">条码 Codabar</a>
     <a data-ins="itf">条码 ITF-25</a>
     <a data-ins="qrcode">二维码 QR</a>
     <a data-ins="datamatrix">二维码 DataMatrix</a>
+    <a data-ins="gs1dm">二维码 GS1 DataMatrix</a>
     <a data-ins="counter">流水号</a>
     <a data-ins="date">日期</a>
     <a data-ins="image">图片 / Logo</a>
@@ -188,6 +193,7 @@
   <div class="menu"><span>工具</span><div class="dd">
     <a data-cmd="dbfocus">数据库套打</a>
     <a data-cmd="csvfocus">CSV 数据套打</a>
+    <a data-cmd="pick">选择要打印的记录…</a>
   </div></div>
 </div>
 <header>
@@ -282,13 +288,18 @@
         <button data-add="rich">+ 富文本</button>
         <button data-add="wordart">+ 艺术字</button>
         <button data-add="barcode">+ Code128</button>
+        <button data-add="gs1128">+ GS1-128</button>
         <button data-add="ean13">+ EAN-13</button>
         <button data-add="ean8">+ EAN-8</button>
         <button data-add="upca">+ UPC-A</button>
+        <button data-add="upce">+ UPC-E</button>
         <button data-add="code39">+ Code39</button>
+        <button data-add="code93">+ Code93</button>
+        <button data-add="codabar">+ Codabar</button>
         <button data-add="itf">+ ITF-25</button>
         <button data-add="qrcode">+ 二维码</button>
         <button data-add="datamatrix">+ DataMatrix</button>
+        <button data-add="gs1dm">+ GS1 DataMatrix</button>
         <button data-add="counter">+ 流水号</button>
         <button data-add="date">+ 日期</button>
         <button data-add="image">+ 图片/Logo</button>
@@ -305,13 +316,17 @@
 A1001,苹果,3.50
 A1002,香蕉,2.20"></textarea>
       <div id="fields" style="margin:8px 0"></div>
+      <div class="row">
+        <label class="f"><span>数量字段（每条打几张）</span><select id="qtyField"><option value="">不使用（按「每条份数」）</option></select></label>
+        <label class="f"><span>记录 <span id="selInfo"></span></span><button id="pickRecs" disabled>选择记录…</button></label>
+      </div>
       <div class="btns">
-        <button id="importFile">导入 CSV 文件…</button>
+        <button id="importFile">导入 CSV / Excel…</button>
         <input id="fileIn" type="file" accept=".csv,.txt,.tsv,.xlsx" hidden>
         <button id="applyCsv" class="primary">生成标签</button>
         <button id="clearCsv">单张预览</button>
       </div>
-      <p class="hint">Excel 文件请在 Excel 里「另存为 CSV」后导入，或直接复制单元格区域粘贴到上面。</p>
+      <p class="hint">可直接导入 .xlsx，或 Excel「另存为 CSV」（UTF-8 / GBK 自动识别），也可复制单元格区域粘贴到上面。</p>
     </div>
 
     <div class="panel">
@@ -399,6 +414,14 @@ A1002,香蕉,2.20"></textarea>
   </div>
 </div>
 
+<div id="dlg" class="wzmask" style="display:none">
+  <div class="wzbox" style="width:560px">
+    <div class="wzhd" id="dlgHd"></div>
+    <div class="wzbody" id="dlgBody"></div>
+    <div class="wzft" id="dlgFt"></div>
+  </div>
+</div>
+
 <div id="pfDlg" class="wzmask" style="display:none">
   <div class="wzbox" style="width:560px">
     <div class="wzhd" id="pfDlgHd">打印前检查</div>
@@ -430,10 +453,10 @@ A1002,香蕉,2.20"></textarea>
 <script>
 /* ============================================================
    标签打印工具 —— 原创实现（全部编码器自写，完全离线）
-   编码器、内容求值、CSV 解析、打印序列与预检在 src/*.js（普通脚本，双击 index.html 即可运行），
-   界面、预览与 ZPL 栅格化在本文件。
+   编码器在 src/barcodes.js：
+   一维：Code128 / GS1-128 / EAN-13 / EAN-8 / UPC-A / UPC-E / Code39 / Code93 / Codabar / ITF-25
+   二维：QR Code / DataMatrix ECC200 / GS1 DataMatrix
    ============================================================ */
-// 编码器统一用 src/barcodes.js：EAN/UPC 校验位检查、DataMatrix 中文（ECI 26 + Base256），预览 / 预检 / ZPL 三处同一份
 
 /* ---------- 状态 ---------- */
 let elements=[
@@ -468,23 +491,20 @@ const fromMM=mm=>UNIT==='cm'?+(mm/10).toFixed(3):+(+mm).toFixed(3); // mm→显�
 
 const $=s=>document.querySelector(s);
 
-/* ---------- 内容/表达式求值（src/textdata.js） ----------
-   1) 插值：文本里写 {字段}（字段名可含中文、空格；{表.字段} 去掉表前缀；大小写不同时自动匹配）、{变量名}
-   2) 以 = 开头为表达式：[字段] / {字段}、"文字"、数字、+ 拼接、函数 left right mid upper lower trim concat add sub mul div round fixed if padl …
-   设计变量（「变量」面板）写作 {变量名}，与数据字段同名时数据字段优先。 */
+/* ---------- 内容求值 ----------
+   写法见 src/textdata.js：{字段}、{#SN}、{#DATE+30:YYYY-MM-DD}、{#TIME}、{#N}/{#REC}/{#COPY}、打印时输入 {?名}，
+   以 = 开头为表达式（[字段]、"文字"、+ 拼接、left/mid/padl/add/if/mod10… 等函数）。
+   每张标签的求值环境由 Job.labelCtx 给出：数据行 + 流水号（按名称）+ 打印时输入 + 本设计定义的变量。 */
 function varValue(v){const x=varVals[v.name];return x!=null&&x!==''?String(x):String(v.def??'');}
-function varMap(){const m={};for(const v of vars)if(v.name&&!(v.name in m))m[v.name]=varValue(v);return m;}
-function contentCtx(row,extra){return TextData.makeCtx(Object.assign({row:row||null,fallback:varMap()},extra||{}));}
-function fieldVal(name,row,ctx){return TextData.fieldVal(name,ctx||contentCtx(row));}
-function evalContent(str,row,ctx){return TextData.evalContent(str,ctx||contentCtx(row));}
-// 每张标签的求值环境（src/job.js）：数据行 + 设计变量 + {#SN}（流水号元素，按名称）{#DATE…} {#N} {#REC} {#COPY}
-// item 为打印序列中的一项 {row,rec,recPos,copy,idx}；预览、预检、ZPL 用同一份，三处结果一致
-function labelCtx(item){return Job.labelCtx(elements,item,{fallback:varMap()});}
-const elCtx=base=>Object.assign({},base,{missing:new Set(),errors:[]});   // 每个元素单独记录缺失字段 / 表达式错误
-// 元素在这张标签上的文字：流水号、日期按元素设置算，其余按内容求值
-function elementText(el,ctx,item){return el.type==='rich'?richResolve(el.content,null,ctx):Job.elementText(el,ctx,item);}
-// CSV / TSV：引号内换行、分号分隔、BOM（src/textdata.js）
-function parseData(text){return TextData.parseData(text);}
+// 设计变量的当前值（数据里有同名字段时以数据为准）
+function varDefs(){const o={};for(const v of vars)if(v.name)o[v.name]=varValue(v);return o;}
+// 作业状态：jobNow 让同一批标签的日期 / 时间一致；jobSkip 为预检后跳过的标签；jobPrompts 为 {?名} 的输入值
+let jobSkip=null, jobNow=null, jobPrompts={};
+try{jobPrompts=JSON.parse(localStorage.getItem('label.prompts')||'{}')||{};}catch(e){}
+const jobOpts=()=>({prompts:jobPrompts,now:jobNow||new Date(),defs:varDefs()});
+// 元素在这张标签上的内容（富文本按原始标记解析后再替换字段，字段值里的标记不生效）
+function elText(el,ctx,e){return el.type==='rich'?richResolve(el.content,ctx):Job.elementText(el,ctx,e);}
+// CSV / 粘贴数据解析见 src/textdata.js 的 parseData（引号内换行、逗号 / Tab / 分号自动识别）
 
 /* ---- 打印机点换算 / 条码整点对齐（保证热敏机上可扫） ---- */
 // 斑马打印机的实际点密度：「203dpi」=8 点/mm，「300dpi」=12 点/mm（即 304.8dpi），「600dpi」=24 点/mm。
@@ -495,12 +515,13 @@ function dpmmOf(dpi){return {203:8,300:12,600:24}[+dpi]||(+dpi||203)/25.4;}
 // 护线下延、数字分组居中在左右两半下方，EAN-13 首位数字放在起始护线左侧，UPC-A 首末位放在两侧。
 function barcodeGeometry(type,res,m,bh,fs,showText){
   const bits=res.bits,txt=String(res.text||'');
-  const isEAN=type==='ean13'||type==='ean8'||type==='upca';
-  const q=type==='ean13'?8:type==='upca'?8:0;            // 左侧留给首位数字的模块数
-  const qr=type==='upca'?8:0;                           // UPC-A 右侧留给末位数字
+  const isEAN=type==='ean13'||type==='ean8'||type==='upca'||type==='upce';
+  const q=type==='ean13'||type==='upca'||type==='upce'?8:0;   // 左侧留给首位数字的模块数
+  const qr=type==='upca'||type==='upce'?8:0;                 // UPC-A / UPC-E 右侧留给末位数字
   const ext=isEAN&&showText?Math.round(fs*0.55/m):0;     // 护线下延的模块数
   const guard=new Set();
-  if(isEAN){const n=bits.length;[0,1,2,n-3,n-2,n-1].forEach(i=>guard.add(i));
+  if(type==='upce'){const n=bits.length;[0,1,2].forEach(i=>guard.add(i));for(let i=n-6;i<n;i++)guard.add(i);}   // UPC-E 无中护线，终止符 010101
+  else if(isEAN){const n=bits.length;[0,1,2,n-3,n-2,n-1].forEach(i=>guard.add(i));
     const mid=Math.floor(n/2);for(let i=mid-2;i<=mid+2;i++)guard.add(i);
     if(type==='upca'){for(let i=3;i<10;i++)guard.add(i);for(let i=n-10;i<n-3;i++)guard.add(i);}}  // UPC-A 首末字符条也下延
   const rects=[];
@@ -521,6 +542,10 @@ function barcodeGeometry(type,res,m,bh,fs,showText){
       for(let i=1;i<6;i++)texts.push([txt[i],(q+3+7*i+3.5)*m,ty]);
       for(let i=6;i<11;i++)texts.push([txt[i],(q+50+7*(i-6)+3.5)*m,ty]);
       texts.push([txt[11],(q+95+qr/2)*m,ty,0.75]);
+    }else if(type==='upce'&&txt.length===8){
+      texts.push([txt[0],q*m/2,ty,0.75]);
+      for(let i=0;i<6;i++)texts.push([txt[1+i],(q+3+7*i+3.5)*m,ty]);
+      texts.push([txt[7],(q+bits.length+qr/2)*m,ty,0.75]);
     }else texts.push([txt,W/2,ty]);
   }
   return {w:W,h:bh+(showText?Math.max(ty-bh+fs*1.15,ext*m):0),rects,texts,fs};
@@ -542,10 +567,9 @@ function matrixSVG(mods,n,sizeMM,color){
 }
 
 /* ---------- 渲染单张标签 ---------- */
-
-function renderLabel(row,idx,item){
-  idx=idx||0;item=item||{row,rec:row?1:0,recPos:0,copy:1,idx};
-  const base=labelCtx(item);
+function renderLabel(e,idx){
+  idx=idx||0;e=e||{row:null,rec:0,recPos:0,copy:1,idx:0};
+  const ctx=Job.labelCtx(elements,e,jobOpts());
   const W=toMM($('#lw').value),H=toMM($('#lh').value);
   const d=document.createElement('div');
   d.className='label'+($('#showGrid').checked?' grid':'');
@@ -557,8 +581,9 @@ function renderLabel(row,idx,item){
     node.dataset.ei=ei;
     node.style.left=(el.x*PXMM)+'px';node.style.top=(el.y*PXMM)+'px';
     if(el.rot){node.style.transform='rotate('+el.rot+'deg)';node.style.transformOrigin='top left';}
-    const ctx=elCtx(base),text=elementText(el,ctx,item);
-    const bad=[...(row&&ctx.missing.size?['找不到字段：'+[...ctx.missing].join('、')]:[]),...(ctx.errors||[]).map(m=>'表达式错误：'+m)];
+    ctx.missing=new Set();ctx.errors=[];
+    let text;try{text=elText(el,ctx,e);}catch(err){text='⚠'+err.message;}
+    const bad=[...(e.row&&ctx.missing.size?['找不到字段：'+[...ctx.missing].join('、')]:[]),...ctx.errors.map(m=>'表达式错误：'+m)];
     if(bad.length){node.classList.add('warnel');node.title=bad.join('\n');}
     try{
       if(el.type==='text'){
@@ -591,8 +616,8 @@ function renderLabel(row,idx,item){
         node.style.fontFamily=el.font||LABEL_FONT;
         if(el.align)node.style.textAlign=el.align;
       }
-      else if(['barcode','ean13','ean8','upca','code39','itf'].includes(el.type)){
-        const enc=Barcodes.encode1D(el.type,text);
+      else if(BARCODE_1D.includes(el.type)){
+        const enc=encode1D(el.type,text);
         const gm=barcodeGeometry(el.type,enc,snapModulePx(el.module),el.h*PXMM,hriMM(el)*PXMM,el.showText);
         if(el.bg)node.style.background=el.bg;
         const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),col=el.color||'#000';
@@ -604,8 +629,8 @@ function renderLabel(row,idx,item){
           e.setAttribute('font-family','monospace');e.setAttribute('font-size',gm.fs*(sc||1));e.setAttribute('fill',col);svg.appendChild(e);});
         node.appendChild(svg);
       }
-      else if(el.type==='qrcode'||el.type==='datamatrix'){
-        const m=Barcodes.encode2D(el.type,text,el.ecl);
+      else if(BARCODE_2D.includes(el.type)){
+        const m=encode2D(el.type,text,el.ecl);
         if(el.bg)node.style.background=el.bg;
         node.appendChild(matrixSVG(m.modules,m.size,el.size,el.color));
       }
@@ -660,14 +685,11 @@ function wrapWithRulers(lab,Wmm,Hmm){
   wrap.appendChild(c);wrap.appendChild(rulerSVG(Wmm,true));wrap.appendChild(rulerSVG(Hmm,false));wrap.appendChild(lab);
   return wrap;
 }
-// 实际要出的标签序列（src/job.js）：按「从/到第几条」截取记录，每条重复「份数」次。
-// 返回数据行数组；.items 为每张的 {row,rec,copy,idx}（idx 用于流水号，跳过的标签不改变后面的号），
-// 范围填反等错误时为空数组并带 .error（不再悄悄改打第 1 条）
-let printSkip=null;   // 本次打印要跳过的标签序号（预检里选了「跳过出错的标签」）
-function printList(){
-  const L=Job.makePrintList(rows,$('#rFrom').value,$('#rTo').value,$('#copies').value,printSkip);
-  const out=L.map(e=>e.row);out.items=L;out.error=L.error;return out;
-}
+// 实际要出的标签序列（每项 {row,rec,recPos,copy,idx}）：按「从/到第几条」、选中的记录、数量字段 / 每条份数展开；
+// 范围填反等错误时为空数组并带 .error
+let selectedRecs=null;   // null = 全部；Set(0 起下标) = 只打选中的
+function printList(){return Job.makePrintList(rows,$('#rFrom').value,$('#rTo').value,$('#copies').value,jobSkip,
+  {selected:selectedRecs,qtyField:($('#qtyField')||{}).value||''});}
 // 打印页面尺寸：标签机模式每张一页、页面 = 标签尺寸、无边距；整页模式按纸张 + 页边距排版
 function updatePageStyle(){
   let st=document.getElementById('pageStyle');
@@ -693,27 +715,24 @@ function render(opt){
   const gapX=toMM($('#gapX').value)*PXMM, gapY=toMM($('#gapY').value)*PXMM;
   const W=toMM($('#lw').value), H=toMM($('#lh').value), rulerOn=$('#rulerChk').checked&&!printingAll;
   updatePageStyle();
-  const list=printList();
-  // 范围有误：打印时什么都不出；编辑时仍显示第一张便于继续设计
-  const shown=list.error?(printingAll?[]:[rows?rows[0]:null]):printingAll?list:list.slice(0,PREVIEW_CAP);
-  const idxOf=i=>list.items[i]?list.items[i].idx:i;   // 跳过的标签不改变后面标签的序号（流水号）
+  const list=printList(), shown=printingAll?list:list.slice(0,PREVIEW_CAP);
   // 拖动中只重绘正在编辑的第一张，松手后再全量刷新
   const firstLab=pv.querySelector(':scope>.label:not(.slot),:scope>.rulerwrap');
-  if(opt&&opt.fast&&firstLab){const lab=renderLabel(shown[0],0,list.items[0]);
+  if(opt&&opt.fast&&firstLab&&shown.length){const lab=renderLabel(shown[0],0);
     pv.replaceChild(rulerOn?wrapWithRulers(lab,W,H):lab,firstLab);return;}
   pv.innerHTML='';
+  if(!list.length){$('#pager').textContent='⚠ '+(list.error||'没有要出的标签');$('#pager').style.color='#c00';return;}
+  $('#pager').style.color='';
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
   pv.style.gap=sheet?(gapY+'px '+gapX+'px'):'12px';
   const frag=document.createDocumentFragment();
   // 整页模式「从第 N 个位置开始」：前面空出 N-1 个标签位（用掉一部分的不干胶纸可接着打）
-  const startAt=sheet&&!list.error?Math.max(1,Math.floor(+$('#startPos').value||1)):1;
+  const startAt=sheet?Math.max(1,Math.floor(+$('#startPos').value||1)):1;
   for(let k=1;k<startAt;k++){const ph=document.createElement('div');ph.className='label slot';
     ph.style.width=(W*PXMM)+'px';ph.style.height=(H*PXMM)+'px';frag.appendChild(ph);}
-  shown.forEach((r,i)=>{const lab=renderLabel(r,idxOf(i),list.error?null:list.items[i]);frag.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
+  shown.forEach((r,i)=>{const lab=renderLabel(r,i);frag.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
   pv.appendChild(frag);
-  $('#pager').style.color=list.error?'#c00':'';
-  if(list.error){$('#pager').textContent='⚠ '+list.error+'（不会打印，请修改「从第几条 / 到第几条」）';return;}
   $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'')+(sheet?'；整页模式':'；标签机模式（每张一页）')
     +(shown.length<list.length?'；预览前 '+shown.length+' 张，打印/导出为全部 '+list.length+' 张':'');
 }
@@ -736,13 +755,21 @@ const FIELDS={
   itf:BC('内容(数字,奇数自动补0)'),
   qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['ecl','纠错等级','sel',['L','M','Q','H']],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   datamatrix:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
-  counter:[['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['suffix','后缀','text'],['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
-  date:[['format','格式','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
+  gs1dm:[['content','GS1 内容，如 (01)06925253841665(17)261020(10){批号}','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
+  gs1128:BC('GS1 内容，如 (01)06925253841665(17)261020(10){批号}'),
+  upce:BC('内容(6/7/8位数字，首位 0 或 1)'),
+  code93:BC('内容(ASCII)'),
+  codabar:BC('内容(数字 -$:/.+，可带起止符 A–D)'),
+  counter:[['name','名称（其他元素用 {#名称} 引用）','text'],['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['every','每几张/条递增','num'],['suffix','后缀','text'],
+    ['per','递增方式','sel',[['label','每张递增'],['record','每条记录递增（多份同号）']]],['radix','进制','sel',[['10','十进制'],['16','十六进制'],['36','36 进制（0-9A-Z）']]],
+    ['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
+  date:[['format','格式（YYYY YY MM DD HH mm ss JJJ WW）','text'],['offset','偏移','num'],['unit','偏移单位','sel',[['d','天'],['m','月'],['y','年']]],
+    ['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
   image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],['rot','旋转°','num']],
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',gs1dm:'GS1 DataMatrix',gs1128:'GS1-128',upce:'UPC-E',code93:'Code93',codabar:'Codabar',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   syncSel();
@@ -773,8 +800,9 @@ function renderEditor(){
           <textarea data-k="${k}" data-i="${idx}" data-rich="1" style="min-height:64px">${esc(el[k]??'')}</textarea>`;
         else if(t==='area')h+=`<label class="f"><span>${label}</span><textarea data-k="${k}" data-i="${idx}" style="min-height:48px">${esc(el[k]??'')}</textarea></label>`;
         else if(t==='bool')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}"><option value="1"${el[k]?' selected':''}>是</option><option value="0"${!el[k]?' selected':''}>否</option></select></label>`;
-        else if(t==='sel')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}">`+opts.map(o=>`<option value="${o}"${(el[k]??'')===o?' selected':''}>${o||'默认'}</option>`).join('')+`</select></label>`;
-        else if(t==='color')h+=`<label class="f"><span>${label}</span><input type="color" data-k="${k}" data-i="${idx}" value="${el[k]||(k==='bg'?'#ffffff':'#000000')}"></label>`;
+        else if(t==='sel')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}">`+opts.map(o=>{const [v,l]=Array.isArray(o)?o:[o,o||'默认'];   // 选项可为 值 或 [值, 显示文字]
+          return `<option value="${esc(v)}"${String(el[k]??'')===String(v)?' selected':''}>${esc(l)}</option>`;}).join('')+`</select></label>`;
+        else if(t==='color')h+=`<label class="f"><span>${label}</span><input type="color" data-k="${k}" data-i="${idx}" value="${esc(el[k]||(k==='bg'?'#ffffff':'#000000'))}"></label>`;
         else if(t==='file')h+=`<label class="f"><span>${label}</span><input type="file" accept="image/*" data-img="${idx}"></label>`;
       }
     }
@@ -798,8 +826,13 @@ const DEFAULTS={
   itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567890'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,ecl:'M',color:'#000000',bg:'',rot:0,content:'https://'},
   datamatrix:{type:'datamatrix',x:3,y:3,size:12,color:'#000000',bg:'',rot:0,content:'DM-0001'},
-  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,prefix:'',start:1,step:1,pad:4,suffix:'',persist:false},
-  date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD'},
+  gs1dm:{type:'gs1dm',x:3,y:3,size:14,color:'#000000',bg:'',rot:0,content:'(01)06925253841665(17)271231(10)B26'},
+  gs1128:{type:'gs1128',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'(01)06925253841665(10)B26'},
+  upce:{type:'upce',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'0123456'},
+  code93:{type:'code93',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'CODE93'},
+  codabar:{type:'codabar',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'A123456B'},
+  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,name:'SN',prefix:'',start:1,step:1,pad:4,every:1,per:'label',radix:'10',suffix:'',persist:false},
+  date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD',offset:0,unit:'d'},
   image:{type:'image',x:3,y:3,w:15,h:15,src:'',rot:0},
   box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0},
   ellipse:{type:'ellipse',x:3,y:3,w:15,h:15,border:0.4,fill:false,rot:0}
@@ -817,7 +850,7 @@ $('#elist').addEventListener('input',e=>{
     elements[i][k]=v;render();commit();return;}
   const img=e.target.dataset.img;
   if(img!=null&&e.target.files[0]){const fr=new FileReader();
-    fr.onload=()=>{elements[img].src=fr.result;render();commit();};fr.readAsDataURL(e.target.files[0]);}   // 进撤消历史并自动保存
+    fr.onload=()=>{elements[img].src=fr.result;commit();render();};fr.readAsDataURL(e.target.files[0]);}
 });
 $('#elist').addEventListener('click',e=>{
   const top=e.target.closest('.top');   // 点列表项标题栏选中该对象（Shift/Ctrl 多选）
@@ -839,16 +872,22 @@ function refreshFields(){
   showFieldTags(r&&r.length?Object.keys(r[0]):[]);
 }
 $('#csv').addEventListener('input',refreshFields);
-$('#applyCsv').onclick=()=>{rows=parseData($('#csv').value);if(!rows){alert('需要至少表头 + 一行数据');return;}render();};
-$('#clearCsv').onclick=()=>{rows=null;render();};
+$('#applyCsv').onclick=()=>{const r=parseData($('#csv').value);if(!r){alert('需要至少表头 + 一行数据');return;}setRows(r);};
+$('#clearCsv').onclick=()=>setRows(null);
+$('#pickRecs').onclick=()=>pickRecords();$('#qtyField').onchange=render;
 $('#importFile').onclick=()=>$('#fileIn').click();
-// 数据文件：.xlsx 直接读第一个工作表；CSV/TSV 自动识别 UTF-8 / GBK（中文版 Excel「另存为 CSV」默认 GBK）
-$('#fileIn').onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value='';
-  try{const buf=await f.arrayBuffer();let t;
-    if(/\.xlsx$/i.test(f.name)){const r=await XLSX.readRows(buf);if(!r||!r.length){alert('工作表里没有数据（需要表头 + 至少一行）');return;}t=XLSX.toTSV(r);}
-    else t=TextData.decodeText(buf);
-    $('#csv').value=t;refreshFields();rows=parseData(t);render();
-  }catch(err){alert('读取失败：'+err.message);}};
+// 按字节读入：.xlsx 解析第一个工作表；文本自动识别 UTF-8 / GBK（中文版 Excel「另存为 CSV」是 GBK）
+$('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
+  fr.onload=async()=>{
+    try{
+      let t;
+      if(/\.xlsx$/i.test(f.name)){const r=await XLSX.readRows(fr.result);t=r?XLSX.toTSV(r):'';}
+      else t=decodeText(fr.result);
+      $('#csv').value=t;refreshFields();setRows(parseData(t));
+      if(!rows)alert('需要至少表头 + 一行数据');
+    }catch(err){alert('读取失败：'+err.message);}
+    render();e.target.value='';};
+  fr.readAsArrayBuffer(f);};
 const onPage=()=>{render();commit();};
 $('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=$('#mTop').oninput=$('#mLeft').oninput=onPage;
 $('#pmode').onchange=$('#paper').onchange=onPage;
@@ -910,7 +949,7 @@ window.addEventListener('mousemove',e=>{
     drag.ids.forEach((i,k)=>{const [x0,y0]=drag.orig[k];elements[i].x=Math.max(0,+(x0+ddx).toFixed(2));elements[i].y=Math.max(0,+(y0+ddy).toFixed(2));});}
   else{const el=elements[drag.ei],o=drag.o;
     if('w' in o){el.w=Math.max(1,snap(o.w+dx));el.h=Math.max(1,snap(o.h+dy));}
-    else if(el.type==='qrcode'||el.type==='datamatrix'){el.size=Math.max(3,snap(o.size+Math.max(dx,dy)));}
+    else if(BARCODE_2D.includes(el.type)){el.size=Math.max(3,snap(o.size+Math.max(dx,dy)));}
     else if('h' in o){el.h=Math.max(2,snap(o.h+dy));}
     else if('size' in o){el.size=Math.max(1,snap(o.size+dy));}}
   render({fast:true});
@@ -996,7 +1035,7 @@ function snapshot(){return JSON.stringify({e:elements,v:vars,l:{
 function commit(){if(restoring)return;history=history.slice(0,hi+1);history.push(snapshot());
   if(history.length>80)history.shift();hi=history.length-1;
   persistSnap();}
-function applySnap(s){const o=JSON.parse(s);restoring=true;elements=o.e;vars=o.v||[];renderVars();
+function applySnap(s){const o=JSON.parse(s);restoring=true;elements=sanitizeElements(o.e).out;vars=sanitizeVars(o.v);renderVars();
   $('#lw').value=fromMM(o.l.lw);$('#lh').value=fromMM(o.l.lh);$('#dpi').value=o.l.dpi;
   $('#cols').value=o.l.cols;$('#gapX').value=fromMM(o.l.gapX);$('#gapY').value=fromMM(o.l.gapY);
   $('#pmode').value=o.l.pmode||((+o.l.cols||0)>0?'sheet':'roll');$('#paper').value=o.l.paper||'A4';
@@ -1026,7 +1065,7 @@ function zMove(dir){const ids=selIds();if(!ids.length)return;
   else if(dir==='bwd'&&i>0){[elements[i],elements[i-1]]=[elements[i-1],elements[i]];sel=i-1;}
   commit();renderEditor();render();}
 function newDesign(){if(!confirm('新建将清空当前设计，继续？'))return;
-  elements=[];vars=[];rows=null;sel=-1;$('#csv').value='';showFieldTags([]);renderVars();commit();renderEditor();render();}
+  elements=[];vars=[];sel=-1;$('#csv').value='';setRows(null);renderVars();commit();renderEditor();render();}
 
 document.querySelector('#menubar').addEventListener('click',e=>{
   const ins=e.target.dataset.ins, cmd=e.target.dataset.cmd;
@@ -1053,6 +1092,7 @@ document.querySelector('#menubar').addEventListener('click',e=>{
     case 'zoomout':$('#zoom').value=Math.max(50,(+$('#zoom').value)-10);$('#zoom').oninput();break;
     case 'zoomreset':$('#zoom').value=100;$('#zoom').oninput();break;
     case 'dbfocus':{const p=$('#dbPanel');if(p&&p.style.display!=='none')p.scrollIntoView({behavior:'smooth'});else alert('数据库套打仅在桌面安装版可用');break;}
+    case 'pick':pickRecords();break;
     case 'csvfocus':$('#csv').scrollIntoView({behavior:'smooth'});$('#csv').focus();break;
   }
 });
@@ -1075,8 +1115,8 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 添加对象向导 ---------- */
 const WZ={step:0,type:'text',source:'const',value:''};
-const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
-const wzHasData=t=>['text','para','rich','wordart','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix'].includes(t);
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['gs1128','条码 GS1-128'],['upce','条码 UPC-E'],['code93','条码 Code93'],['codabar','条码 Codabar'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['gs1dm','GS1 DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const wzHasData=t=>['text','para','rich','wordart',...BARCODE_1D,...BARCODE_2D].includes(t);
 function wzFields(){const r=parseData($('#csv').value);
   const fs=r&&r.length?Object.keys(r[0]):rows&&rows.length?Object.keys(rows[0]):[];
   return [...new Set([...fs,...vars.map(v=>v.name).filter(Boolean)])];}
@@ -1128,25 +1168,35 @@ $('#saveBtn').onclick=()=>{
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
   URL.revokeObjectURL(a.href);
 };
-// 载入校验：未知类型剔除并提示；缺省字段补默认值；数值字段转数字；图片只接受内嵌 data: 地址（不连外网）
-const NUMKEYS=['x','y','size','h','module','w','border','rot','start','step','pad','bend','spacing','stroke','shadow'];
+// 载入校验：未知类型剔除并提示；缺省字段补默认值；字段按 FIELDS 声明的类型规整（数字 / 布尔 / 颜色）；
+// 图片只接受内嵌 data: 地址（不连外网）；变量定义只保留合法项
 function sanitizeElements(list){
   const bad=[],out=[];
-  for(const el of list){
-    if(!el||typeof el!=='object'||!Object.prototype.hasOwnProperty.call(DEFAULTS,el.type)){bad.push(el&&el.type);continue;}
+  for(const el of Array.isArray(list)?list:[]){
+    if(!el||typeof el!=='object'||!DEFAULTS[el.type]){bad.push(el&&el.type);continue;}
     const o=Object.assign(JSON.parse(JSON.stringify(DEFAULTS[el.type])),el);
-    NUMKEYS.forEach(k=>{if(k in o)o[k]=+o[k]||0;});
-    if(o.content!=null&&typeof o.content!=='string')o.content=String(o.content);
+    for(const [k,,t] of FIELDS[o.type]){
+      if(t==='num')o[k]=+o[k]||0;
+      else if(t==='bool')o[k]=o[k]===true||o[k]===1||o[k]==='1';
+      else if(t==='color'&&o[k]&&!/^#[0-9a-f]{3,8}$/i.test(o[k]))o[k]=DEFAULTS[o.type][k]||'';
+      else if((t==='text'||t==='area'||t==='rich'||t==='sel')&&o[k]!=null&&typeof o[k]!=='string')o[k]=String(o[k]);
+    }
     if(o.type==='image'&&o.src&&!/^data:image\//.test(o.src)){bad.push('外部图片地址');o.src='';}
+    if(o.group!=null&&typeof o.group!=='string')delete o.group;
     out.push(o);
   }
   return {out,bad};
 }
+function sanitizeVars(list){
+  return (Array.isArray(list)?list:[]).filter(v=>v&&typeof v==='object'&&typeof v.name==='string').map(v=>({
+    name:v.name,prompt:String(v.prompt??''),kind:VARKINDS.some(([k])=>k===v.kind)?v.kind:'text',def:String(v.def??''),
+    options:Array.isArray(v.options)?v.options.map(String):[],ask:!!v.ask,required:!!v.required}));
+}
 function loadDesign(d){
   if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
-  const {out,bad}=sanitizeElements(d.elements);
-  if(bad.length)alert('以下内容无法识别，已略过：'+[...new Set(bad.map(String))].join('、'));
-  d={...d,elements:out,vars:Array.isArray(d.vars)?d.vars.filter(v=>v&&typeof v==='object'&&typeof v.name==='string'):[]};
+  {const {out,bad}=sanitizeElements(d.elements);
+    if(bad.length)alert('以下内容无法识别，已略过：'+[...new Set(bad.map(String))].join('、'));
+    d={...d,elements:out,vars:sanitizeVars(d.vars)};}
   if(d.label){const L=d.label;$('#lw').value=fromMM(L.w??50);$('#lh').value=fromMM(L.h??30);$('#dpi').value=L.dpi??203;
     $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);
     // 旧设计没有打印方式：设了「每行数量」的按整页，否则按标签机
@@ -1215,7 +1265,7 @@ function rasterize(Wd,Hd,rotDeg,paint,dither){
 function painter(el,text,dpi,idx,img){
   const D=mm=>(+mm||0)*dpmmOf(dpi);
   switch(el.type){
-    case 'text':case 'counter':case 'date':{   // 流水号 / 日期的文字由调用方按 Job.elementText 算好传入
+    case 'text':case 'counter':case 'date':{
       const t=text;
       if(!t)return null;const px=D(el.size);_measureCtx.font=fontOf(el,px);
       return {w:_measureCtx.measureText(t).width,h:px*1.25,paint:g=>{g.font=fontOf(el,px);g.textBaseline='top';g.fillText(t,0,0);}};}
@@ -1236,14 +1286,14 @@ function painter(el,text,dpi,idx,img){
         if(el.type==='box'){if(el.fill)g.rect(0,0,w,h);else g.rect(t/2,t/2,w-t,h-t);}
         else{if(el.fill)g.ellipse(w/2,h/2,w/2,h/2,0,0,Math.PI*2);else g.ellipse(w/2,h/2,Math.max(0,(w-t)/2),Math.max(0,(h-t)/2),0,0,Math.PI*2);}
         if(el.fill)g.fill();else{g.lineWidth=t;g.stroke();}}};}
-    case 'barcode':case 'ean13':case 'ean8':case 'upca':case 'code39':case 'itf':{
-      const enc=Barcodes.encode1D(el.type,text);
+    case 'barcode':case 'gs1128':case 'ean13':case 'ean8':case 'upca':case 'upce':case 'code39':case 'code93':case 'codabar':case 'itf':{
+      const enc=encode1D(el.type,text);
       const gm=barcodeGeometry(el.type,enc,moduleDots(el.module,dpi),Math.round(D(el.h)),D(hriMM(el)),el.showText);
       return {w:gm.w,h:gm.h,paint:g=>{gm.rects.forEach(r=>g.fillRect(r[0],r[1],r[2],r[3]));
         g.textAlign='center';g.textBaseline='hanging';
         gm.texts.forEach(([t,cx,ty,sc])=>{g.font=gm.fs*(sc||1)+'px monospace';g.fillText(t,cx,ty);});}};}
-    case 'qrcode':case 'datamatrix':{
-      const mx=Barcodes.encode2D(el.type,text,el.ecl);
+    case 'qrcode':case 'datamatrix':case 'gs1dm':{
+      const mx=encode2D(el.type,text,el.ecl);
       const md=qr2dModuleDots(el.size,mx.size,dpi);
       return {w:mx.size*md,h:mx.size*md,paint:g=>{for(let y=0;y<mx.size;y++)for(let x=0;x<mx.size;x++)if(mx.modules[y][x])g.fillRect(x*md,y*md,md,md);}};}
   }
@@ -1253,7 +1303,7 @@ function painter(el,text,dpi,idx,img){
    标记：[b]粗[/b] [i]斜[/i] [u]下划线[/u] [size=5]字号 mm[/size] [color=#c00000]颜色[/color]，可嵌套，\n 换行。
    只认这几种标记、参数严格校验，其它内容一律按普通文字显示（不生成 HTML，无注入风险）。 */
 const RICH_LB='\uE000';   // 字段值里的 [ 先换成占位符，避免数据内容被当成格式标记
-function richResolve(src,row,ctx){return String(src??'').replace(/\{([^{}\n]+)\}/g,(_,k)=>String(fieldVal(k,row,ctx)).replace(/\[/g,RICH_LB));}
+function richResolve(src,ctx){return String(src??'').replace(/\{([^{}\n]+)\}/g,(_,k)=>String(fieldVal(k,ctx)).replace(/\[/g,RICH_LB));}
 function parseRich(src){
   const out=[],stack=[{tag:'',st:{}}],re=/\[(\/?)(b|i|u|size|color)(?:=([^\]\n]{1,24}))?\]/gi;
   let last=0,m;const cur=()=>stack[stack.length-1].st;
@@ -1456,11 +1506,11 @@ function drawWordart(g,L,el,scale){
   g.restore();
 }
 // 文字模板分段：返回 [{text,dx(mm)}]；表达式(=开头)或不含 {字段} 的返回 null（整体处理）
-function textSegments(el,row,ctx){
+function textSegments(el,ctx){
   const src=String(el.content==null?'':el.content);
   if(src[0]==='='||src.indexOf('{')<0)return null;
   const parts=[];let last=0;const re=/\{([^{}\n]+)\}/g;let m;
-  while((m=re.exec(src))){if(m.index>last)parts.push(src.slice(last,m.index));parts.push(String(fieldVal(m[1],row,ctx)));last=re.lastIndex;}
+  while((m=re.exec(src))){if(m.index>last)parts.push(src.slice(last,m.index));parts.push(String(fieldVal(m[1],ctx)));last=re.lastIndex;}
   if(last<src.length)parts.push(src.slice(last));
   _measureCtx.font=fontOf(el,100);const k=(+el.size||1)/100;let acc='';const out=[];
   for(const t of parts){if(t)out.push({text:t,dx:_measureCtx.measureText(acc).width*k});acc+=t;}
@@ -1476,24 +1526,26 @@ function nativeZPL(el,text,dpi,x,y){
     return o+'^GE'+w+','+h+','+t+',B^FS\n';}
   return null;
 }
-const RASTER_ONLY=new Set(['rich','wordart','text','counter','date','para','image','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix']);
+const RASTER_ONLY=new Set(['rich','wordart','text','counter','date','para','image',...BARCODE_1D,...BARCODE_2D]);
 async function buildZPL(){
   const dpi=+$('#dpi').value||203;
   const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
-  const list=printList();if(list.error)throw new Error(list.error);
+  const list=printList();
+  if(!list.length)throw new Error(list.error||'没有要出的标签');
   const imgs=new Map();
   for(const el of elements)if(el.type==='image'&&el.src&&!imgs.has(el.src))imgs.set(el.src,await loadImage(el.src));
   // 第一遍：生成每张标签的指令；相同输入的位图只算一次
   const cache=new Map(), use=new Map(), labels=[];
-  list.forEach((row,i)=>{
-    const item=list.items[i],idx=item.idx,base=labelCtx(item),parts=[];
+  const opts=jobOpts();
+  list.forEach((e,idx)=>{
+    const parts=[],ctx=Job.labelCtx(elements,e,opts);
     elements.forEach(el=>{
       const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
-      let text;try{text=elementText(el,elCtx(base),item);}catch(e){text='';}
+      let text;try{text=elText(el,ctx,e);}catch(err){text='';}
       // 实心椭圆走位图：^GE 的「加粗到实心」依赖固件，位图与预览逐点一致
       if(!RASTER_ONLY.has(el.type)&&!isRot(el)&&!(el.type==='ellipse'&&el.fill)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
       // 「品名：{字段}」这类模板：静态文字与字段值分开转位图，静态部分全批只发一次（串口打印快很多）
-      const segs=el.type==='text'?textSegments(el,row,elCtx(base)):null;
+      const segs=el.type==='text'?textSegments(el,ctx):null;
       if(segs&&segs.length>1){
         const th=(+el.rot||0)*Math.PI/180;
         segs.forEach(sg=>{const sub={...el,content:sg.text,x:el.x+sg.dx*Math.cos(th),y:el.y+sg.dx*Math.sin(th)};
@@ -1502,8 +1554,7 @@ async function buildZPL(){
       placeRaster(el,text,x,y);
     });
     function placeRaster(el,text,x,y){
-      const shown=text;
-      const key=JSON.stringify([el.type,shown,el.size,el.bold,el.font,el.w,el.h,el.align,el.rot,el.border,el.fill,el.module,el.showText,el.ecl,
+      const key=JSON.stringify([el.type,text,el.size,el.bold,el.font,el.w,el.h,el.align,el.rot,el.border,el.fill,el.module,el.showText,el.ecl,
         el.type==='image'?el.src:0,dpi]);
       let r=cache.get(key);
       if(r===undefined){let pt=null;try{pt=painter(el,text,dpi,idx,el.type==='image'?imgs.get(el.src):null);}catch(e){pt=null;}
@@ -1577,20 +1628,21 @@ function cropGF(r,cx,cy){
     for(let i=0;i<nbpr;i++){const v=parseInt(bitsStr.substr(i*8,8),2);hex+=(v<16?'0':'')+v.toString(16).toUpperCase();}}
   return {total:nbpr*nrows,bpr:nbpr,hex};
 }
-async function exportZPL(){if(!await prepareJob())return;
-  try{const z=await buildZPL(),blob=new Blob([z],{type:'text/plain'});
+async function exportZPL(){if(!await startJob())return;
+  try{const z=await buildZPL();const blob=new Blob([z],{type:'text/plain'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);
     pendingPrintJob=true;askAdvanceCounters();}
-  catch(err){alert('导出失败：'+err.message);}finally{endJob();}}
+  catch(err){alert('导出失败：'+err.message);}
+  finally{endJob();}}
 // 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延实际张数，下次接着编号不重号
 // 每次真正开始一次打印/导出才置位；同一作业被多个事件触发时只询问一次
 let pendingPrintJob=false;
 function askAdvanceCounters(){
   const job=pendingPrintJob;pendingPrintJob=false;if(!job)return;
   const cs=elements.filter(e=>e.type==='counter'&&e.persist);if(!cs.length)return;
-  const L=printList(),n=L.length;if(!n)return;
-  if(!confirm('本次共 '+n+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
-  cs.forEach(e=>{e.start=(+e.start||0)+Job.counterAdvance(e,L.items);});commit();renderEditor();render();
+  const list=printList();if(!list.length)return;
+  if(!confirm('本次共 '+list.length+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
+  cs.forEach(e=>{e.start=(+e.start||0)+Job.counterAdvance(e,list);});commit();renderEditor();render();
 }
 window.addEventListener('afterprint',()=>{askAdvanceCounters();endJob();});
 $('#loadBtn').onclick=()=>$('#designIn').click();
@@ -1644,7 +1696,7 @@ if(window.labelDB&&window.labelDB.isDesktop){
   $('#dbRun').onclick=async()=>{msg('查询中…',true);const r=await window.labelDB.query(cfg(),$('#dbSql').value);
     if(!r.ok){msg('查询失败：'+r.error,false);return;}
     if(!r.rows||!r.rows.length){msg('查询无数据',false);return;}
-    rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);saveCfg();};
+    setRows(r.rows);msg('已取 '+rows.length+' 行',true);saveCfg();};
   syncDb();restoreCfg();
 }
 
@@ -1654,23 +1706,26 @@ function prnMsg(s,ok){const m=$('#prnMsg');if(m){m.textContent=s;m.style.color=o
 async function doSilentPrint(){
   if(!hasPrinter()){alert('「打印到所选打印机」仅在桌面安装版可用；网页版请用 Ctrl+P。');return;}
   const dev=$('#prnList').value;if(!dev){prnMsg('请先选择打印机',false);return;}
-  if(!await prepareJob())return;
+  if(!await startJob())return;
   prnMsg('正在打印…',true);
-  pendingPrintJob=true;printingAll=true;render();   // 静默打印不一定触发 beforeprint，显式全量渲染
-  let r;try{r=await window.labelPrinter.print(dev,{pageSize:silentPageSize()});}finally{printingAll=false;render();}
-  if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else prnMsg('打印失败：'+r.error,false);
-  endJob();
+  try{
+    pendingPrintJob=true;printingAll=true;render();   // 静默打印不一定触发 beforeprint，显式全量渲染
+    let r;try{r=await window.labelPrinter.print(dev,{pageSize:silentPageSize()});}finally{printingAll=false;render();}
+    if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else{pendingPrintJob=false;prnMsg('打印失败：'+r.error,false);}
+  }finally{endJob();}
 }
 function rawTarget(){const k=$('#rawKind').value,a=$('#rawAddr').value.trim();
   return k==='tcp'?{kind:'tcp',host:a,port:+$('#rawPort').value||9100}:k==='share'?{kind:'share',name:a}:{kind:'com',port:a};}
 async function doSendZPL(){
   if(!hasPrinter()){alert('「ZPL 直发」仅在桌面安装版可用；网页版请用「文件 → 导出 ZPL」。');return;}
   if(!$('#rawAddr').value.trim()){prnMsg('请填写打印机 IP / 共享名 / 串口',false);return;}
-  if(!await prepareJob())return;
+  if(!await startJob())return;
   prnMsg('正在发送…',true);
-  try{const r=await window.labelPrinter.sendRaw(rawTarget(),await buildZPL());
-    if(r.ok){prnMsg('已发送 '+printList().length+' 张标签到打印机',true);pendingPrintJob=true;askAdvanceCounters();}else prnMsg(r.error,false);}
-  catch(err){prnMsg('发送失败：'+err.message,false);}finally{endJob();}
+  try{
+    const n=printList().length,r=await window.labelPrinter.sendRaw(rawTarget(),await buildZPL());
+    if(r.ok){prnMsg('已发送 '+n+' 张标签到打印机',true);pendingPrintJob=true;askAdvanceCounters();}else prnMsg(r.error,false);
+  }catch(err){prnMsg(err.message,false);}
+  finally{endJob();}
 }
 if(hasPrinter()){
   $('#prnPanel').style.display='';
@@ -1692,6 +1747,60 @@ if(hasPrinter()){
   $('#rawKind').onchange=()=>{syncRaw();save();};
   $('#prnList').onchange=save;$('#rawAddr').oninput=save;$('#rawPort').oninput=save;
   $('#prnSilent').onclick=doSilentPrint;$('#rawSend').onclick=doSendZPL;
+}
+
+/* ---------- 记录选择 / 数量字段 / 通用对话框 ---------- */
+// 换了数据：清空选择、刷新数量字段下拉（自动识别「数量 / qty」列）
+function setRows(r){
+  rows=r&&r.length?r:null;selectedRecs=null;
+  const keys=rows?Object.keys(rows[0]):[],q=$('#qtyField'),old=q.value;
+  q.innerHTML='<option value="">不使用（按「每条份数」）</option>'+keys.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('');
+  q.value=keys.includes(old)?old:(keys.find(k=>/^(数量|qty|quantity|张数|打印数量)$/i.test(k))||'');
+  showFieldTags(keys);updateSelInfo();render();
+}
+function updateSelInfo(){const n=rows?rows.length:0;
+  $('#selInfo').textContent=!n?'':selectedRecs?'已选 '+selectedRecs.size+' / '+n+' 条':'全部 '+n+' 条';
+  $('#pickRecs').disabled=!n;}
+// buttons: [{id,label,primary}]；返回被点的 id，点遮罩 / Esc / 取消返回 null
+function dialog(title,bodyHTML,buttons,onOpen){
+  return new Promise(resolve=>{
+    const m=$('#dlg');$('#dlgHd').textContent=title;$('#dlgBody').innerHTML=bodyHTML;
+    const ft=$('#dlgFt');ft.innerHTML='';
+    const done=v=>{m.style.display='none';m.onclick=null;window.removeEventListener('keydown',esc_,true);resolve(v);};
+    const esc_=e=>{if(e.key==='Escape'){e.stopPropagation();done(null);}};window.addEventListener('keydown',esc_,true);
+    buttons.forEach(b=>{const el=document.createElement('button');el.textContent=b.label;if(b.primary)el.className='primary';
+      el.onclick=()=>done(b.id);ft.appendChild(el);});
+    m.onclick=e=>{if(e.target===m)done(null);};
+    m.style.display='flex';if(onOpen)onOpen($('#dlgBody'));
+  });
+}
+// 表格勾选要打印的记录：搜索任意字段、全选 / 全不选 / 反选（作用于当前搜索结果）
+async function pickRecords(){
+  if(!rows||!rows.length)return;
+  const keys=Object.keys(rows[0]),cols=keys.slice(0,5),cur=new Set(selectedRecs||rows.map((_,i)=>i));
+  const body=`<div style="display:flex;gap:6px;margin-bottom:8px"><input id="recQ" placeholder="搜索任意字段…">
+    <button data-sa="all">全选</button><button data-sa="none">全不选</button><button data-sa="inv">反选</button></div>
+    <div id="recCnt" class="hint" style="margin:0 0 6px"></div>
+    <div style="max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:6px"><table id="recTbl" style="width:100%;border-collapse:collapse;font-size:12px"></table></div>`;
+  const LIMIT=2000;
+  const r=await dialog('选择要打印的记录',body,[{id:'ok',label:'确定',primary:true},{id:null,label:'取消'}],b=>{
+    const tbl=b.querySelector('#recTbl'),q=b.querySelector('#recQ');
+    const match=()=>{const s=q.value.trim().toLowerCase();const out=[];
+      for(let i=0;i<rows.length;i++){if(!s||keys.some(k=>String(rows[i][k]).toLowerCase().includes(s)))out.push(i);}return out;};
+    const draw=()=>{const ids=match();
+      tbl.innerHTML='<tr><th></th><th>#</th>'+cols.map(k=>`<th style="text-align:left">${esc(k)}</th>`).join('')+'</tr>'
+        +ids.slice(0,LIMIT).map(i=>`<tr><td><input type="checkbox" data-ri="${i}" style="width:auto"${cur.has(i)?' checked':''}></td><td>${i+1}</td>`
+          +cols.map(k=>`<td>${esc(String(rows[i][k]).slice(0,40))}</td>`).join('')+'</tr>').join('');
+      b.querySelector('#recCnt').textContent='已选 '+cur.size+' / '+rows.length+' 条'+(ids.length>LIMIT?'；只显示前 '+LIMIT+' 条匹配，全选 / 反选作用于全部匹配记录':'');
+      b._ids=ids;};
+    q.oninput=draw;
+    tbl.onchange=e=>{const i=+e.target.dataset.ri;if(e.target.checked)cur.add(i);else cur.delete(i);b.querySelector('#recCnt').textContent='已选 '+cur.size+' / '+rows.length+' 条';};
+    b.querySelectorAll('[data-sa]').forEach(x=>x.onclick=()=>{const ids=b._ids;
+      if(x.dataset.sa==='all')ids.forEach(i=>cur.add(i));else if(x.dataset.sa==='none')ids.forEach(i=>cur.delete(i));
+      else ids.forEach(i=>cur.has(i)?cur.delete(i):cur.add(i));draw();});
+    draw();});
+  if(r!=='ok')return;
+  selectedRecs=cur.size===rows.length?null:cur;updateSelInfo();render();
 }
 
 /* ---------- 变量：打印时输入 / 挑选列表 ---------- */
@@ -1739,35 +1848,48 @@ $('#varAdd').onclick=()=>{let n=1;while(vars.some(v=>v.name==='变量'+n))n++;
 $('#varFill').onclick=async()=>{const q=vars.filter(v=>varNameOK(v.name));if(!q.length){alert('还没有定义变量');return;}
   if(await openVarDlg(q,'填写变量当前值')){renderVars();render();}};
 // 打印/导出前调用：有「打印时询问」的变量就弹框，取消则返回 false 中止本次打印
+// 同时收集内容里直接写的 {?名}（未在变量面板定义的输入项，值记在 jobPrompts）
 async function askVars(){
-  const q=vars.filter(v=>v.ask&&varNameOK(v.name));
+  const declared=new Set(vars.map(v=>v.name));
+  const q=vars.filter(v=>v.ask&&varNameOK(v.name))
+    .concat(Job.promptsUsed(elements).filter(k=>!declared.has(k)).map(k=>({name:k,prompt:k,kind:'text',_prompt:true})));
   if(!q.length)return true;
   const ok=await openVarDlg(q,'打印前请输入');
   if(ok){renderVars();render();}
   return ok;
 }
+// 一次打印 / 导出 / 直发作业：输入 → 固定本批日期时间 → 检查有标签可出；返回 false 表示取消
+async function startJob(){
+  if(!await askVars())return false;
+  jobSkip=null;jobNow=new Date();
+  const list=printList();
+  if(!list.length){alert(list.error||'没有要出的标签');endJob();return false;}
+  const r=runPreflight();
+  if(!r.errors.length&&!r.warnings.length)return true;
+  const c=await openPreflightDlg(r);
+  if(c==='cancel'){endJob();return false;}
+  if(c==='skip'){jobSkip=new Set(r.errors.map(x=>x.n-1));render();}
+  return true;
+}
 /* ---------- 打印前预检（src/job.js） ----------
-   打印 / 导出 ZPL / 直发 / 静默打印前统一走 prepareJob()：范围检查 → 打印时输入 → 逐张预检。
-   错误（条码无法编码、表达式出错、字段找不到）只能「取消」或「跳过出错的标签」，不会把「⚠ 错误信息」打到标签上；
-   警告（出界、静区不足、模块 < 1 点、EAN 尺寸、条码被遮挡）可继续。 */
+   打印 / 导出 ZPL / 直发 / 静默打印前由 startJob() 逐张检查。错误（条码无法编码、表达式出错、字段找不到）
+   只能「取消」或「跳过出错的标签」，不会把「⚠ 错误信息」打到标签上；警告（出界、静区不足、模块 < 1 点、
+   EAN 尺寸、条码被遮挡）可继续。尺寸按界面实际画法（painter）和斑马点密度计算。 */
 function uiSize(el,text,dpi,cache){
-  const key=JSON.stringify([el.type,text,el.size,el.bold,el.font,el.w,el.h,el.module,el.showText,el.ecl,el.border,el.fill,el.arc,el.spacing,el.stroke,el.shadow]);
+  const key=JSON.stringify([el.type,text,el.size,el.bold,el.font,el.w,el.h,el.module,el.showText,el.ecl,el.border,el.fill,el.bend,el.shape,el.spacing,el.stroke,el.shadow]);
   if(cache.has(key))return cache.get(key);
-  const e2=el.type==='counter'||el.type==='date'?{...el,type:'text'}:el;   // 流水号 / 日期按已算好的文字度量
-  const t=text;
-  let pt=null;try{pt=painter(e2,t,dpi,0,null);}catch(err){pt=null;}
+  let pt=null;try{pt=painter(el,text,dpi,0,null);}catch(err){pt=null;}
   const k=dpmmOf(dpi),r=pt?{w:pt.w/k,h:pt.h/k,dx:0}:{w:+el.w||0,h:+el.h||0,dx:0};
   cache.set(key,r);return r;
 }
 function runPreflight(){
   const dpi=+$('#dpi').value||203,cache=new Map();
-  return Job.preflight({elements,list:printList().items,label:{w:toMM($('#lw').value),h:toMM($('#lh').value),dpi},
-    now:new Date(),fallback:varMap(),dpmm:dpmmOf(dpi),size:(el,text)=>uiSize(el,text,dpi,cache)});
+  return Job.preflight(Object.assign(jobOpts(),{elements,list:printList(),label:{w:toMM($('#lw').value),h:toMM($('#lh').value),dpi},
+    dpmm:dpmmOf(dpi),size:(el,text)=>uiSize(el,text,dpi,cache)}));
 }
-const TYPELABEL=el=>(TYPENAME&&TYPENAME[el.type])||el.type;
-function issueHTML(g){const n=g.labels.length,ls=[...new Set(g.labels)];
+function issueHTML(g){const ls=[...new Set(g.labels)];
   const where=ls.length>8?'第 '+ls.slice(0,8).join('、')+' … 张（共 '+ls.length+' 张）':'第 '+ls.join('、')+' 张';
-  return `<li style="margin:4px 0"><b>#${g.ei+1} ${esc(TYPELABEL(g.el))}</b>：${esc(g.msg)} <span style="color:var(--muted)">（${where}）</span></li>`;}
+  return `<li style="margin:4px 0"><b>#${g.ei+1} ${esc(TYPENAME[g.el.type]||g.el.type)}</b>：${esc(g.msg)} <span style="color:var(--muted)">（${where}）</span></li>`;}
 let pfDone=null;
 function openPreflightDlg(r){
   if(pfDone)pfDone('cancel');
@@ -1785,25 +1907,14 @@ function openPreflightDlg(r){
   });
 }
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&pfDone)pfDone('cancel');},true);
-async function prepareJob(){
-  printSkip=null;
-  const L=printList();if(L.error){alert(L.error);return false;}
-  if(!await askVars())return false;
-  const r=runPreflight();
-  if(!r.errors.length&&!r.warnings.length)return true;
-  const c=await openPreflightDlg(r);
-  if(c==='cancel')return false;
-  if(c==='skip'){printSkip=new Set(r.errors.map(e=>e.n-1));render();}
-  return true;
-}
-function endJob(){if(printSkip){printSkip=null;render();}}
-async function doPrint(){if(!await prepareJob())return;window.print();}
+function endJob(){if(jobNow||jobSkip){jobNow=null;jobSkip=null;render();}}
+async function doPrint(){if(!await startJob())return;window.print();}
 let varDlgDone=null;
 function openVarDlg(list,title){
   if(varDlgDone)varDlgDone(false);
   $('#varDlgHd').textContent=title;$('#varDlgMsg').textContent='';
   $('#varDlgBody').innerHTML=list.map((v,i)=>{
-    const cur=varValue(v),lab=esc(v.prompt||v.name)+(v.required?' <b style="color:#c00">*</b>':'');
+    const cur=v._prompt?String(jobPrompts[v.name]??''):varValue(v),lab=esc(v.prompt||v.name)+(v.required?' <b style="color:#c00">*</b>':'');
     let ctl;
     if(v.kind==='pick'){const opts=v.options||[];
       ctl=`<select data-i="${i}">${opts.includes(cur)?'':'<option value="">（请选择）</option>'}${opts.map(o=>`<option${o===cur?' selected':''}>${esc(o)}</option>`).join('')}</select>`;}
@@ -1820,7 +1931,9 @@ function openVarDlg(list,title){
       const miss=vals.filter(([v,x])=>v.required&&String(x).trim()==='');
       document.querySelectorAll('#varDlgBody [data-i]').forEach(c=>c.style.borderColor=miss.some(([v])=>v===list[+c.dataset.i])?'#c00':'');
       if(miss.length){$('#varDlgMsg').textContent='请填写：'+miss.map(([v])=>v.prompt||v.name).join('、');return;}
-      vals.forEach(([v,x])=>{varVals[v.name]=x;});saveVarVals();close(true);};
+      vals.forEach(([v,x])=>{if(v._prompt)jobPrompts[v.name]=x;else varVals[v.name]=x;});saveVarVals();
+      try{localStorage.setItem('label.prompts',JSON.stringify(jobPrompts));}catch(e){}
+      close(true);};
     $('#varDlgBody').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#varDlgOk').click();}};
   });
 }

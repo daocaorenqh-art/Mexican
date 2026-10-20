@@ -17,16 +17,6 @@ eq('未加载数据时显示占位', T.evalContent('{品名}', null), '[品名]'
 eq('旧表达式写法兼容', T.evalContent('="零售价："+[JYPRICE]+".00"', row), '零售价：558.00');
 eq('表达式里的中文字段', T.evalContent('=[品名]', row), '女包');
 
-// 设计变量（{变量名}）：数据字段优先，未加载数据时也能取到；不存在的仍记为缺失
-{ const c = T.makeCtx({ row, fallback: { '批次': 'P9', 'SKU': '变量值' } });
-  eq('设计变量 {批次}', T.evalContent('{批次}', c), 'P9');
-  eq('同名时数据字段优先', T.evalContent('{SKU}', c), 'A1');
-  eq('表达式里的设计变量', T.evalContent('=[批次]+"-"+[SKU]', c), 'P9-A1');
-  T.evalContent('{无此项}', c); check('不存在的字段仍记为缺失', c.missing.has('无此项') && !c.missing.has('批次')); }
-eq('未加载数据时设计变量取值', T.evalContent('{批次}', T.makeCtx({ fallback: { '批次': 'P9' } })), 'P9');
-eq('未加载数据时未知字段仍显示占位', T.evalContent('{品名}', T.makeCtx({ fallback: { '批次': 'P9' } })), '[品名]');
-eq('原型链上的名字不当作字段', T.evalContent('{constructor}', T.makeCtx({ row: { a: '1' } })), '');
-
 // 变量
 eq('{#SN}', T.evalContent('SN{#SN}', ctx()), 'SN0007');
 eq('{#DATE}', T.evalContent('{#DATE}', ctx()), '2026-10-20');
@@ -88,4 +78,15 @@ eq('UTF-8', T.decodeText(Buffer.from('品名,价格', 'utf8')), '品名,价格')
 eq('UTF-8 BOM', T.decodeText(Buffer.from('﻿品名', 'utf8')), '品名');
 eq('GBK（中文版 Excel 另存为 CSV）', T.decodeText(Buffer.from('c6b7c3fb2cbcdbb8f1', 'hex')), '品名,价格');
 
+// 设计里定义的变量（ctx.defs）：数据字段优先；无数据时直接取变量值；都没有时无数据显示 [名]、有数据记缺失
+{
+  const defs = { '批号': 'B26', '品名': '不应使用' };
+  eq('变量：无数据时取变量值', T.evalContent('{批号}', T.makeCtx({ defs })), 'B26');
+  eq('变量：数据里有同名字段时以数据为准', T.evalContent('{品名}', T.makeCtx({ row, defs })), '女包');
+  eq('变量：数据里没有该字段时用变量', T.evalContent('{批号}/{SKU}', T.makeCtx({ row, defs })), 'B26/A1');
+  eq('变量：表达式里同样可用', T.evalContent('=[批号]+"-"+left([品名],1)', T.makeCtx({ row, defs })), 'B26-女');
+  eq('变量：未定义且无数据显示占位', T.evalContent('{颜色}', T.makeCtx({ defs })), '[颜色]');
+  const c = T.makeCtx({ row, defs }); T.evalContent('{颜色}', c);
+  check('变量：未定义且有数据记为缺失', c.missing.has('颜色'));
+}
 done();

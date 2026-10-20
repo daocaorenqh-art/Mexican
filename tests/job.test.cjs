@@ -103,7 +103,7 @@ check('旋转 90° 外框（绕左上角顺时针）', Math.abs(bx.x0 - 5) < 1e-
   const r3 = Job.preflight({ elements: [{ type: 'ean13', x: 10, y: 5, h: 10, module: 0.33, content: '6925253841665' }], list, label, now: new Date(), dpmm: 12 });
   check('o.dpmm：300dpi 按 12 点/mm（0.33mm → 4 点 = 0.333mm，在 GS1 范围内）', !r3.warnings.some(w => /GS1/.test(w.msg)), JSON.stringify(r3.warnings));
   const r4 = Job.preflight({ elements: [{ type: 'text', x: 1, y: 1, size: 3, content: '{批次}' }], list: Job.makePrintList([{ a: 1 }], 1, 0, 1), label, now: new Date(),
-    fallback: { '批次': 'P9' } });
+    defs: { '批次': 'P9' } });
   eq('设计变量不算缺失字段', r4.errors.length, 0); }
 eq('图片路径转 file 地址', Job.imageSrc({}, 'C:\\img\\a.png'), 'file:///C:/img/a.png');
 

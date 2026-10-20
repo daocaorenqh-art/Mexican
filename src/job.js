@@ -2,8 +2,8 @@
    浏览器：<script src="src/job.js">（需先加载 barcodes.js、textdata.js）；Node（测试）：require('./src/job.js')。 */
 (function(root){
 const isNode=typeof module!=='undefined'&&module.exports;
-const B=isNode?require('./barcodes.js'):root.Barcodes;
-const T=isNode?require('./textdata.js'):root.TextData;
+const B=isNode?require('./barcodes.js'):root;
+const T=isNode?require('./textdata.js'):root;
 
 /* ---------- 出标签序列 ----------
    每项：{row, rec(第几条记录，无数据为 0), recPos(在本次范围内的第几条，0 起), copy(第几份，1 起), idx(本次第几张，0 起)}
@@ -52,7 +52,7 @@ function labelCtx(elements,e,extra){
   e=e||{row:null,rec:0,recPos:0,copy:1,idx:0};extra=extra||{};
   const vars=Object.assign({},extra.vars||{});
   for(const el of elements)if(el.type==='counter'){const k=counterName(el);if(!(k in vars))vars[k]=counterText(el,e);}
-  return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy,fallback:extra.fallback||null});
+  return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},defs:extra.defs||null,now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy});
 }
 // 元素在这张标签上的文字内容
 function elementText(el,ctx,e){
@@ -102,7 +102,7 @@ function rotatedBox(x,y,w,h,rot){const a=(+rot||0)*Math.PI/180,c=Math.cos(a),s=M
    返回 {errors, warnings}，每项 {n(第几张), rec, ei, el, msg}。错误：内容无法编码、表达式出错、字段不存在；
    警告：超出标签、静区不足、模块小于 1 个打印点、EAN 尺寸偏离 GS1 推荐
    可选：o.size(el,text,ei)→{w,h,dx}（mm，界面按实际画法给出的未旋转尺寸，dx 为相对 x 的左边偏移）；
-         o.dpmm 打印机每 mm 点数（斑马 203/300/600dpi = 8/12/24）；o.fallback 设计变量 */
+         o.dpmm 打印机每 mm 点数（斑马 203/300/600dpi = 8/12/24） */
 function preflight(o){
   const {elements,list,label}=o,dpi=+label.dpi||203,W=+label.w||0,H=+label.h||0;
   const D=o.dpmm?(mm=>Math.round((+mm||0)*o.dpmm)):(mm=>dots(mm,dpi)),toMM=d=>o.dpmm?d/o.dpmm:d*25.4/dpi;

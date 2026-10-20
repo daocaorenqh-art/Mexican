@@ -1,5 +1,5 @@
 /* 条码 / 二维码编码器（原创实现，无第三方依赖）。
-   浏览器：<script src="src/barcodes.js"> 后用全局 Barcodes.*；Node（测试）：require('./src/barcodes.js')。 */
+   浏览器：<script src="src/barcodes.js"> 后以全局变量使用；Node（测试）：require('./src/barcodes.js')。 */
 (function(root){
 /* ============================================================
    原创二维码编码器：QR Code（ISO/IEC 18004）+ DataMatrix ECC200（ISO/IEC 16022）
@@ -454,5 +454,5 @@ function encode2D(type,text,ecl){
   throw new Error('未知二维码类型 '+type);
 }
 const api={Codes2D,C128,EAN13,EAN8,UPCA,C39,ITF,UPCE,C93,CODABAR,GS1,BARCODE_1D,BARCODE_2D,encode1D,encode2D};
-if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.Barcodes=api;   // 浏览器：命名空间，避免与页面同名函数冲突
+if(typeof module!=='undefined'&&module.exports)module.exports=api;else Object.assign(root,api);
 })(typeof window!=='undefined'?window:globalThis);
