@@ -1,6 +1,9 @@
 // 移植自另一开发线的界面功能（docs/integration.md）逐项验收
 import { S, APP } from './_lib.mjs';
 import pw from 'playwright';
+import { createRequire } from 'node:module';
+const require=createRequire(import.meta.url);
+const { makeZip }=require('../helpers.cjs');
 const { chromium } = pw;
 let pass=0,fail=0;const ok=(n,c,x='')=>{c?(pass++,console.log('  ✓',n,x)):(fail++,console.log('  ✗',n,x));};
 const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:1000}});
@@ -56,6 +59,31 @@ for(const t of ['gs1128','upce','code93','codabar','gs1dm']){
 }
 const z=await p.evaluate(async()=>{document.querySelector('#zplComp').value='acs';return buildZPL();});
 ok('新条码导出 ZPL（位图）',/\^GFA/.test(z)&&(z.match(/\^XA/g)||[]).length===1);
+
+console.log('\n[4] CSV 编码 / 引号内换行 / 分号 / .xlsx');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'text',x:1,y:1,size:3,content:'{品名}'}]});});
+await p.setInputFiles('#fileIn',{name:'gbk.csv',mimeType:'text/csv',buffer:Buffer.from('c6b7c3fb2c534b550ad3eac9a12c41310a','hex')}); // 品名,SKU\n雨伞,A1（GBK）
+await p.waitForTimeout(200);
+ok('GBK CSV 中文不乱码',(await p.inputValue('#csv')).startsWith('品名,SKU\n雨伞')&&(await p.evaluate(()=>document.querySelector('#preview .label').innerText.trim()))==='雨伞',await p.inputValue('#csv'));
+await p.setInputFiles('#fileIn',{name:'utf8.csv',mimeType:'text/csv',buffer:Buffer.from('\uFEFF品名,备注\n"衬衫","第一行\n第二行"\n长裤,x\n')});
+await p.waitForTimeout(200);
+const q=await p.evaluate(()=>({n:rows.length,note:rows[0]['备注'],first:Object.keys(rows[0])[0]}));
+ok('UTF-8 带 BOM、引号内换行不拆成两条',q.n===2&&q.note==='第一行\n第二行'&&q.first==='品名',JSON.stringify(q));
+const semi=await p.evaluate(()=>{const r=parseData('品名;价格\n衬衫;99');return r&&r[0]['价格'];});
+ok('分号分隔自动识别',semi==='99',semi);
+await p.setInputFiles('#fileIn',{name:'a.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:makeZip({
+  'xl/workbook.xml':'<workbook><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>',
+  'xl/_rels/workbook.xml.rels':'<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+  'xl/sharedStrings.xml':'<sst><si><t>品名</t></si><si><t>SKU</t></si><si><t>台灯</t></si></sst>',
+  'xl/worksheets/sheet1.xml':'<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+    +'<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>1001</v></c></row></sheetData></worksheet>'})});
+await p.waitForTimeout(300);
+ok('.xlsx 直接导入',(await p.inputValue('#csv'))==='品名\tSKU\n台灯\t1001'&&(await p.evaluate(()=>document.querySelector('#preview .label').innerText.trim()))==='台灯',await p.inputValue('#csv'));
+await p.evaluate(()=>{window.__alert='';window.alert=x=>{window.__alert=x;};});
+await p.setInputFiles('#fileIn',{name:'b.xlsx',mimeType:'application/octet-stream',buffer:Buffer.from('not a zip')});
+await p.waitForTimeout(300);
+const am=await p.evaluate(()=>window.__alert);
+ok('损坏的 .xlsx 给出提示不崩溃',am.includes('读取失败')&&errors.length===0,am);
 
 ok('全程无 JS 错误',errors.length===0,errors.join(';'));
 console.log(`\n==== 移植功能验收：通过 ${pass} / 失败 ${fail} ====`);

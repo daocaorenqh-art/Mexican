@@ -301,12 +301,12 @@ A1001,苹果,3.50
 A1002,香蕉,2.20"></textarea>
       <div id="fields" style="margin:8px 0"></div>
       <div class="btns">
-        <button id="importFile">导入 CSV 文件…</button>
-        <input id="fileIn" type="file" accept=".csv,.txt,.tsv" hidden>
+        <button id="importFile">导入 CSV / Excel…</button>
+        <input id="fileIn" type="file" accept=".csv,.txt,.tsv,.xlsx" hidden>
         <button id="applyCsv" class="primary">生成标签</button>
         <button id="clearCsv">单张预览</button>
       </div>
-      <p class="hint">Excel 文件请在 Excel 里「另存为 CSV」后导入，或直接复制单元格区域粘贴到上面。</p>
+      <p class="hint">可直接导入 .xlsx，或 Excel「另存为 CSV」（UTF-8 / GBK 自动识别），也可复制单元格区域粘贴到上面。</p>
     </div>
 
     <div class="panel">
@@ -407,6 +407,8 @@ A1002,香蕉,2.20"></textarea>
 </div>
 
 <script src="src/barcodes.js"></script>
+<script src="src/textdata.js"></script>
+<script src="src/xlsx.js"></script>
 <script>
 /* ============================================================
    标签打印工具 —— 原创实现（全部编码器自写，完全离线）
@@ -507,22 +509,7 @@ function evalExpr(src,row){
   if(i<src.length)throw new Error('无法解析: '+src.slice(i));
   return r;
 }
-function parseData(text){
-  const t=String(text).replace(/\r\n/g,'\n').trim();if(!t)return null;
-  const lines=t.split('\n').filter(l=>l.length);
-  if(lines.length<2)return null;
-  const sep=lines[0].includes('\t')?'\t':',';
-  const split=l=>{ // 支持 "..." 引用与 "" 转义
-    const out=[];let cur='',q=false;
-    for(let i=0;i<l.length;i++){const c=l[i];
-      if(q){ if(c==='"'){ if(l[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
-      else { if(c==='"')q=true; else if(c===sep){out.push(cur);cur='';} else cur+=c; }
-    }
-    out.push(cur);return out.map(s=>s.trim());
-  };
-  const head=split(lines[0]);
-  return lines.slice(1).map(l=>{const c=split(l);const o={};head.forEach((h,i)=>o[h]=c[i]??'');return o;});
-}
+// CSV / 粘贴数据解析见 src/textdata.js 的 parseData（引号内换行、逗号 / Tab / 分号自动识别）
 
 /* ---- 打印机点换算 / 条码整点对齐（保证热敏机上可扫） ---- */
 // 斑马打印机的实际点密度：「203dpi」=8 点/mm，「300dpi」=12 点/mm（即 304.8dpi），「600dpi」=24 点/mm。
@@ -870,8 +857,18 @@ $('#csv').addEventListener('input',refreshFields);
 $('#applyCsv').onclick=()=>{rows=parseData($('#csv').value);if(!rows){alert('需要至少表头 + 一行数据');return;}render();};
 $('#clearCsv').onclick=()=>{rows=null;render();};
 $('#importFile').onclick=()=>$('#fileIn').click();
+// 按字节读入：.xlsx 解析第一个工作表；文本自动识别 UTF-8 / GBK（中文版 Excel「另存为 CSV」是 GBK）
 $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
-  fr.onload=()=>{$('#csv').value=fr.result;refreshFields();rows=parseData(fr.result);render();};fr.readAsText(f);};
+  fr.onload=async()=>{
+    try{
+      let t;
+      if(/\.xlsx$/i.test(f.name)){const r=await XLSX.readRows(fr.result);t=r?XLSX.toTSV(r):'';}
+      else t=decodeText(fr.result);
+      $('#csv').value=t;refreshFields();rows=parseData(t);
+      if(!rows)alert('需要至少表头 + 一行数据');
+    }catch(err){alert('读取失败：'+err.message);}
+    render();e.target.value='';};
+  fr.readAsArrayBuffer(f);};
 const onPage=()=>{render();commit();};
 $('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=onPage;
 function setUnit(u){
