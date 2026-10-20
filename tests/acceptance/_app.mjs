@@ -129,9 +129,9 @@ export function zplLabelCount(zpl) {
   let n = 0; for (const blk of zpl.split('^XZ')) { if (!blk.includes('^XA')) continue; const m = blk.match(/\^PQ(\d+)/); n += m ? +m[1] : 1; } return n;
 }
 // 扫 PNG 文件（或 RGBA）里的全部条码；GS1 按人眼格式 (01)… 返回
-export async function scanPNG(file, textMode = 'HRI') {
+export async function scanPNG(file, textMode = 'HRI', extra = {}) {
   const Z = await zxing();
-  const r = await Z.readBarcodes(new Uint8Array(fs.readFileSync(file)), { formats: [], tryHarder: true, tryRotate: true, maxNumberOfSymbols: 12, textMode });
+  const r = await Z.readBarcodes(new Uint8Array(fs.readFileSync(file)), Object.assign({ formats: [], tryHarder: true, tryRotate: true, maxNumberOfSymbols: 12, textMode }, extra));
   return r.filter((x) => x.isValid).map((x) => ({ format: x.format, text: x.text }));
 }
 // TSPL：解析后把 BITMAP / BAR / BOX 还原成点阵 PNG（用浏览器画布编码）
@@ -151,9 +151,9 @@ export async function renderTSPL(page, bytes, wMM, hMM, dpi, invert = true) {
   return files;
 }
 // 预览截图（放大 3 倍，近似 288dpi 屏幕采样）后扫码
-export async function scanPreview(page, index = 0) {
+export async function scanPreview(page, index = 0, extra = {}) {
   const loc = page.locator('#preview .label:not(.slot)').nth(index);
   const f = OUT + `preview-${process.pid}-${++renderSeq}.png`;
   await loc.screenshot({ path: f, scale: 'device' });
-  return scanPNG(f);
+  return scanPNG(f, 'HRI', extra);
 }

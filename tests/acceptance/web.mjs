@@ -350,6 +350,50 @@ console.log('\n[P] PDF417');
   await page.close();
 }
 
+/* ================= Q. EAN / UPC 附加码、ITF-14 保护框 ================= */
+console.log('\n[Q] 附加码 / ITF-14');
+{
+  const page = await openApp(browser, { deviceScaleFactor: 3 });
+  const ADD = { eanAddOnSymbol: 'Require' };   // zxing-cpp：必须同时读到附加码
+  if (!(await supportsType(page, 'itf14'))) rec.gap('Q-itf14', 'ITF-14', '界面没有这种元素');
+  // 附加码：主码 + 2 / 5 位，内容来自字段；三条输出路径都要读到「主码+附加码」
+  for (const [type, main, add, want] of [['ean13', '9771234567003', '02', '977123456700302'], ['ean13', '9787115123459', '52800', '978711512345952800'],
+    ['upca', '03600029145', '12', '003600029145212']]) {
+    await loadDesign(page, design([B1(type, '{MAIN}+{ADD}', 8, 8, { h: 14, module: 0.33 })], 80, 50));
+    await setCSV(page, 'MAIN,ADD\n' + main + ',' + add);
+    const norm = (t) => t;   // zxing-cpp 把 UPC-A 读成 0 + 12 位，期望值已按此给出
+    const pv = (await scanPreview(page, 0, ADD)).map((g) => norm(g.text));
+    const z = await exportCmd(page, { choice: 'ok' });
+    const zg = z.data ? (await scanPNG(renderZPL(z.data.toString('utf8'), 80, 50, 203)[0], 'HRI', ADD)).map((g) => g.text) : [];
+    const t = await exportCmd(page, { lang: 'tspl', choice: 'ok' });
+    const tg = t.data ? (await scanPNG((await renderTSPL(page, t.data, 80, 50, 203))[0].file, 'HRI', ADD)).map((g) => g.text) : [];
+    rec.check(`Q-addon-${type}-${add.length}`, `${type.toUpperCase()} + ${add.length} 位附加码：预览 / ZPL / TSPL 都读到主码+附加码`,
+      pv.includes(want) && zg.includes(want) && tg.includes(want), `预览 ${pv.join(',')}；ZPL ${zg.join(',')}；TSPL ${tg.join(',')}；应为 ${want}`);
+  }
+  // 附加码位数错：预检报错、不出纸
+  await loadDesign(page, design([B1('ean13', '{MAIN}+{ADD}', 8, 8, { h: 14 })], 80, 50));
+  await setCSV(page, 'MAIN,ADD\n9771234567003,123');
+  const bad = await exportCmd(page, { choice: 'skip', timeout: 5000 });
+  rec.check('Q-addon-bad', '附加码位数不对：预检报错且不出纸', !bad.data && bad.dialogs.some((d) => /附加码/.test(d)), bad.dialogs.join(' / ').slice(0, 160));
+  // ITF-14：全框 / 上下条，出纸可扫且保护框确实存在（码的上方有一道连续的粗黑条）
+  if (await supportsType(page, 'itf14')) for (const bearer of ['frame', 'tb']) {
+    await loadDesign(page, design([Object.assign(B1('itf14', '1540014128876', 6, 10, { h: 14, module: 0.5 }), { bearer })], 100, 50));
+    const z = await exportCmd(page, { choice: 'ok' });
+    let got = [], bar = 0;
+    if (z.data) { const f = renderZPL(z.data.toString('utf8'), 100, 50, 203)[0]; got = (await scanPNG(f)).map((g) => g.text);
+      bar = await page.evaluate(async (b64) => { const im = new Image(); await new Promise((r) => { im.onload = r; im.src = 'data:image/png;base64,' + b64; });
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+        const d = g.getImageData(0, 0, im.width, im.height).data; let best = 0;
+        for (let y = 0; y < im.height; y++) { let run = 0; for (let x = 0; x < im.width; x++) { if (d[(y * im.width + x) * 4] < 128) { run++; if (run > best) best = run; } else run = 0; } }
+        return best; }, fs.readFileSync(f).toString('base64')); }
+    const want = '15400141288763';
+    rec.check(`Q-itf14-${bearer}`, `ITF-14（保护框：${bearer === 'frame' ? '全框' : '上下条'}）出纸可扫、保护框存在`, got.includes(want) && bar > 300,
+      `扫到 ${got.join(',')}（应为 ${want}）；最长连续黑条 ${bar} 点`);
+  }
+  rec.check('Q-noerror', '全程无脚本错误', page._errors.length === 0, page._errors.join('; '));
+  await page.close();
+}
+
 /* ================= I. 设计往返与健壮性 ================= */
 console.log('\n[I] 设计往返与健壮性');
 {
