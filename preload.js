@@ -30,3 +30,10 @@ contextBridge.exposeInMainWorld('labelPrinter', {
   status: (target, lang) => ipcRenderer.invoke('printer:status', { target, lang }),
   print: (deviceName, opts) => ipcRenderer.invoke('printer:print', { deviceName, pageSize: opts && opts.pageSize })
 });
+
+// 设计文件：打开 / 保存（同一路径直接覆盖）/ 另存为 / 最近文件
+contextBridge.exposeInMainWorld('labelFile', {
+  recent: () => ipcRenderer.invoke('file:recent'),
+  open: (path) => ipcRenderer.invoke('file:open', path || null),
+  save: (opts) => ipcRenderer.invoke('file:save', opts)
+});

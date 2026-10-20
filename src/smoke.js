@@ -23,8 +23,8 @@ async function run(win, pageErrors) {
     return n + ' 张预览';
   });
   await check('预加载接口', async () => {
-    const t = await js('[typeof window.labelDB, typeof window.labelPrinter, typeof window.labelSecret].join()');
-    if (t !== 'object,object,object') throw new Error(t);
+    const t = await js('[typeof window.labelDB, typeof window.labelPrinter, typeof window.labelSecret, typeof window.labelFile].join()');
+    if (t !== 'object,object,object,object') throw new Error(t);
     return t;
   });
   let zpl = '';
@@ -66,6 +66,30 @@ async function run(win, pageErrors) {
   for (const m of ['mysql2/promise', 'pg', 'mssql']) await check(m + ' 驱动', () => { require(m); return '已加载'; });
   // odbc 依赖系统的 ODBC 管理器，Windows 自带；其它平台未必有，只在 Windows 上要求
   if (process.platform === 'win32') await check('odbc 驱动', () => { require('odbc'); return '已加载'; });
+  await check('设计文件保存 / 打开', async () => {
+    // 只能读写用户选过的文件：先把临时文件放进最近列表（相当于用户选过），结束后恢复原列表
+    const { app } = require('electron');
+    const listFile = path.join(app.getPath('userData'), 'recent-files.json');
+    const before = fs.existsSync(listFile) ? fs.readFileSync(listFile) : null;
+    const file = path.join(os.tmpdir(), 'labelprint-smoke-' + process.pid + '.json');
+    try {
+      fs.mkdirSync(path.dirname(listFile), { recursive: true });
+      fs.writeFileSync(listFile, JSON.stringify([file]));
+      const text = await js('designJSON()');
+      const saved = await js('window.labelFile.save(' + JSON.stringify({ path: file, text }) + ')');
+      if (!saved || saved.path !== file || fs.readFileSync(file, 'utf8') !== text) throw new Error('保存结果不一致');
+      const opened = await js('window.labelFile.open(' + JSON.stringify(file) + ')');
+      if (!opened || opened.text !== text) throw new Error('打开结果不一致');
+      const recent = await js('window.labelFile.recent()');
+      if (!recent.includes(file)) throw new Error('最近文件里没有：' + JSON.stringify(recent));
+      const refused = await js('window.labelFile.open(' + JSON.stringify(path.join(os.tmpdir(), 'not-picked.json')) + ').then(() => false, () => true)');
+      if (!refused) throw new Error('未选过的路径没有被拒绝');
+      return '保存 / 打开 / 最近文件正常，未选过的路径已拒绝';
+    } finally {
+      fs.rmSync(file, { force: true });
+      if (before) fs.writeFileSync(listFile, before); else fs.rmSync(listFile, { force: true });
+    }
+  });
   await check('程序图标', () => {
     const f = path.join(__dirname, '..', 'assets', 'icon.ico');
     if (!fs.existsSync(f)) throw new Error('缺少 ' + f);
