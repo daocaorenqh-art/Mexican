@@ -1,10 +1,11 @@
 {
   "name": "label-print-tool",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "本地安装运行的标签/条码设计与批量打印客户端，支持多种数据库套打",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node tests/verify-2d.cjs",
     "dist": "electron-builder --win --publish never",
     "dist:dir": "electron-builder --win --dir"
   },
@@ -12,7 +13,9 @@
   "license": "MIT",
   "devDependencies": {
     "electron": "33.2.0",
-    "electron-builder": "25.1.8"
+    "electron-builder": "25.1.8",
+    "jsqr": "1.4.0",
+    "@zxing/library": "0.23.0"
   },
   "dependencies": {},
   "optionalDependencies": {
@@ -25,9 +28,17 @@
   "build": {
     "appId": "com.local.labelprint",
     "productName": "标签打印工具",
-    "files": ["main.js", "preload.js", "index.html", "src/**/*", "examples/**/*"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "src/**/*",
+      "examples/**/*"
+    ],
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": false,

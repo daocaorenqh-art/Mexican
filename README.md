@@ -12,7 +12,7 @@
 - **元素**：
   - 文字（字号、加粗、字体、对齐）
   - 条码：Code128、EAN-13、EAN-8、UPC-A、Code39、ITF-25（均为自写编码，含自动校验位）
-  - 二维码（使用开源 qrcodejs 渲染，浏览器从 CDN 加载）
+  - 二维码：QR Code（L/M/Q/H 纠错）、DataMatrix ECC200（均为自写编码，完全离线）
   - 图片 / Logo（本地上传）
   - 线条 / 边框 / 黑块
   - 每个元素支持任意角度旋转、复制
@@ -87,6 +87,13 @@ npm start
 > Access 连接需本机已安装「Microsoft Access Database Engine / ODBC 驱动」。
 > 各数据库驱动（better-sqlite3 / odbc / mysql2 / pg / mssql）为原生模块，由 `npm install` 自动编译安装；没用到的类型即使未成功安装也不影响其它功能。
 
-## 关于二维码库
+## 编码器正确性
 
-二维码用开源库 [qrcodejs](https://github.com/davidshimjs/qrcodejs)，通过 CDN 在浏览器端加载，离线或无法访问 CDN 时二维码不渲染（会给出提示），其余功能不受影响。如需完全离线，可把该库下载到本地并改为本地引用。
+所有条码/二维码编码器均为自写，无第三方依赖、完全离线。二维码编码器由仓库内测试用两个独立解码器（jsQR、ZXing）校验：
+QR 覆盖版本 1–40、四档纠错、中文 UTF-8；DataMatrix 覆盖全部 23 档尺寸（含多数据区、多块交织）。
+
+```bat
+npm test
+```
+
+CI 打包前会先跑这项校验，未通过则不出安装包。

@@ -21,6 +21,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # 编码器正确性校验：生成的二维码/DataMatrix 必须能被独立解码器扫回原文，否则不出包
+      - name: Verify barcode encoders
+        run: npm test
+
       # 用 electron-builder 打包成 NSIS 安装程序
       - name: Build installer
         run: npm run dist
