@@ -157,6 +157,7 @@
     <hr>
     <a data-ins="text">文字</a>
     <a data-ins="para">段落（多行）</a>
+    <a data-ins="wordart">艺术字（弧形/描边/阴影）</a>
     <a data-ins="barcode">条码 Code128</a>
     <a data-ins="ean13">条码 EAN-13</a>
     <a data-ins="ean8">条码 EAN-8</a>
@@ -259,6 +260,7 @@
       <div id="elist"></div>
       <div class="btns">
         <button data-add="text">+ 文字</button>
+        <button data-add="wordart">+ 艺术字</button>
         <button data-add="barcode">+ Code128</button>
         <button data-add="ean13">+ EAN-13</button>
         <button data-add="ean8">+ EAN-8</button>
@@ -722,7 +724,7 @@ const PXMM=3.78; // 屏幕预览 1mm≈3.78px(96dpi)
 // 标签内容默认字体：预览与 ZPL 栅格化用同一字体，度量与换行才一致
 const LABEL_FONT='"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Noto Sans SC","Source Han Sans SC",sans-serif';
 let UNIT='mm'; // 显示单位；内部一律用 mm 存储
-const LENKEYS=new Set(['x','y','size','h','module','w','border']); // 需随单位换算的长度字段
+const LENKEYS=new Set(['x','y','size','h','module','w','border','spacing','stroke','shadow']); // 需随单位换算的长度字段
 const toMM=v=>UNIT==='cm'?(+v||0)*10:(+v||0);      // 输入(显示单位)→mm
 const fromMM=mm=>UNIT==='cm'?+(mm/10).toFixed(3):+(+mm).toFixed(3); // mm→显示单位
 
@@ -886,6 +888,13 @@ function renderLabel(row,idx){
         if(el.font)node.style.fontFamily=el.font;
         if(el.align&&el.align!=='left'){node.style.textAlign=el.align;node.style.display='inline-block';}
       }
+      else if(el.type==='wordart'){
+        // 预览与 ZPL 共用 wordartLayout/drawWordart，屏幕上的弧度、描边、阴影即打印结果
+        const L=wordartLayout(el,text),S=PXMM*4,cv=document.createElement('canvas');
+        cv.width=Math.max(1,Math.ceil(L.w*S));cv.height=Math.max(1,Math.ceil(L.h*S));
+        cv.style.width=(L.w*PXMM)+'px';cv.style.height=(L.h*PXMM)+'px';cv.style.display='block';
+        drawWordart(cv.getContext('2d'),L,el,S);node.appendChild(cv);
+      }
       else if(el.type==='para'){
         // 换行结果与 ZPL 栅格化共用 wrapLines，屏幕上在哪断行，打出来就在哪断行
         node.textContent=wrapLines(text,el).join('\n');
@@ -1003,6 +1012,9 @@ const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['
 const FIELDS={
   text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  wordart:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bend','弯曲度 0-100','num'],
+    ['shape','形状','sel',['平直','上拱','下弯','波浪']],['spacing','字距(mm)','num'],['stroke','描边宽(mm)','num'],['shadow','阴影偏移(mm)','num'],
+    ['hollow','空心字','bool'],['bold','加粗','bool'],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei']],['rot','旋转°','num']],
   barcode:BC('内容'),
   ean13:BC('内容(12/13位数字)'),
   ean8:BC('内容(7/8位数字)'),
@@ -1017,7 +1029,7 @@ const FIELDS={
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   syncSel();
@@ -1056,6 +1068,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 /* ---------- 事件 ---------- */
 const DEFAULTS={
   text:{type:'text',x:3,y:3,size:4,bold:false,align:'left',font:'',rot:0,content:'文字'},
+  wordart:{type:'wordart',x:3,y:3,size:5,bold:true,font:'',shape:'上拱',bend:40,spacing:0,stroke:0,shadow:0,hollow:false,rot:0,content:'艺术字 WordArt'},
   para:{type:'para',x:3,y:3,w:40,size:3.5,bold:false,align:'left',font:'',rot:0,content:'多行文字\n第二行'},
   barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'123456'},
   ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'690123456789'},
@@ -1331,8 +1344,8 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 添加对象向导 ---------- */
 const WZ={step:0,type:'text',source:'const',value:''};
-const WZTYPES=[['text','文字'],['para','段落（多行）'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
-const wzHasData=t=>['text','para','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix'].includes(t);
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const wzHasData=t=>['text','para','wordart','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix'].includes(t);
 function wzFields(){const r=parseData($('#csv').value);
   const fs=r&&r.length?Object.keys(r[0]):rows&&rows.length?Object.keys(rows[0]):[];
   return [...new Set([...fs,...vars.map(v=>v.name).filter(Boolean)])];}
@@ -1461,6 +1474,8 @@ function painter(el,text,dpi,idx,img){
       return {w:wd,h:lines.length*lh,paint:g=>{g.font=fontOf(el,px);g.textBaseline='top';
         lines.forEach((ln,i)=>{const lw=g.measureText(ln).width;
           const x0=el.align==='center'?(wd-lw)/2:el.align==='right'?wd-lw:0;g.fillText(ln,x0,i*lh);});}};}
+    case 'wordart':{if(!text)return null;const L=wordartLayout(el,text),s=dpmmOf(dpi);
+      return {w:L.w*s,h:L.h*s,paint:g=>drawWordart(g,L,el,s)};}
     case 'image':{if(!img)return null;const w=D(el.w),h=D(el.h);
       const r=Math.min(w/img.naturalWidth,h/img.naturalHeight),iw=img.naturalWidth*r,ih=img.naturalHeight*r;
       return {w,h,dither:true,paint:g=>g.drawImage(img,(w-iw)/2,(h-ih)/2,iw,ih)};}   // 等比居中，同预览 object-fit:contain
@@ -1483,6 +1498,41 @@ function painter(el,text,dpi,idx,img){
   }
   return null;
 }
+// 艺术字布局（单位 mm）：逐字沿平直/上拱/下弯/波浪路径排列并按切线方向旋转，返回包围盒与每个字的中心和角度
+function wordartLayout(el,text){
+  _measureCtx.font=fontOf(el,100);
+  const k=(+el.size||1)/100,fh=(+el.size||1)*1.25,sp=+el.spacing||0,chars=[...String(text)];
+  const ws=chars.map(c=>_measureCtx.measureText(c).width*k);
+  const total=Math.max(0.01,ws.reduce((a,b)=>a+b,0)+sp*Math.max(0,chars.length-1));
+  const bend=Math.min(100,Math.max(0,+el.bend||0))/100,shape=el.shape||'平直';
+  let s=0;const gl=chars.map((ch,i)=>{const c=s+ws[i]/2;s+=ws[i]+sp;let x=c,y=0,a=0;
+    if(bend>0&&(shape==='上拱'||shape==='下弯')){const A=bend*Math.PI,R=total/A,t=(c-total/2)/R,dir=shape==='上拱'?1:-1;
+      x=total/2+R*Math.sin(t);y=dir*R*(1-Math.cos(t));a=dir*t;}
+    else if(bend>0&&shape==='波浪'){const amp=bend*fh*0.5,w=2*Math.PI/total;
+      y=-amp*Math.sin(w*c);a=Math.atan(-amp*w*Math.cos(w*c));}
+    return {ch,x,y,a,w:ws[i]};});
+  // 包围盒：每个字按 (宽 × 行高) 的矩形旋转后取外接
+  const pad=(el.hollow?Math.max(+el.stroke||0,0.2):(+el.stroke||0)/2)+0.2,sh=Math.max(0,+el.shadow||0);   // 空心字轮廓整条画在字外
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  gl.forEach(g=>{const c=Math.cos(g.a),n=Math.sin(g.a),hw=g.w/2,hh=fh/2;
+    for(const [dx,dy] of [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]]){const px=g.x+dx*c-dy*n,py=g.y+dx*n+dy*c;
+      x0=Math.min(x0,px);x1=Math.max(x1,px);y0=Math.min(y0,py);y1=Math.max(y1,py);}});
+  if(!gl.length){x0=y0=0;x1=y1=0.1;}
+  gl.forEach(g=>{g.x-=x0-pad;g.y-=y0-pad;});
+  return {w:x1-x0+pad*2+sh,h:y1-y0+pad*2+sh,glyphs:gl,size:+el.size||1};
+}
+// 按 scale(像素/mm) 画艺术字：阴影 → 白色隔离边 → 正文（实心/空心 + 描边）；单色热敏机上阴影与正文也分得开
+function drawWordart(g,L,el,scale){
+  const px=L.size*scale,st=Math.max(0,+el.stroke||0)*scale,sh=Math.max(0,+el.shadow||0)*scale;
+  g.save();g.font=fontOf(el,px);g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
+  const each=(fn,ox=0,oy=0)=>L.glyphs.forEach(q=>{g.save();g.translate(q.x*scale+ox,q.y*scale+oy);g.rotate(q.a);fn(q.ch);g.restore();});
+  if(sh>0){g.fillStyle='#000';each(c=>g.fillText(c,0,0),sh,sh);
+    g.strokeStyle='#fff';g.lineWidth=Math.max(st,0.3*scale)*2;each(c=>g.strokeText(c,0,0));}
+  if(el.hollow){const ow=Math.max(st,0.2*scale);   // 先画双倍宽黑边、再白色填字：只留字外一圈轮廓，细笔画的中文也是空心
+    g.strokeStyle='#000';g.lineWidth=ow*2;each(c=>g.strokeText(c,0,0));g.fillStyle='#fff';each(c=>g.fillText(c,0,0));}
+  else{g.fillStyle='#000';each(c=>g.fillText(c,0,0));if(st>0){g.strokeStyle='#000';g.lineWidth=st;each(c=>g.strokeText(c,0,0));}}
+  g.restore();
+}
 // 文字模板分段：返回 [{text,dx(mm)}]；表达式(=开头)或不含 {字段} 的返回 null（整体处理）
 function textSegments(el,row){
   const src=String(el.content==null?'':el.content);
@@ -1504,7 +1554,7 @@ function nativeZPL(el,text,dpi,x,y){
     return o+'^GE'+w+','+h+','+t+',B^FS\n';}
   return null;
 }
-const RASTER_ONLY=new Set(['text','counter','date','para','image','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix']);
+const RASTER_ONLY=new Set(['wordart','text','counter','date','para','image','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix']);
 async function buildZPL(){
   const dpi=+$('#dpi').value||203;
   const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
