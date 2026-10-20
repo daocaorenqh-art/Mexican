@@ -40,6 +40,23 @@ await p.reload();await p.waitForSelector('#preview .label');
 const rs=await p.evaluate(()=>({n:elements.length,x:elements[0]&&elements[0].x,v:vars.length&&vars[0].kind}));
 ok('自动保存恢复时同样校验',rs.n===1&&rs.x===1&&rs.v==='pick',JSON.stringify(rs));
 
+console.log('\n[2/3] 编码器模块：校验位检查、新条码类型');
+const enc=await p.evaluate(()=>{loadDesign({v:1,label:{w:60,h:40,dpi:203},elements:[
+    {type:'ean13',x:2,y:2,h:10,module:0.33,showText:true,content:'6925253841660'},
+    {type:'ean13',x:2,y:20,h:10,module:0.33,showText:true,content:'6925253841665'}]});
+  const n=[...document.querySelectorAll('#preview .label:first-child .el')];
+  return {bad:n[0].textContent,good:!!n[1].querySelector('svg')};});
+ok('EAN-13 校验位填错 → 报错而不是照样生成',enc.bad.includes('校验位'),enc.bad);
+ok('校验位正确 → 正常生成',enc.good);
+for(const t of ['gs1128','upce','code93','codabar','gs1dm']){
+  const r=await p.evaluate(t=>{document.querySelector(`[data-add="${t}"]`).click();const i=elements.length-1;
+    const node=document.querySelector(`#preview .el[data-ei="${i}"]`);return {svg:!!(node&&node.querySelector('svg')),err:node&&node.textContent.includes('⚠'),
+      menu:!!document.querySelector(`[data-ins="${t}"]`),wz:WZTYPES.some(x=>x[0]===t),edit:!!document.querySelector(`#elist [data-i="${i}"][data-k="content"]`)};},t);
+  ok(`${t}：按钮 / 菜单 / 向导 / 属性 / 预览都可用`,r.svg&&!r.err&&r.menu&&r.wz&&r.edit,JSON.stringify(r));
+}
+const z=await p.evaluate(async()=>{document.querySelector('#zplComp').value='acs';return buildZPL();});
+ok('新条码导出 ZPL（位图）',/\^GFA/.test(z)&&(z.match(/\^XA/g)||[]).length===1);
+
 ok('全程无 JS 错误',errors.length===0,errors.join(';'));
 console.log(`\n==== 移植功能验收：通过 ${pass} / 失败 ${fail} ====`);
 await b.close();process.exit(fail?1:0);
