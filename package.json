@@ -1,6 +1,6 @@
 {
   "name": "label-print-tool",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "本地安装运行的标签/条码设计与批量打印客户端，支持多种数据库套打",
   "main": "main.js",
   "scripts": {
@@ -19,7 +19,7 @@
   },
   "dependencies": {},
   "optionalDependencies": {
-    "better-sqlite3": "11.5.0",
+    "better-sqlite3": "12.11.1",
     "mysql2": "3.11.5",
     "pg": "8.13.1",
     "mssql": "11.0.1",

@@ -29,6 +29,18 @@ jobs:
       - name: Build installer
         run: npm run dist
 
+      # 核查安装包里 5 个数据库驱动都在：原生驱动查 .node 文件，纯 JS 驱动查 app.asar 内容
+      - name: Verify packaged database drivers
+        shell: pwsh
+        run: |
+          $base = 'dist/win-unpacked/resources/app.asar.unpacked/node_modules'
+          foreach ($m in @('better-sqlite3', 'odbc')) {
+            $n = Get-ChildItem -Path (Join-Path $base $m) -Recurse -Filter *.node -ErrorAction SilentlyContinue
+            if (-not $n) { Write-Error "安装包缺少原生驱动：$m"; exit 1 }
+            Write-Host "OK  $m  ->  $($n[0].Name)"
+          }
+          node -e "const a=require('@electron/asar');const l=a.listPackage('dist/win-unpacked/resources/app.asar').join('\n');for(const m of ['mysql2','pg','mssql']){if(!new RegExp('node_modules[\\\\/]'+m+'[\\\\/]package\\.json').test(l)){console.error('安装包缺少驱动：'+m);process.exit(1)}console.log('OK  '+m)}"
+
       # 把安装包作为构建产物上传（在 Actions 运行页可下载）
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
