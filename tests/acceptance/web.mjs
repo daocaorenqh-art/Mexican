@@ -270,6 +270,48 @@ console.log('\n[J] 生产流程行为');
   await page.close();
 }
 
+/* ================= K. 流水号按周期归零、段落行数限制 ================= */
+console.log('\n[K] 流水号归零 / 段落行数');
+{
+  const page = await openApp(browser);
+  const day = (off) => { const d = new Date(); d.setDate(d.getDate() + off); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const scanSN = async (z) => { const out = []; for (const f of renderZPL(z.data.toString('utf8'), 80, 50, 203)) out.push(...(await scanPNG(f)).map((g) => g.text)); return out; };
+  // 上次续号是昨天、按天归零：今天这批从 resetStart 开始，而不是接着 57
+  await page.evaluate(() => localStorage.removeItem('label.printlog'));
+  await loadDesign(page, design([{ type: 'counter', name: 'SN', x: 2, y: 2, size: 3, prefix: '', start: 57, step: 1, pad: 4, persist: true, reset: 'day', resetStart: 1, period: day(-1), rot: 0 },
+    { type: 'qrcode', x: 40, y: 5, size: 18, ecl: 'M', rot: 0, content: 'SN{#SN}' }]));
+  await setField(page, 'copies', 3);
+  const pv = (await previewTexts(page))[0] || '';
+  let z = await exportCmd(page, { choice: 'ok' });
+  let got = z.data ? (await scanSN(z)).sort() : [];
+  const st = await page.evaluate(() => { const c = elements.find((e) => e.type === 'counter'); return { start: c.start, period: c.period }; });
+  const lg = await page.evaluate(() => (JSON.parse(localStorage.getItem('label.printlog') || '[]')[0] || {}).serials);
+  rec.check('K-reset-new-day', '按天归零：跨天后预览 / ZPL / 日志都从 0001 开始', pv.includes('0001') && got.join(',') === 'SN0001,SN0002,SN0003' && /0001.*0003/.test(JSON.stringify(lg)),
+    `预览 ${pv.slice(0, 20)}；出纸 ${got.join(',')}；日志 ${JSON.stringify(lg)}`);
+  rec.check('K-reset-advance', '归零后续号前进到 4，周期记为今天', st.start === 4 && st.period === day(0), JSON.stringify(st));
+  z = await exportCmd(page, { choice: 'ok' });
+  got = z.data ? (await scanSN(z)).sort() : [];
+  rec.check('K-reset-same-day', '同一天再打：接着 0004 编号，不再归零', got.join(',') === 'SN0004,SN0005,SN0006', got.join(','));
+  // 段落最多 2 行 + 省略号：预览末尾有 …；ZPL 出纸的段落高度 ≈ 2 行（字号 3mm，203dpi 每行约 24 点）
+  await setField(page, 'copies', 1);
+  const longText = '面料：棉100%。本产品执行国家标准，请按洗涤说明保养，避免暴晒和高温熨烫，深浅衣物分开洗涤。';
+  await loadDesign(page, design([{ type: 'para', x: 5, y: 5, w: 30, size: 3, maxLines: 2, ellipsis: true, bold: false, align: 'left', font: '', rot: 0, content: longText }]));
+  const ptxt = (await previewTexts(page))[0] || '';
+  z = await exportCmd(page, { choice: 'ok' });
+  let rows = 0;
+  if (z.data) { const f = renderZPL(z.data.toString('utf8'), 80, 50, 203)[0];
+    rows = await page.evaluate(async (b64) => { const im = new Image(); await new Promise((r) => { im.onload = r; im.src = 'data:image/png;base64,' + b64; });
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, im.width, im.height).data; let top = -1, bot = -1;
+      for (let y = 0; y < im.height; y++) { let ink = false; for (let x = 0; x < im.width; x++) if (d[(y * im.width + x) * 4] < 128) { ink = true; break; } if (ink) { if (top < 0) top = y; bot = y; } }
+      return top < 0 ? 0 : bot - top + 1; }, fs.readFileSync(f).toString('base64')); }
+  const lineDots = 3 * 203 / 25.4;
+  rec.check('K-para-lines', '段落最多 2 行：预览以 … 结尾，出纸高度约 2 行', /…\s*$/.test(ptxt) && ptxt.split('\n').filter((l) => l.trim()).length === 2 && rows > lineDots * 1.3 && rows < lineDots * 2.4,
+    `预览 ${JSON.stringify(ptxt.slice(-12))}，${ptxt.split('\n').filter((l) => l.trim()).length} 行；出纸墨迹高 ${rows} 点（1 行约 ${lineDots.toFixed(0)} 点）`);
+  rec.check('K-noerror', '全程无脚本错误', page._errors.length === 0, page._errors.join('; '));
+  await page.close();
+}
+
 /* ================= I. 设计往返与健壮性 ================= */
 console.log('\n[I] 设计往返与健壮性');
 {
