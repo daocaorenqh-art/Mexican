@@ -105,8 +105,12 @@
   .wzft{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
+  body.shop #elist,body.shop #elist~.btns,body.shop #elist~.hint,body.shop #canvasbar,body.shop #saveBtn,body.shop #varPanel .btns,
+  body.shop #menubar .menu.design,body.shop .pagepanel{display:none !important}
+  body.shop .label .el{cursor:default}
+  body.shop #varList input,body.shop #varList select,body.shop #varList textarea,body.shop #varList button{pointer-events:none;opacity:.6}
+  body.shop header h1::after{content:'（车间模式）';font-size:12px;color:var(--muted);font-weight:400}
   @media print{
-    @page{margin:8mm}
     body{background:#fff}
     header, #menubar, .wrap>div:first-child, #pager, #canvasbar{display:none !important}
     .rulerwrap>svg,.rulerwrap>.rcorner{display:none}
@@ -129,13 +133,13 @@
     <a data-cmd="new">新建</a>
     <a data-cmd="open">打开设计…</a>
     <a data-cmd="save">保存设计</a>
-    <a data-cmd="zpl">导出 ZPL（斑马机）…</a>
+    <a data-cmd="zpl">导出打印机指令（ZPL / TSPL）…</a>
     <hr>
     <a data-cmd="print">打印…　Ctrl+P</a>
     <a data-cmd="silentprint">打印到所选打印机（桌面版）</a>
-    <a data-cmd="zplsend">ZPL 直发打印机（桌面版）</a>
+    <a data-cmd="zplsend">指令直发打印机（桌面版）</a>
   </div></div>
-  <div class="menu"><span>编辑</span><div class="dd">
+  <div class="menu design"><span>编辑</span><div class="dd">
     <a data-cmd="undo">撤消　Ctrl+Z</a>
     <a data-cmd="redo">恢复　Ctrl+Y</a>
     <hr>
@@ -155,7 +159,7 @@
     <a data-cmd="disth">水平等距分布</a>
     <a data-cmd="distv">垂直等距分布</a>
   </div></div>
-  <div class="menu"><span>插入</span><div class="dd">
+  <div class="menu design"><span>插入</span><div class="dd">
     <a data-cmd="wizard">对象向导…　Ins</a>
     <hr>
     <a data-ins="text">文字</a>
@@ -187,11 +191,14 @@
     <a data-cmd="zoomin">放大</a>
     <a data-cmd="zoomout">缩小</a>
     <a data-cmd="zoomreset">实际大小</a>
+      <hr>
+    <a data-cmd="shop">车间模式（只打印）开/关</a>
   </div></div>
   <div class="menu"><span>工具</span><div class="dd">
     <a data-cmd="dbfocus">数据库套打</a>
     <a data-cmd="csvfocus">CSV 数据套打</a>
     <a data-cmd="pick">选择要打印的记录…</a>
+    <a data-cmd="log">打印日志…</a>
   </div></div>
 </div>
 <header>
@@ -212,7 +219,7 @@
 <div class="wrap">
   <!-- 左侧设置 -->
   <div>
-    <div class="panel">
+    <div class="panel pagepanel">
       <h2>标签 & 纸张</h2>
       <div class="row">
         <label class="f"><span>标签宽 (<span class="ul">mm</span>)</span><input id="lw" type="number" value="50" min="1" step="1"></label>
@@ -227,14 +234,26 @@
             <option value="600">600</option>
           </select>
         </label>
-        <label class="f"><span>每行数量</span><input id="cols" type="number" value="0" min="0" step="1"></label>
+        <label class="f"><span>每行数量（整页）</span><input id="cols" type="number" value="0" min="0" step="1"></label>
         <label class="f"><span>单位</span><select id="unit"><option value="mm">mm</option><option value="cm">cm</option></select></label>
       </div>
-      <div class="row">
-        <label class="f"><span>列间距 (<span class="ul">mm</span>)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
-        <label class="f"><span>行间距 (<span class="ul">mm</span>)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
+      <label class="f"><span>打印方式</span>
+        <select id="pmode"><option value="roll">标签机（每张一页，页面 = 标签尺寸）</option><option value="sheet">整页（A4 不干胶等多张/页）</option></select></label>
+      <div id="sheetOpts">
+        <div class="row">
+          <label class="f"><span>纸张</span><select id="paper"><option value="A4">A4</option><option value="A5">A5</option><option value="Letter">Letter</option></select></label>
+          <label class="f"><span>从第几个位置开始</span><input id="startPos" type="number" value="1" min="1" step="1"></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>页上边距 (<span class="ul">mm</span>)</span><input id="mTop" type="number" value="8" min="0" step="0.5"></label>
+          <label class="f"><span>页左边距 (<span class="ul">mm</span>)</span><input id="mLeft" type="number" value="8" min="0" step="0.5"></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>列间距 (<span class="ul">mm</span>)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
+          <label class="f"><span>行间距 (<span class="ul">mm</span>)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
+        </div>
+        <p class="hint">「每行数量」设 N 按 N 列网格排布；设 0 按宽度自动换行。「从第几个位置开始」可接着用打过一部分的不干胶纸。</p>
       </div>
-      <p class="hint">整页套打：「每行数量」设 N 则按 N 列网格排布（如 A4 不干胶多张/页）；设 0 则按宽度自动平铺换行。标签机一般每张一页。</p>
     </div>
 
     <div class="panel">
@@ -244,8 +263,32 @@
         <label class="f"><span>从第几条</span><input id="rFrom" type="number" value="1" min="1" step="1"></label>
         <label class="f"><span>到第几条</span><input id="rTo" type="number" value="0" min="0" step="1"></label>
       </div>
-      <label class="f"><span>ZPL 位图压缩</span>
-        <select id="zplComp"><option value="z64">Z64（新款斑马机，体积最小）</option><option value="acs">ACS（兼容所有斑马机）</option></select></label>
+      <details id="zplOpts" style="margin:0 0 8px"><summary style="cursor:pointer;font-size:13px">打印机指令参数（ZPL / TSPL）</summary>
+        <div style="margin-top:8px">
+          <label class="f"><span>指令语言</span><select id="zLang"><option value="zpl">ZPL（斑马 Zebra）</option><option value="tspl">TSPL（TSC / 佳博 / 芯烨）</option></select></label>
+          <label class="f"><span>ZPL 位图压缩</span>
+            <select id="zplComp"><option value="z64">Z64（新款斑马机，体积最小）</option><option value="acs">ACS（兼容所有斑马机）</option></select></label>
+          <div class="row">
+            <label class="f"><span>浓度 0–30</span><input id="zDark" type="number" min="0" max="30" placeholder="打印机设置"></label>
+            <label class="f"><span>速度 1–14 (英寸/秒)</span><input id="zSpeed" type="number" min="1" max="14" placeholder="打印机设置"></label>
+          </div>
+          <div class="row">
+            <label class="f"><span>打印方式</span><select id="zMedia"><option value="">打印机设置</option><option value="direct">热敏</option><option value="transfer">热转印（碳带）</option></select></label>
+            <label class="f"><span>纸张类型</span><select id="zTrack"><option value="">打印机设置</option><option value="gap">间隙纸</option><option value="mark">黑标纸</option><option value="continuous">连续纸</option></select></label>
+          </div>
+          <div class="row">
+            <label class="f"><span>出纸方式</span><select id="zMode"><option value="">打印机设置</option><option value="tear">撕纸</option><option value="peel">剥离</option><option value="cut">切刀</option></select></label>
+            <label class="f"><span>上下偏移 (点)</span><input id="zTop" type="number" step="1" placeholder="0"></label>
+          </div>
+          <div class="row">
+            <label class="f"><span>左右偏移 (点)</span><input id="zLeft" type="number" step="1" placeholder="0"></label>
+            <label class="f"><span>间隙 / 黑标高 (mm，TSPL)</span><input id="zGap" type="number" min="0" step="0.5" placeholder="2"></label>
+          </div>
+          <label class="f" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="zInvert" checked style="width:auto"> TSPL 位图反色（打出来是黑块时取消勾选）</label>
+          <label class="f"><span>每批发送张数（直发，大批量分批）</span><input id="zBatch" type="number" min="1" step="1" value="200"></label>
+          <p class="hint" style="margin-top:0">导出和直发都按这里的指令语言；全部内容按位图输出，与预览逐点一致，无需打印机中文字库。参数留空 = 沿用打印机自己的设置。</p>
+        </div>
+      </details>
       <p class="hint">「到第几条」填 0 表示到最后一条。预览、打印、导出 ZPL 都按这里的范围和份数出标签；流水号按实际张数逐张递增。</p>
     </div>
 
@@ -255,17 +298,19 @@
         <div style="display:flex;gap:6px"><select id="prnList"><option value="">（加载中…）</option></select><button id="prnRefresh" title="刷新打印机列表">↻</button></div></label>
       <div class="btns"><button id="prnSilent" class="primary">打印到此打印机</button></div>
       <hr style="border:none;border-top:1px solid var(--line);margin:12px 0">
-      <label class="f"><span>ZPL 直发方式</span>
-        <select id="rawKind"><option value="tcp">网络打印机（IP）</option><option value="share">本机共享打印机（USB）</option><option value="com">串口（COM）</option></select></label>
+      <label class="f"><span>指令直发方式（语言见「打印设置 → 打印机指令参数」）</span>
+        <select id="rawKind"><option value="tcp">网络打印机（IP）</option><option value="spool">本机打印机按名称（USB，免共享）</option><option value="share">本机共享打印机（USB）</option><option value="com">串口（COM）</option></select></label>
       <div class="row">
         <label class="f"><span id="rawAddrLbl">IP 地址</span><input id="rawAddr" placeholder="192.168.1.50"></label>
         <label class="f" id="rawPortWrap"><span>端口</span><input id="rawPort" type="number" value="9100"></label>
+        <label class="f" id="rawBaudWrap" style="display:none"><span>波特率</span><select id="rawBaud"><option value="">系统设置</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option><option>4800</option><option>2400</option></select></label>
       </div>
-      <div class="btns"><button id="rawSend" class="primary">发送 ZPL 到打印机</button></div>
-      <p class="hint" id="prnMsg">USB 打印机：在 Windows 打印机属性里设为「共享」，这里填共享名即可直发。</p>
+      <div class="btns"><button id="rawSend" class="primary">发送到打印机</button><button id="prnStatus" title="网络打印机：读取缺纸 / 开盖 / 缺碳带 / 分辨率">检测打印机</button>
+        <button id="rawCancel" style="display:none">取消发送</button><button id="rawResume" style="display:none">续打剩余</button></div>
+      <p class="hint" id="prnMsg">USB 打印机：选「本机打印机按名称」，用上面选中的系统打印机直发（无需共享）；个别新式驱动不接受 RAW 时再改用「共享」。</p>
     </div>
 
-    <div class="panel">
+    <div class="panel pagepanel">
       <h2>元素</h2>
       <div id="elist"></div>
       <div class="btns">
@@ -314,7 +359,7 @@ A1002,香蕉,2.20"></textarea>
       <p class="hint">可直接导入 .xlsx，或 Excel「另存为 CSV」（UTF-8 / GBK 自动识别），也可复制单元格区域粘贴到上面。</p>
     </div>
 
-    <div class="panel">
+    <div class="panel pagepanel" id="varPanel">
       <h2>变量（打印时输入）</h2>
       <div id="varList"></div>
       <div class="btns">
@@ -665,25 +710,47 @@ let printingAll=false;   // 打印期间临时全量渲染
 function render(opt){
   syncSel();
   const pv=$('#preview');
-  const cols=+$('#cols').value||0;
+  const sheet=$('#pmode').value==='sheet', cols=sheet?(+$('#cols').value||0):0;
   const gapX=toMM($('#gapX').value)*PXMM, gapY=toMM($('#gapY').value)*PXMM;
+  updatePageStyle();
   const W=toMM($('#lw').value), H=toMM($('#lh').value), rulerOn=$('#rulerChk').checked;
   const list=printList(), shown=printingAll?list:list.slice(0,PREVIEW_CAP);
   // 拖动中只重绘正在编辑的第一张，松手后再全量刷新
-  if(opt&&opt.fast&&pv.firstChild&&shown.length){const lab=renderLabel(shown[0],0);
-    pv.replaceChild(rulerOn?wrapWithRulers(lab,W,H):lab,pv.firstChild);return;}
+  const firstLab=pv.querySelector(':scope>.label:not(.slot),:scope>.rulerwrap');   // 跳过整页模式起始空位
+  if(opt&&opt.fast&&firstLab&&shown.length){const lab=renderLabel(shown[0],0);
+    pv.replaceChild(rulerOn?wrapWithRulers(lab,W,H):lab,firstLab);return;}
   pv.innerHTML='';
   if(!list.length){$('#pager').textContent='⚠ '+(list.error||'没有要出的标签');$('#pager').style.color='#c00';return;}
   $('#pager').style.color='';
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
-  pv.style.gap=gapY+'px '+gapX+'px';
+  pv.style.gap=sheet?(gapY+'px '+gapX+'px'):'12px';
   const frag=document.createDocumentFragment();
-  shown.forEach((r,i)=>{const lab=renderLabel(r,i);frag.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
+  // 整页模式「从第 N 个位置开始」：前面空出 N-1 个标签位（用掉一半的不干胶纸可接着打）
+  const startAt=sheet?Math.max(1,Math.floor(+$('#startPos').value||1)):1;
+  for(let k=1;k<startAt;k++){const ph=document.createElement('div');ph.className='label slot';
+    ph.style.width=(W*PXMM)+'px';ph.style.height=(H*PXMM)+'px';frag.appendChild(ph);}
+  shown.forEach((r,i)=>{const lab=renderLabel(r,i);frag.appendChild(i===0&&rulerOn&&!printingAll?wrapWithRulers(lab,W,H):lab);});
   pv.appendChild(frag);
   $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'')
+    +(sheet?'；整页模式':'；标签机模式（每张一页）')
     +(shown.length<list.length?'；预览前 '+shown.length+' 张，打印/导出为全部 '+list.length+' 张':'');
 }
+
+// 打印页面：标签机模式每张一页、页面 = 标签尺寸、无边距；整页模式按纸张 + 页边距排版，空出的起始位不打印
+function updatePageStyle(){
+  let st=document.getElementById('pageStyle');
+  if(!st){st=document.createElement('style');st.id='pageStyle';document.head.appendChild(st);}
+  const W=toMM($('#lw').value), H=toMM($('#lh').value);
+  st.textContent=$('#pmode').value==='sheet'
+    ?'@page{size:'+$('#paper').value+';margin:'+(+toMM($('#mTop').value)||0)+'mm 0 0 '+(+toMM($('#mLeft').value)||0)+'mm}'
+     +'@media print{.label.slot{visibility:hidden;box-shadow:none}}'
+    :'@page{size:'+W+'mm '+H+'mm;margin:0}'
+     +'@media print{#preview{display:block !important}#preview .label{break-after:page;page-break-after:always}'
+     +'#preview .label:last-child{break-after:auto;page-break-after:auto}}';
+}
+// 静默打印的页面尺寸：标签机模式 = 标签尺寸（微米），整页模式 = 纸张名
+const silentPageSize=()=>$('#pmode').value==='sheet'?$('#paper').value:{width:toMM($('#lw').value)*1000,height:toMM($('#lh').value)*1000};
 
 /* ---------- 元素编辑 UI ---------- */
 const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']];
@@ -838,10 +905,12 @@ $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new Fi
     render();e.target.value='';};
   fr.readAsArrayBuffer(f);};
 const onPage=()=>{render();commit();};
-$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=onPage;
+$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=$('#mTop').oninput=$('#mLeft').oninput=$('#paper').onchange=onPage;
+$('#pmode').onchange=()=>{syncPmode();onPage();};
+$('#startPos').oninput=render;
 function setUnit(u){
   if(u===UNIT)return;
-  const ids=['lw','lh','gapX','gapY'],mm=ids.map(id=>toMM($('#'+id).value));
+  const ids=['lw','lh','gapX','gapY','mTop','mLeft'],mm=ids.map(id=>toMM($('#'+id).value));
   UNIT=u;
   ids.forEach((id,i)=>$('#'+id).value=fromMM(mm[i]));
   document.querySelectorAll('.ul').forEach(s=>s.textContent=u);
@@ -850,6 +919,13 @@ function setUnit(u){
 $('#unit').onchange=e=>setUnit(e.target.value);
 $('#copies').oninput=$('#rFrom').oninput=$('#rTo').oninput=render;
 try{const z=localStorage.getItem('label.zplComp');if(z)$('#zplComp').value=z;}catch(e){}
+// 打印机指令参数记在本机
+const ZKEYS=['zLang','zDark','zSpeed','zMedia','zTrack','zMode','zTop','zLeft','zGap','zInvert','zBatch'];
+try{const o=JSON.parse(localStorage.getItem('label.zplopt')||'{}')||{};
+  ZKEYS.forEach(k=>{if(k in o){const el=$('#'+k);if(el.type==='checkbox')el.checked=!!o[k];else el.value=o[k];}});}catch(e){}
+ZKEYS.forEach(k=>$('#'+k).addEventListener('change',()=>{const o={};
+  ZKEYS.forEach(k2=>{const el=$('#'+k2);o[k2]=el.type==='checkbox'?el.checked:el.value;});
+  try{localStorage.setItem('label.zplopt',JSON.stringify(o));}catch(e){}}));
 $('#zplComp').onchange=()=>{try{localStorage.setItem('label.zplComp',$('#zplComp').value);}catch(e){}};
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
@@ -860,6 +936,7 @@ $('#printBtn').onclick=()=>doPrint();
 let drag=null;
 const zf=()=>(+$('#zoom').value/100)||1;
 $('#preview').addEventListener('mousedown',e=>{
+  if(shopOn())return;   // 车间模式：只打印，不能拖动编辑
   const h=e.target.closest('.rz'), elNode=e.target.closest('.el');
   if(h){const ei=+h.dataset.ei;drag={mode:'resize',ei,sx:e.clientX,sy:e.clientY,o:{...elements[ei]}};
     document.body.style.userSelect='none';e.preventDefault();return;}
@@ -963,7 +1040,7 @@ $('#canvasbar').addEventListener('click',e=>{const b=e.target.closest('button');
   else if(b.dataset.grp==='g')groupSel();else if(b.dataset.grp==='u')ungroupSel();});
 window.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase();
-  if(tag==='input'||tag==='textarea'||tag==='select')return;
+  if(tag==='input'||tag==='textarea'||tag==='select'||shopOn())return;
   if(e.key==='Escape'){setSelection([]);renderEditor();render();return;}
   const ids=selIds();if(!ids.length)return;
   const step=e.shiftKey?2:0.5;let dx=0,dy=0;
@@ -976,14 +1053,23 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 撤消/重做 · 剪贴板 · 层次 · 菜单 ---------- */
 let history=[],hi=-1,restoring=false,clip=null;
-function snapshot(){return JSON.stringify({e:elements,v:vars,l:{
-  lw:toMM($('#lw').value),lh:toMM($('#lh').value),dpi:$('#dpi').value,cols:$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)}});}
+// 标签 / 纸张设置（mm）；旧设计没有 pmode 时：设了「每行数量」按整页，否则按标签机
+function pageSpec(){return {lw:toMM($('#lw').value),lh:toMM($('#lh').value),dpi:$('#dpi').value,cols:$('#cols').value,
+  gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value),pmode:$('#pmode').value,paper:$('#paper').value,
+  mTop:toMM($('#mTop').value),mLeft:toMM($('#mLeft').value)};}
+function applyPage(l){$('#lw').value=fromMM(l.lw??50);$('#lh').value=fromMM(l.lh??30);$('#dpi').value=String(l.dpi??203);
+  $('#cols').value=l.cols??0;$('#gapX').value=fromMM(l.gapX??3);$('#gapY').value=fromMM(l.gapY??3);
+  $('#pmode').value=l.pmode==='sheet'||l.pmode==='roll'?l.pmode:((+l.cols||0)>0?'sheet':'roll');
+  $('#paper').value=['A4','A5','Letter'].includes(l.paper)?l.paper:'A4';
+  $('#mTop').value=fromMM(l.mTop??8);$('#mLeft').value=fromMM(l.mLeft??8);syncPmode();}
+function syncPmode(){const sh=$('#pmode').value==='sheet';$('#sheetOpts').style.display=sh?'':'none';
+  $('#cols').closest('label').style.display=sh?'':'none';}
+function snapshot(){return JSON.stringify({e:elements,v:vars,l:pageSpec()});}
 function commit(){if(restoring)return;history=history.slice(0,hi+1);history.push(snapshot());
   if(history.length>80)history.shift();hi=history.length-1;
   persistSnap();}
 function applySnap(s){const o=JSON.parse(s);restoring=true;elements=sanitizeElements(o.e).out;vars=sanitizeVars(o.v);renderVars();
-  $('#lw').value=fromMM(o.l.lw);$('#lh').value=fromMM(o.l.lh);$('#dpi').value=o.l.dpi;
-  $('#cols').value=o.l.cols;$('#gapX').value=fromMM(o.l.gapX);$('#gapY').value=fromMM(o.l.gapY);
+  applyPage(o.l||{});
   sel=-1;renderEditor();render();restoring=false;}
 // 撤消/恢复后同步自动保存，否则重启会回到撤消前的状态
 const persistSnap=()=>{try{localStorage.setItem('label.autosave',history[hi]);}catch(e){}};
@@ -1009,7 +1095,7 @@ function zMove(dir){const ids=selIds();if(!ids.length)return;
   else if(dir==='bwd'&&i>0){[elements[i],elements[i-1]]=[elements[i-1],elements[i]];sel=i-1;}
   commit();renderEditor();render();}
 function newDesign(){if(!confirm('新建将清空当前设计，继续？'))return;
-  elements=[];vars=[];sel=-1;$('#csv').value='';setRows(null);renderVars();commit();renderEditor();render();}
+  elements=[];vars=[];sel=-1;designName='未命名';$('#csv').value='';setRows(null);renderVars();commit();renderEditor();render();}
 
 document.querySelector('#menubar').addEventListener('click',e=>{
   const ins=e.target.dataset.ins, cmd=e.target.dataset.cmd;
@@ -1037,6 +1123,8 @@ document.querySelector('#menubar').addEventListener('click',e=>{
     case 'zoomreset':$('#zoom').value=100;$('#zoom').oninput();break;
     case 'dbfocus':{const p=$('#dbPanel');if(p&&p.style.display!=='none')p.scrollIntoView({behavior:'smooth'});else alert('数据库套打仅在桌面安装版可用');break;}
     case 'pick':pickRecords();break;
+    case 'log':showLog();break;
+    case 'shop':toggleShop();break;
     case 'csvfocus':$('#csv').scrollIntoView({behavior:'smooth'});$('#csv').focus();break;
   }
 });
@@ -1044,6 +1132,7 @@ window.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase();
   const inField=tag==='input'||tag==='textarea'||tag==='select';
   if(e.ctrlKey||e.metaKey){const k=e.key.toLowerCase();
+    if(shopOn()&&k!=='p')return;   // 车间模式只保留 Ctrl+P
     if(k==='a'&&!inField){e.preventDefault();setSelection(elements.map((_,i)=>i));renderEditor();render();return;}
     if(k==='g'&&!inField){e.preventDefault();e.shiftKey?ungroupSel():groupSel();return;}
     if(k==='z'&&!inField){e.preventDefault();undo();}
@@ -1053,6 +1142,7 @@ window.addEventListener('keydown',e=>{
     else if(k==='v'&&!inField){e.preventDefault();pasteClip();}
     else if(k==='p'){e.preventDefault();doPrint();}
     return;}
+  if(shopOn())return;
   if(!inField&&e.key==='Delete'){e.preventDefault();delSel();}
   if(!inField&&e.key==='Insert'){e.preventDefault();wzOpen();}
 });
@@ -1105,8 +1195,8 @@ $('#wzNext').onclick=()=>{if(WZ.step===0&&wzHasData(WZ.type)){WZ.step=1;wzRender
 
 /* ---------- 保存 / 载入设计 ---------- */
 $('#saveBtn').onclick=()=>{
-  const design={v:1,label:{w:toMM($('#lw').value),h:toMM($('#lh').value),dpi:+$('#dpi').value,
-    cols:+$('#cols').value,gapX:toMM($('#gapX').value),gapY:toMM($('#gapY').value)},elements,vars};
+  const P=pageSpec();
+  const design={v:2,label:{w:P.lw,h:P.lh,dpi:+P.dpi,cols:+P.cols,gapX:P.gapX,gapY:P.gapY,pmode:P.pmode,paper:P.paper,mTop:P.mTop,mLeft:P.mLeft},elements,vars};
   const blob=new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
   URL.revokeObjectURL(a.href);
@@ -1140,8 +1230,7 @@ function loadDesign(d){
   {const {out,bad}=sanitizeElements(d.elements);
     if(bad.length)alert('以下内容无法识别，已略过：'+[...new Set(bad.map(String))].join('、'));
     d={...d,elements:out,vars:sanitizeVars(d.vars)};}
-  if(d.label){const L=d.label;$('#lw').value=fromMM(L.w??50);$('#lh').value=fromMM(L.h??30);$('#dpi').value=L.dpi??203;
-    $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);}
+  if(d.label){const L=d.label;applyPage({lw:L.w,lh:L.h,dpi:L.dpi,cols:L.cols,gapX:L.gapX??L.tile,gapY:L.gapY??L.tile,pmode:L.pmode,paper:L.paper,mTop:L.mTop,mLeft:L.mLeft});}
   elements=d.elements;vars=Array.isArray(d.vars)?d.vars:[];sel=-1;renderVars();renderEditor();render();commit();
 }
 
@@ -1458,20 +1547,20 @@ function textSegments(el,ctx){
   return out;
 }
 const isRot=el=>((+el.rot||0)%360+360)%360!==0;
-// 原生指令（未旋转的条码/二维码/方框/椭圆）：打印机自己画，最清晰
-function nativeZPL(el,text,dpi,x,y){
-  const o='^FO'+x+','+y;
-  if(el.type==='box'){const w=mm2dots(el.w,dpi),h=mm2dots(el.h,dpi),t=Math.max(1,mm2dots(el.border,dpi));
-    return o+'^GB'+w+','+h+','+(el.fill?Math.min(w,h):t)+',B^FS\n';}
-  if(el.type==='ellipse'){const w=mm2dots(el.w,dpi),h=mm2dots(el.h,dpi),t=Math.max(1,mm2dots(el.border,dpi));
-    return o+'^GE'+w+','+h+','+t+',B^FS\n';}
-  return null;
+// 未旋转的线框 / 椭圆：交给打印机原生指令画（ZPL ^GB/^GE，TSPL BOX/BAR），最清晰、数据最小
+function nativeShape(el,dpi,x,y){
+  if(el.type!=='box'&&el.type!=='ellipse')return null;
+  return {nat:el.type,el,x,y,w:mm2dots(el.w,dpi),h:mm2dots(el.h,dpi),t:Math.max(1,mm2dots(el.border,dpi)),fill:!!el.fill};
 }
 const RASTER_ONLY=new Set(['rich','wordart','text','counter','date','para','image',...BARCODE_1D,...BARCODE_2D]);
-async function buildZPL(){
+/* 一批标签的版面（与指令语言无关，单位：打印点）。每张标签为若干项：
+     {r,x,y}  位图（同一 key 的位图全批只算一次，ZPL 可 ~DG 复用）
+     {gf,x,y} 超出左 / 上边缘、裁过的位图
+     {nat:'box'|'ellipse',x,y,w,h,t,fill,el} 未旋转的线框 / 椭圆 */
+async function layoutJob(listArg){
   const dpi=+$('#dpi').value||203;
   const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
-  const list=printList();
+  const list=listArg||printList();
   if(!list.length)throw new Error(list.error||'没有要出的标签');
   // 预先解码本批用到的所有图片（动态图片每张可能不同）
   const imgs=new Map(),imgEls=elements.filter(el=>el.type==='image'),opts=jobOpts();
@@ -1485,7 +1574,7 @@ async function buildZPL(){
     elements.forEach(el=>{
       const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
       let text;try{text=elText(el,ctx,e);}catch(err){text='';}
-      if(!RASTER_ONLY.has(el.type)&&!isRot(el)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
+      if(!RASTER_ONLY.has(el.type)&&!isRot(el)){const z=nativeShape(el,dpi,x,y);if(z)parts.push(z);return;}
       // 「品名：{字段}」这类模板：静态文字与字段值分开转位图，静态部分全批只发一次（串口打印快很多）
       const segs=el.type==='text'&&!ANCHOR_K[el.align]&&!(+el.fitW)?textSegments(el,ctx):null;
       if(segs&&segs.length>1){
@@ -1512,23 +1601,75 @@ async function buildZPL(){
     }
     labels.push(parts);
   });
-  // 第二遍：重复出现的位图用 ~DG 存进打印机内存一次，各张用 ^XG 调用
-  const names=new Map();let n=0,head='';
-  for(const [key,cnt] of use)if(cnt>1&&n<999){const r=cache.get(key),nm='R:G'+String(++n).padStart(3,'0')+'.GRF';
-    names.set(key,nm);head+='~DG'+nm+','+dgBody(r)+'\n';}
-  let out=head;
-  for(const parts of labels){
-    out+='^XA\n^CI28\n^PW'+Wd+'\n^LL'+Hd+'\n';
+  return {dpi,Wd,Hd,labels,cache,use};
+}
+// 打印机参数（留空 = 沿用打印机自己的设置）
+function printerOpts(){const v=id=>{const e=$('#'+id);return e?(e.type==='checkbox'?e.checked:e.value):'';};
+  return {darkness:v('zDark'),speed:v('zSpeed'),media:v('zMedia'),track:v('zTrack'),mode:v('zMode'),top:v('zTop'),left:v('zLeft'),gap:v('zGap'),invert:v('zInvert')};}
+const cmdLang=()=>($('#zLang')&&$('#zLang').value)||'zpl';
+// 连续内容完全相同的标签合并（ZPL ^PQ n / TSPL PRINT 1,n），份数多时不再重复发整张数据
+function mergeRuns(bodies){const out=[];for(const b of bodies){const l=out[out.length-1];if(l&&l.body===b)l.n++;else out.push({body:b,n:1});}return out;}
+async function buildZPL(list){
+  const L=await layoutJob(list),pr=printerOpts();
+  // 重复出现的位图用 ~DG 存进打印机内存一次，各张用 ^XG 调用
+  const names=new Map();let n=0,out='';
+  if(pr.darkness!==''&&pr.darkness!=null)out+='~SD'+String(Math.max(0,Math.min(30,Math.round(+pr.darkness)))).padStart(2,'0')+'\n';
+  for(const [key,cnt] of L.use)if(cnt>1&&n<999){const r=L.cache.get(key),nm='R:G'+String(++n).padStart(3,'0')+'.GRF';
+    names.set(key,nm);out+='~DG'+nm+','+dgBody(r)+'\n';}
+  const head='^XA\n^CI28\n^PW'+L.Wd+'\n^LL'+L.Hd+'\n^LH0,0\n'+zplSetup(pr);
+  const bodies=[];
+  for(const parts of L.labels){let b='';
     for(const p of parts){
-      if(typeof p==='string'){out+=p;continue;}
-      if(p.gf){out+='^FO'+p.x+','+p.y+'^GFA,'+await gfBody(p.gf)+'^FS\n';continue;}
+      if(p.nat==='box'){b+='^FO'+p.x+','+p.y+'^GB'+p.w+','+p.h+','+(p.fill?Math.min(p.w,p.h):p.t)+',B^FS\n';continue;}
+      if(p.nat==='ellipse'){b+='^FO'+p.x+','+p.y+'^GE'+p.w+','+p.h+','+(p.fill?Math.min(p.w,p.h):p.t)+',B^FS\n';continue;}
+      if(p.gf){b+='^FO'+p.x+','+p.y+'^GFA,'+await gfBody(p.gf)+'^FS\n';continue;}
       const nm=names.get(p.r.key);
-      out+='^FO'+p.x+','+p.y+(nm?'^XG'+nm+',1,1':'^GFA,'+await gfBody(p.r))+'^FS\n';
+      b+='^FO'+p.x+','+p.y+(nm?'^XG'+nm+',1,1':'^GFA,'+await gfBody(p.r))+'^FS\n';
     }
-    out+='^PQ1\n^XZ\n';
-  }
+    bodies.push(b);}
+  for(const {body,n} of mergeRuns(bodies))out+=head+body+'^PQ'+n+'\n^XZ\n';
   return out;
 }
+function zplSetup(p){let s='';
+  if(p.speed!==''&&p.speed!=null)s+='^PR'+Math.max(1,Math.min(14,Math.round(+p.speed)));
+  if(p.media)s+='^MT'+(p.media==='transfer'?'T':'D');
+  if(p.track)s+='^MN'+({gap:'Y',mark:'M',continuous:'N'}[p.track]||'Y');
+  if(p.mode)s+='^MM'+({tear:'T',peel:'P',cut:'C'}[p.mode]||'T');
+  if(+p.top)s+='^LT'+Math.round(+p.top);
+  if(+p.left)s+='^LS'+Math.round(+p.left);
+  return s?s+'\n':'';}
+/* TSPL（TSC / 佳博 / 芯烨 等国产标签机）：与 ZPL 同一版面，位图用 BITMAP、线框用 BOX / BAR，椭圆按位图。
+   无需打印机中文字库；TSPL 位图 1 = 白点，默认反色（打出来是黑块时在参数里取消「反色」）。返回 Uint8Array */
+async function buildTSPL(list){
+  const L=await layoutJob(list),pr=printerOpts(),invert=pr.invert!==false;
+  const W=toMM($('#lw').value),H=toMM($('#lh').value),gap=pr.gap===''||pr.gap==null?2:Math.max(0,+pr.gap);
+  let head='SIZE '+W+' mm,'+H+' mm\r\n';
+  head+=pr.track==='mark'?'BLINE '+gap+' mm,0 mm\r\n':pr.track==='continuous'?'GAP 0 mm,0 mm\r\n':'GAP '+gap+' mm,0 mm\r\n';
+  head+='DIRECTION 0\r\nREFERENCE '+(+pr.left?Math.round(+pr.left):0)+',0\r\n';
+  if(+pr.top)head+='SHIFT '+Math.round(+pr.top)+'\r\n';
+  if(pr.speed!==''&&pr.speed!=null)head+='SPEED '+Math.max(1,Math.min(14,Math.round(+pr.speed)))+'\r\n';
+  if(pr.darkness!==''&&pr.darkness!=null)head+='DENSITY '+Math.max(0,Math.min(15,Math.round(+pr.darkness/2)))+'\r\n';
+  if(pr.mode==='peel')head+='SET PEEL ON\r\n';else if(pr.mode==='cut')head+='SET CUTTER 1\r\n';else if(pr.mode==='tear')head+='SET TEAR ON\r\n';
+  head+='CLS\r\n';
+  const bytesOf=(hex)=>{let t='';for(let i=0;i<hex.length;i+=2){const v=parseInt(hex.substr(i,2),16);t+=String.fromCharCode(invert?(~v)&0xFF:v);}return t;};
+  const bitmap=(x,y,r)=>'BITMAP '+x+','+y+','+r.bpr+','+(r.total/r.bpr)+',0,'+bytesOf(r.hex)+'\r\n';
+  const shapeCache=new Map();
+  const bodies=L.labels.map(parts=>{let b='';
+    for(const p of parts){
+      if(p.nat==='box'){b+=p.fill?'BAR '+p.x+','+p.y+','+p.w+','+p.h+'\r\n':'BOX '+p.x+','+p.y+','+(p.x+p.w)+','+(p.y+p.h)+','+Math.min(p.t,p.w,p.h)+'\r\n';continue;}
+      if(p.nat==='ellipse'){const k=[p.w,p.h,p.t,p.fill].join();
+        if(!shapeCache.has(k)){const pt=painter(p.el,'',L.dpi,0,null);shapeCache.set(k,pt?rasterize(pt.w,pt.h,0,pt.paint):null);}
+        const r=shapeCache.get(k);if(r)b+=bitmap(p.x+r.dx,p.y+r.dy,r);continue;}
+      b+=bitmap(p.x,p.y,p.gf||p.r);
+    }
+    return b;});
+  let out='';for(const {body,n} of mergeRuns(bodies))out+=head+body+'PRINT 1,'+n+'\r\n';
+  const data=new Uint8Array(out.length);for(let i=0;i<out.length;i++)data[i]=out.charCodeAt(i)&0xFF;
+  return data;
+}
+// 按所选指令语言生成：{data, ext, labels}
+async function buildCommands(list){const lang=cmdLang();
+  return lang==='tspl'?{data:await buildTSPL(list),ext:'prn',lang}:{data:await buildZPL(list),ext:'zpl',lang};}
 // ZPL 位图压缩（ZPL 手册「Alternative Data Compression Scheme」，所有斑马机通用）：
 //   G–Y=重复1–19次、g–y=20–380、z=400，可叠加；按行再用 ,(本行余下全0) !(全F) :(同上一行)
 // 文字位图多为空白行/重复行，通常可压到原来的 1/5～1/20，串口打印时尤其关键
@@ -1573,25 +1714,26 @@ function cropGF(r,cx,cy){
   return {total:nbpr*nrows,bpr:nbpr,hex};
 }
 async function exportZPL(){if(!await startJob())return;
-  try{const z=await buildZPL();const blob=new Blob([z],{type:'text/plain'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);
+  try{const c=await buildCommands();const blob=new Blob([c.data],{type:c.ext==='zpl'?'text/plain':'application/octet-stream'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.'+c.ext;a.click();URL.revokeObjectURL(a.href);
+    logJob('导出 '+c.lang.toUpperCase(),printList());
     pendingPrintJob=true;askAdvanceCounters();}
   catch(err){alert('导出失败：'+err.message);}
   finally{endJob();}}
 // 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延实际张数，下次接着编号不重号
 // 每次真正开始一次打印/导出才置位；同一作业被多个事件触发时只询问一次
 let pendingPrintJob=false;
-function askAdvanceCounters(){
+function askAdvanceCounters(done){
   const job=pendingPrintJob;pendingPrintJob=false;if(!job)return;
   const cs=elements.filter(e=>e.type==='counter'&&e.persist);if(!cs.length)return;
-  const list=printList();if(!list.length)return;
+  const list=Array.isArray(done)?done:printList();if(!list.length)return;
   if(!confirm('本次共 '+list.length+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
   cs.forEach(e=>{e.start=(+e.start||0)+Job.counterAdvance(e,list);});commit();renderEditor();render();
 }
-window.addEventListener('afterprint',()=>{askAdvanceCounters();endJob();});
+window.addEventListener('afterprint',()=>{if(jobNow)logJob('浏览器打印',printList());askAdvanceCounters();endJob();});
 $('#loadBtn').onclick=()=>$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
-  fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));}catch(err){alert('读取失败: '+err.message);}};fr.readAsText(f);};
+  fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));designName=f.name.replace(/\.json$/i,'');}catch(err){alert('读取失败: '+err.message);}e.target.value='';};fr.readAsText(f);};
 $('#themeBtn').onclick=()=>{const r=document.documentElement;
   const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
   r.setAttribute('data-theme',cur==='dark'?'light':'dark');};
@@ -1654,43 +1796,94 @@ async function doSilentPrint(){
   prnMsg('正在打印…',true);
   try{
     pendingPrintJob=true;printingAll=true;render();   // 静默打印不一定触发 beforeprint，显式全量渲染
-    let r;try{r=await window.labelPrinter.print(dev);}finally{printingAll=false;render();}
-    if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else{pendingPrintJob=false;prnMsg('打印失败：'+r.error,false);}
+    let r;try{r=await window.labelPrinter.print(dev,{pageSize:silentPageSize()});}finally{printingAll=false;render();}
+    if(r.ok){prnMsg('已发送到打印机：'+dev,true);logJob('静默打印',printList(),dev);askAdvanceCounters();}else{pendingPrintJob=false;prnMsg('打印失败：'+r.error,false);}
   }finally{endJob();}
 }
-function rawTarget(){const k=$('#rawKind').value,a=$('#rawAddr').value.trim();
-  return k==='tcp'?{kind:'tcp',host:a,port:+$('#rawPort').value||9100}:k==='share'?{kind:'share',name:a}:{kind:'com',port:a};}
-async function doSendZPL(){
-  if(!hasPrinter()){alert('「ZPL 直发」仅在桌面安装版可用；网页版请用「文件 → 导出 ZPL」。');return;}
-  if(!$('#rawAddr').value.trim()){prnMsg('请填写打印机 IP / 共享名 / 串口',false);return;}
-  if(!await startJob())return;
-  prnMsg('正在发送…',true);
+function rawTarget(){const k=$('#rawKind').value,a=$('#rawAddr').value.trim(),baud=$('#rawBaud').value;
+  return k==='tcp'?{kind:'tcp',host:a,port:+$('#rawPort').value||9100}:k==='spool'?{kind:'spool',name:$('#prnList').value}
+    :k==='share'?{kind:'share',name:a}:Object.assign({kind:'com',port:a},baud?{baud}:{});}
+function describeTarget(){const t=rawTarget();return t.kind==='tcp'?t.host+':'+t.port:t.kind==='com'?t.port+(t.baud?' @'+t.baud:''):t.name;}
+// 网络打印机发送前检查：缺纸 / 开盖等问题、设计 DPI 与打印机不符。返回 false 表示取消
+async function checkPrinterBeforeSend(){
+  if($('#rawKind').value!=='tcp')return true;
+  prnMsg('正在检测打印机…',true);
+  const r=await window.labelPrinter.status(rawTarget(),cmdLang());
+  if(!r.ok){prnMsg('读不到打印机状态（'+r.error+'），继续发送',true);return true;}
+  const st=r.status,dpi=+$('#dpi').value;
+  if(st.problems.length&&!confirm('打印机状态：'+st.problems.join('、')+'\n仍要发送吗？'))return false;
+  if(st.dpi&&st.dpi!==dpi&&!confirm('设计精度是 '+dpi+' dpi，打印机是 '+st.dpi+' dpi，打出来的尺寸会变成约 '+Math.round(dpi/st.dpi*100)+'%。\n建议把「精度 DPI」改为 '+st.dpi+'。仍要发送吗？'))return false;
+  return true;
+}
+// 大批量分批直发：每批单独生成、单独发送，可取消；失败后可从未发送的那张续打（沿用当时的日期 / 输入值）
+let sendCancel=false,resumeState=null;
+async function sendBatches(list){
+  const size=Math.max(1,Math.floor(+$('#zBatch').value||200)),target=rawTarget();
+  let sent=0;sendCancel=false;$('#rawCancel').style.display='';$('#rawResume').style.display='none';
   try{
-    const n=printList().length,r=await window.labelPrinter.sendRaw(rawTarget(),await buildZPL());
-    if(r.ok){prnMsg('已发送 '+n+' 张标签到打印机',true);pendingPrintJob=true;askAdvanceCounters();}else prnMsg(r.error,false);
+    for(let i=0;i<list.length;i+=size){
+      if(sendCancel){resumeState={list:list.slice(i),now:jobNow};prnMsg('已取消：已发送 '+sent+' / '+list.length+' 张',false);break;}
+      const part=list.slice(i,i+size);
+      prnMsg('正在发送 '+(i+1)+'–'+(i+part.length)+' / '+list.length+' 张…',true);
+      const r=await window.labelPrinter.sendRaw(target,(await buildCommands(part)).data);
+      if(!r.ok){resumeState={list:list.slice(i),now:jobNow};prnMsg('第 '+(i+1)+' 张起发送失败：'+r.error+'（已发送 '+sent+' 张，可「续打剩余」）',false);break;}
+      sent+=part.length;
+    }
+    if(sent===list.length){resumeState=null;prnMsg('已发送 '+sent+' 张标签到打印机',true);}
+  }finally{$('#rawCancel').style.display='none';$('#rawResume').style.display=resumeState?'':'none';}
+  return list.slice(0,sent);
+}
+async function doSendZPL(){
+  if(!hasPrinter()){alert('「指令直发」仅在桌面安装版可用；网页版请用「文件 → 导出打印机指令」。');return;}
+  const spool=$('#rawKind').value==='spool';
+  if(spool?!$('#prnList').value:!$('#rawAddr').value.trim()){prnMsg(spool?'请在上面选择系统打印机':'请填写打印机 IP / 共享名 / 串口',false);return;}
+  if(!await startJob())return;
+  try{
+    if(!(await checkPrinterBeforeSend()))return;
+    const done=await sendBatches(printList());
+    if(done.length){logJob(cmdLang().toUpperCase()+' 直发',done,describeTarget());pendingPrintJob=true;askAdvanceCounters(done);}
   }catch(err){prnMsg(err.message,false);}
   finally{endJob();}
+}
+// 续打：从未发送的那张开始
+async function doResume(){
+  if(!resumeState)return;
+  const st=resumeState;jobNow=st.now||new Date();
+  try{const done=await sendBatches(st.list);if(done.length){logJob(cmdLang().toUpperCase()+' 续打',done,describeTarget());pendingPrintJob=true;askAdvanceCounters(done);}}
+  catch(err){prnMsg(err.message,false);}
+  finally{endJob();}
+}
+async function doPrinterStatus(){
+  if($('#rawKind').value!=='tcp'){prnMsg('只有网络打印机能读取状态',false);return;}
+  if(!$('#rawAddr').value.trim()){prnMsg('请填写打印机 IP',false);return;}
+  prnMsg('正在检测…',true);
+  const r=await window.labelPrinter.status(rawTarget(),cmdLang());
+  if(!r.ok){prnMsg(r.error,false);return;}
+  const st=r.status;
+  prnMsg((st.ready?'打印机就绪':'打印机状态：'+st.problems.join('、'))+(st.model?'；'+st.model:'')+(st.dpi?'；'+st.dpi+' dpi'+(st.dpi!==+$('#dpi').value?'（与设计精度 '+$('#dpi').value+' 不符）':''):''),st.ready&&(!st.dpi||st.dpi===+$('#dpi').value));
 }
 if(hasPrinter()){
   $('#prnPanel').style.display='';
   const KEY='label.printer';let saved={};
   try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(e){}
-  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify({dev:$('#prnList').value,kind:$('#rawKind').value,addr:$('#rawAddr').value,port:$('#rawPort').value}));}catch(e){}};
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify({dev:$('#prnList').value,kind:$('#rawKind').value,addr:$('#rawAddr').value,port:$('#rawPort').value,baud:$('#rawBaud').value}));}catch(e){}};
   const syncRaw=()=>{const k=$('#rawKind').value;
+    $('#rawAddr').closest('label').style.display=k==='spool'?'none':'';
     $('#rawAddrLbl').textContent=k==='tcp'?'IP 地址':k==='share'?'共享打印机名':'串口';
     $('#rawAddr').placeholder=k==='tcp'?'192.168.1.50':k==='share'?'ZT410':'COM1';
-    $('#rawPortWrap').style.display=k==='tcp'?'':'none';};
+    $('#rawPortWrap').style.display=k==='tcp'?'':'none';$('#rawBaudWrap').style.display=k==='com'?'':'none';};
   const loadPrinters=async()=>{const r=await window.labelPrinter.list(),sel=$('#prnList');
     if(!r.ok){sel.innerHTML='<option value="">（读取失败）</option>';prnMsg(r.error,false);return;}
     sel.innerHTML=r.printers.length?r.printers.map(p=>`<option value="${esc(p.name)}">${esc(p.displayName)}${p.isDefault?'（默认）':''}</option>`).join(''):'<option value="">（未找到打印机）</option>';
     const want=saved.dev||(r.printers.find(p=>p.isDefault)||{}).name;
     if(want&&r.printers.some(p=>p.name===want))sel.value=want;};
-  if(saved.kind)$('#rawKind').value=saved.kind;if(saved.addr)$('#rawAddr').value=saved.addr;if(saved.port)$('#rawPort').value=saved.port;
+  if(saved.kind)$('#rawKind').value=saved.kind;if(saved.addr)$('#rawAddr').value=saved.addr;if(saved.port)$('#rawPort').value=saved.port;if(saved.baud)$('#rawBaud').value=saved.baud;
   syncRaw();loadPrinters();
   $('#prnRefresh').onclick=loadPrinters;
   $('#rawKind').onchange=()=>{syncRaw();save();};
-  $('#prnList').onchange=save;$('#rawAddr').oninput=save;$('#rawPort').oninput=save;
+  $('#prnList').onchange=save;$('#rawAddr').oninput=save;$('#rawPort').oninput=save;$('#rawBaud').onchange=save;
   $('#prnSilent').onclick=doSilentPrint;$('#rawSend').onclick=doSendZPL;
+  $('#prnStatus').onclick=doPrinterStatus;$('#rawCancel').onclick=()=>{sendCancel=true;};$('#rawResume').onclick=doResume;
 }
 
 /* ---------- 记录选择 / 数量字段 / 通用对话框 ---------- */
@@ -1745,6 +1938,68 @@ async function pickRecords(){
     draw();});
   if(r!=='ok')return;
   selectedRecs=cur.size===rows.length?null:cur;updateSelInfo();render();
+}
+
+/* ---------- 打印日志（追溯 / 补打） ---------- */
+let designName='未命名';
+const LOGKEY='label.printlog';
+function readLog(){try{return JSON.parse(localStorage.getItem(LOGKEY)||'[]')||[];}catch(e){return [];}}
+// 连续记录号压缩成区间：1-5,8,10-12
+function ranges(nums){const a=[...new Set(nums)].sort((x,y)=>x-y),out=[];
+  for(let i=0;i<a.length;){let j=i;while(j+1<a.length&&a[j+1]===a[j]+1)j++;out.push(i===j?String(a[i]):a[i]+'-'+a[j]);i=j+1;}return out.join(',');}
+// 每次打印 / 导出 / 直发成功后记一笔：时间、方式、目标、设计、张数、记录、流水号区间、输入值，以及所用数据（≤1000 条，可载入补打）
+function logJob(method,list,target){
+  if(!list||!list.length)return;
+  const recs=list.filter(e=>e.rec).map(e=>e.rec),serials={};
+  elements.filter(e=>e.type==='counter').forEach(c=>{serials[Job.counterName(c)]=Job.counterText(c,list[0])+(list.length>1?' – '+Job.counterText(c,list[list.length-1]):'');});
+  const usedRows=[...new Map(list.filter(e=>e.row).map(e=>[e.rec,e.row])).values()];
+  const inputs=Object.assign({},jobPrompts);vars.filter(v=>v.ask&&v.name).forEach(v=>{inputs[v.name]=varValue(v);});
+  const entry={t:fmtDate(new Date(),'YYYY-MM-DD HH:mm:ss'),method,target:target||'',design:designName,labels:list.length,
+    recs:ranges(recs),serials,prompts:inputs,rows:usedRows.length<=1000?usedRows:null};
+  const log=readLog();log.unshift(entry);
+  try{localStorage.setItem(LOGKEY,JSON.stringify(log.slice(0,500)));}
+  catch(e){entry.rows=null;try{localStorage.setItem(LOGKEY,JSON.stringify(log.slice(0,200)));}catch(e2){}}
+}
+async function showLog(){
+  const log=readLog();
+  const body=log.length?`<div style="max-height:52vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr><th style="text-align:left">时间</th><th>方式</th><th>张数</th><th style="text-align:left">设计 / 记录 / 流水号 / 输入</th><th></th></tr>`
+    +log.map((g,i)=>`<tr style="border-top:1px solid var(--line)"><td>${esc(g.t)}</td><td>${esc(g.method)}${g.target?'<br><span class="hint">'+esc(g.target)+'</span>':''}</td><td style="text-align:center">${+g.labels||0}</td>
+      <td>${esc(g.design)}${g.recs?'<br>记录 '+esc(g.recs):''}${Object.keys(g.serials||{}).map(k=>'<br>'+esc(k)+'：'+esc(g.serials[k])).join('')}${Object.keys(g.prompts||{}).length?'<br>'+Object.keys(g.prompts).map(k=>esc(k)+'='+esc(g.prompts[k])).join('，'):''}</td>
+      <td>${g.rows?`<button data-lg="${i}">载入数据</button>`:''}</td></tr>`).join('')+'</table></div>'
+    :'<p>还没有打印记录。</p>';
+  const r=await dialog('打印日志（最近 '+log.length+' 次）',body,[{id:'csv',label:'导出 CSV'},{id:'clear',label:'清空'},{id:null,label:'关闭',primary:true}],b=>{
+    b.querySelectorAll('[data-lg]').forEach(x=>x.onclick=()=>{const g=log[+x.dataset.lg];
+      $('#csv').value=XLSX.toTSV(g.rows);setRows(parseData($('#csv').value));
+      for(const [k,v] of Object.entries(g.prompts||{})){if(vars.some(d=>d.name===k))varVals[k]=v;else jobPrompts[k]=v;}saveVarVals();renderVars();render();
+      [...$('#dlgFt').querySelectorAll('button')].find(b=>b.className==='primary').click();
+      alert('已载入这次打印的 '+g.rows.length+' 条数据和输入值。流水号不会自动回退，补打同号请先调整流水号起始值。');});});
+  if(r==='csv'){const head=['时间','方式','目标','设计','张数','记录','流水号','输入'];
+    const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const csv='\uFEFF'+[head.join(',')].concat(log.map(g=>[g.t,g.method,g.target,g.design,g.labels,g.recs,
+      Object.keys(g.serials||{}).map(k=>k+':'+g.serials[k]).join(' '),Object.keys(g.prompts||{}).map(k=>k+'='+g.prompts[k]).join(' ')].map(q).join(','))).join('\r\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='print-log.csv';a.click();URL.revokeObjectURL(a.href);}
+  else if(r==='clear'&&confirm('清空全部打印日志？'))localStorage.removeItem(LOGKEY);
+}
+
+/* ---------- 车间模式（只打印） ----------
+   隐藏设计相关的面板和菜单，画布不能拖动编辑、快捷键不改设计；可设退出密码（只存 SHA-256） */
+async function sha256(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}catch(e){return 'plain:'+s;}}
+const shopOn=()=>document.body.classList.contains('shop');
+function setShop(on){document.body.classList.toggle('shop',on);setSelection([]);renderEditor();render();}
+async function toggleShop(){
+  let st={};try{st=JSON.parse(localStorage.getItem('label.shop')||'{}')||{};}catch(e){}
+  if(!shopOn()){
+    const pw=prompt('进入车间模式（只能载入设计、选数据、打印）。\n可设置退出密码，留空则不设：','');
+    if(pw===null)return;
+    st={on:true,hash:pw?await sha256(pw):''};
+  } else {
+    if(st.hash){const pw=prompt('输入退出密码：');if(pw===null)return;if((await sha256(pw))!==st.hash){alert('密码不对');return;}}
+    st={on:false};
+  }
+  try{localStorage.setItem('label.shop',JSON.stringify(st));}catch(e){}
+  setShop(st.on);
 }
 
 /* ---------- 变量：打印时输入 / 挑选列表 ---------- */
@@ -1876,7 +2131,8 @@ window.addEventListener('keydown',e=>{if(e.key==='Escape'&&varDlgDone)varDlgDone
 
 /* ---------- 启动 ---------- */
 try{const s=localStorage.getItem('label.autosave');if(s)applySnap(s);}catch(e){}
-renderVars();renderEditor();render();commit();
+syncPmode();renderVars();renderEditor();render();commit();
+try{if((JSON.parse(localStorage.getItem('label.shop')||'{}')||{}).on)setShop(true);}catch(e){}
 </script>
 </body>
 </html>

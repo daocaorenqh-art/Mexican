@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process';
 import pw from 'playwright';
 import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
-const { makeZip }=require('../helpers.cjs');
+const { makeZip, decodeBits }=require('../helpers.cjs');
+const ZPLmod=require('../../src/zpl.js');
 const { chromium } = pw;
 let pass=0,fail=0;const ok=(n,c,x='')=>{c?(pass++,console.log('  ✓',n,x)):(fail++,console.log('  ✗',n,x));};
 const b=await chromium.launch();const p=await b.newPage({viewport:{width:1400,height:1000}});
@@ -224,6 +225,162 @@ await p.evaluate(()=>{window.dispatchEvent(new Event('afterprint'));loadDesign({
 dg=await startPrint();
 ok('没有问题 → 不弹预检直接打印',!dg.open&&await p.evaluate(()=>window.__printed)===1,JSON.stringify(dg));
 await p.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
+
+console.log('\n[6] 打印方式：标签机 / 整页');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:50,h:30,dpi:203},elements:[{type:'text',x:2,y:2,size:3,content:'{品名}'}]});setRows(parseData('品名\n甲\n乙\n丙'));});
+const pg=()=>p.evaluate(()=>({css:document.getElementById('pageStyle').textContent,mode:document.querySelector('#pmode').value,
+  sheetVis:getComputedStyle(document.querySelector('#sheetOpts')).display!=='none',colsVis:getComputedStyle(document.querySelector('#cols').closest('label')).display!=='none',
+  slots:document.querySelectorAll('#preview .label.slot').length,labels:document.querySelectorAll('#preview .label:not(.slot)').length,pager:document.querySelector('#pager').textContent}));
+let g=await pg();
+ok('默认标签机模式：@page = 标签尺寸、无边距，整页选项隐藏',g.mode==='roll'&&g.css.includes('@page{size:50mm 30mm;margin:0}')&&g.css.includes('break-after:page')&&!g.sheetVis&&!g.colsVis,JSON.stringify(g));
+await p.evaluate(()=>{const s=(id,v)=>{const e=document.querySelector(id);e.value=v;e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input'));};
+  s('#pmode','sheet');s('#paper','A5');s('#mTop','10');s('#mLeft','6');s('#cols','2');s('#startPos','3');});
+g=await pg();
+ok('整页模式：纸张 A5、页边距 10/6mm',g.css.includes('@page{size:A5;margin:10mm 0 0 6mm}')&&g.sheetVis&&g.colsVis,g.css);
+ok('从第 3 个位置开始：前面空 2 个位、打印时不显示',g.slots===2&&g.labels===3&&g.css.includes('.label.slot{visibility:hidden'),JSON.stringify(g));
+ok('提示整页模式',g.pager.includes('整页模式'),g.pager);
+const saved=await p.evaluate(async()=>{let blob;const o=URL.createObjectURL;URL.createObjectURL=x=>{blob=x;return o(x);};document.querySelector('#saveBtn').click();URL.createObjectURL=o;return JSON.parse(await blob.text());});
+ok('保存的设计带打印方式与纸张',saved.label.pmode==='sheet'&&saved.label.paper==='A5'&&saved.label.mTop===10&&saved.label.mLeft===6,JSON.stringify(saved.label));
+await p.evaluate(()=>{undo();});
+ok('撤消可恢复上一步纸张设置',await p.evaluate(()=>document.querySelector('#mLeft').value)!=='6'||await p.evaluate(()=>document.querySelector('#cols').value)!=='2');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:40,h:20,dpi:203,cols:3,gapX:2,gapY:2},elements:[{type:'text',x:1,y:1,size:3,content:'旧'}]});});
+ok('旧设计设了「每行数量」→ 自动按整页模式',(await pg()).mode==='sheet');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'text',x:1,y:1,size:3,content:'旧'}]});});
+ok('旧设计未设「每行数量」→ 标签机模式',(await pg()).mode==='roll');
+const sps=await p.evaluate(async()=>{let got=null;window.labelPrinter={isDesktop:true,print:async(d,o)=>{got={d,o};return {ok:true};}};
+  const sel=document.querySelector('#prnList');sel.innerHTML='<option value="ZT410">ZT410</option>';sel.value='ZT410';window.confirm=()=>true;
+  await doSilentPrint();const a=got;
+  document.querySelector('#pmode').value='sheet';document.querySelector('#pmode').onchange();document.querySelector('#paper').value='A4';
+  await doSilentPrint();delete window.labelPrinter;return [a,got];});
+ok('静默打印传页面尺寸：标签机 = 40×20mm（微米）、整页 = A4',sps[0].o.pageSize.width===40000&&sps[0].o.pageSize.height===20000&&sps[1].o.pageSize==="A4",JSON.stringify(sps));
+
+console.log('\n[10] 打印机参数 / 相同标签合并');
+const setZ=(o)=>p.evaluate(o=>{for(const [k,v] of Object.entries(o)){const e=document.querySelector('#'+k);if(e.type==='checkbox')e.checked=v;else e.value=v;e.dispatchEvent(new Event('change'));}},o);
+await p.evaluate(()=>{loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'text',x:2,y:2,size:3,content:'固定'},{type:'box',x:1,y:1,w:38,h:18,border:0.3}]});
+  setRows(null);document.querySelector('#copies').value='3';});
+await setZ({zLang:'zpl',zDark:'',zSpeed:'',zMedia:'',zTrack:'',zMode:'',zTop:'',zLeft:''});
+let zz=await p.evaluate(()=>buildZPL());
+ok('参数留空：不输出任何打印机设置指令',!/~SD|\^PR|\^MT|\^MN|\^MM|\^LT|\^LS/.test(z),zz.slice(0,120));
+ok('3 份内容相同 → 1 个 ^XA + ^PQ3',(zz.match(/\^XA/g)||[]).length===1&&zz.includes('^PQ3'),zz.match(/\^PQ\d+/g));
+await setZ({zDark:'20',zSpeed:'4',zMedia:'transfer',zTrack:'mark',zMode:'cut',zTop:'5',zLeft:'-3'});
+zz=await p.evaluate(()=>buildZPL());
+ok('浓度 / 速度 / 热转印 / 黑标纸 / 切刀 / 偏移',zz.startsWith('~SD20')&&['^PR4','^MTT','^MNM','^MMC','^LT5','^LS-3'].every(c=>zz.includes(c)),zz.slice(0,160));
+await p.evaluate(()=>{elements.push({type:'counter',x:2,y:10,size:3,name:'SN',prefix:'',start:1,step:1,pad:3,every:1,per:'label',radix:'10',suffix:'',persist:false});render();});
+zz=await p.evaluate(()=>buildZPL());
+ok('每张流水号不同 → 不合并（3 个 ^XA）',(zz.match(/\^XA/g)||[]).length===3&&!zz.includes('^PQ3'));
+await p.reload();await p.waitForSelector('#preview .label');
+ok('打印机参数重启后保留',await p.evaluate(()=>document.querySelector('#zDark').value==='20'&&document.querySelector('#zTrack').value==='mark'));
+
+console.log('\n[11] TSPL（TSC / 佳博 / 芯烨）');
+await setZ({zLang:'tspl',zDark:'',zSpeed:'',zMedia:'',zTrack:'',zMode:'',zTop:'',zLeft:'',zGap:'',zInvert:true});
+await p.evaluate(()=>{loadDesign({v:1,label:{w:50,h:30,dpi:203},elements:[
+  {type:'qrcode',x:36,y:3,size:12,ecl:'M',content:'合格证 {品名}'},{type:'barcode',x:3,y:3,h:10,module:0.33,showText:true,content:'{SKU}'},
+  {type:'text',x:3,y:20,size:3,content:'品名：{品名}'},{type:'box',x:1,y:1,w:48,h:28,border:0.3},{type:'ellipse',x:40,y:20,w:6,h:6,border:0.3}]});
+  document.querySelector('#copies').value='2';setRows(parseData('品名,SKU\n衬衫,A100\n长裤,B200'));});
+const ts=await p.evaluate(async()=>{const c=await buildCommands();return {ext:c.ext,lang:c.lang,bytes:Array.from(c.data)};});
+const tl=ZPLmod.parseTSPL(Uint8Array.from(ts.bytes)),txt=Buffer.from(ts.bytes).toString('latin1');
+ok('导出 .prn（TSPL）',ts.ext==='prn'&&ts.lang==='tspl');
+ok('SIZE / GAP / CLS 头',txt.startsWith('SIZE 50 mm,30 mm\r\nGAP 2 mm,0 mm\r\n')&&txt.includes('CLS\r\n'),txt.slice(0,60));
+ok('2 条记录 × 2 份 → 2 张，各 PRINT 1,2',tl.length===2&&tl.every(l=>l.copies===2),JSON.stringify(tl.map(l=>l.copies)));
+ok('线框用 BOX，椭圆按位图',tl[0].boxes.length===1&&tl[0].bitmaps.length>=4,JSON.stringify({boxes:tl[0].boxes.length,bm:tl[0].bitmaps.length}));
+// 把 BITMAP 还原成整张标签点阵（反色：位 0 = 黑），再用 zxing-cpp 扫
+const W=Math.round(50*8),H=Math.round(30*8);
+async function scanTSPL(lab){const px=new Uint8Array(W*H);
+  for(const b of lab.bitmaps)for(let y=0;y<b.h;y++)for(let x=0;x<b.bpr*8;x++){const v=b.bytes[y*b.bpr+(x>>3)],bit=(v>>(7-(x&7)))&1;
+    if(!bit){const X=b.x+x,Y=b.y+y;if(X<W&&Y<H)px[Y*W+X]=1;}}
+  return (await decodeBits(W,H,(x,y)=>px[y*W+x],{scale:2})).map(r=>r.text).sort();}
+const sc=await scanTSPL(tl[1]);
+ok('TSPL 点阵扫码：QR（中文）与 Code128 都扫得出',sc.includes('合格证 长裤')&&sc.includes('B200'),JSON.stringify(sc));
+await setZ({zInvert:false});
+const tl2=ZPLmod.parseTSPL(Uint8Array.from(await p.evaluate(async()=>Array.from((await buildCommands()).data))));
+ok('取消反色 → 位图数据按位取反',tl2[0].bitmaps[0].bytes[0]===((~tl[0].bitmaps[0].bytes[0])&255));
+await setZ({zLang:'zpl',zInvert:true});
+
+console.log('\n[13] 打印日志 / 车间模式');
+await p.evaluate(()=>{localStorage.removeItem('label.printlog');window.showIssues=async()=>'go';
+  loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'text',x:2,y:2,size:3,content:'{品名} {?批次}'},
+    {type:'counter',x:2,y:10,size:3,name:'SN',prefix:'S',start:5,step:1,pad:3,every:1,per:'label',radix:'10',suffix:'',persist:false}]});
+  document.querySelector('#copies').value='1';setRows(parseData('品名\n甲\n乙\n丙\n丁'));jobPrompts={'批次':'B9'};
+  document.querySelector('#rFrom').value='2';document.querySelector('#rTo').value='3';render();});
+// {?批次} 会弹出打印时输入框：先发起打印，再点确定
+const okVarDlg=async()=>{await p.waitForTimeout(150);await p.evaluate(()=>{if(getComputedStyle(document.querySelector('#varDlg')).display!=='none')document.querySelector('#varDlgOk').click();});await p.waitForTimeout(150);};
+await p.evaluate(()=>{window.print=()=>{window.dispatchEvent(new Event('afterprint'));};doPrint();});
+await okVarDlg();
+const lg=await p.evaluate(()=>JSON.parse(localStorage.getItem('label.printlog')||'[]'));
+ok('打印后记日志：方式 / 张数 / 记录区间 / 流水号区间 / 输入值',lg.length===1&&lg[0].method==='浏览器打印'&&lg[0].labels===2&&lg[0].recs==='2-3'&&lg[0].serials.SN==='S005 – S006'&&lg[0].prompts['批次']==='B9',JSON.stringify(lg[0]&&{...lg[0],rows:undefined}));
+await p.evaluate(()=>{document.querySelector('#rFrom').value='1';document.querySelector('#rTo').value='0';setRows(null);showLog();});
+await p.waitForTimeout(100);
+ok('打印日志对话框列出记录',await p.evaluate(()=>document.querySelector('#dlgBody').innerText.includes('2-3')&&!!document.querySelector('#dlgBody [data-lg="0"]')));
+await p.evaluate(()=>{window.alert=()=>{};document.querySelector('#dlgBody [data-lg="0"]').click();});
+await p.waitForTimeout(100);
+ok('「载入数据」补打：恢复当次记录与输入值',await p.evaluate(()=>rows&&rows.length===2&&rows[0]['品名']==='乙'&&jobPrompts['批次']==='B9'));
+await p.evaluate(()=>{exportZPL();});await okVarDlg();
+const z0=await p.evaluate(()=>JSON.parse(localStorage.getItem('label.printlog'))[0].method);
+ok('导出指令也记日志',z0==='导出 ZPL',z0);
+// 车间模式（设退出密码）
+await p.evaluate(async()=>{window.prompt=()=>'1234';await toggleShop();});
+const shop=await p.evaluate(()=>({on:document.body.classList.contains('shop'),
+  elist:getComputedStyle(document.querySelector('#elist')).display,edit:getComputedStyle(document.querySelector('#menubar .menu.design')).display,
+  page:getComputedStyle(document.querySelector('.pagepanel')).display,print:getComputedStyle(document.querySelector('#printBtn')).display}));
+ok('车间模式：隐藏元素编辑 / 编辑与插入菜单 / 纸张设置，保留打印',shop.on&&shop.elist==='none'&&shop.edit==='none'&&shop.page==='none'&&shop.print!=='none',JSON.stringify(shop));
+const box=await p.locator('#preview .el').first().boundingBox();const x0=await p.evaluate(()=>elements[0].x);
+await p.mouse.move(box.x+3,box.y+3);await p.mouse.down();await p.mouse.move(box.x+60,box.y+30,{steps:4});await p.mouse.up();
+await p.keyboard.press('Delete');await p.keyboard.press('Control+z');
+ok('车间模式：拖不动、Delete / Ctrl+Z 不改设计',await p.evaluate(()=>elements.length)===2&&await p.evaluate(()=>elements[0].x)===x0);
+await p.reload();await p.waitForSelector('#preview .label');
+ok('重启后仍在车间模式',await p.evaluate(()=>document.body.classList.contains('shop')));
+await p.evaluate(async()=>{window.alert=()=>{};window.prompt=()=>'0000';await toggleShop();});
+ok('退出密码不对 → 不退出',await p.evaluate(()=>document.body.classList.contains('shop')));
+await p.evaluate(async()=>{window.prompt=()=>'1234';await toggleShop();});
+ok('密码正确 → 退出车间模式',await p.evaluate(()=>!document.body.classList.contains('shop')));
+
+console.log('\n[12] 直发：按打印机名 / 波特率 / 检测打印机 / 分批 / 取消 / 续打');
+{
+  const c2=await b.newContext();
+  await c2.addInitScript(()=>{window.__sends=[];window.__status={ready:false,problems:['缺纸'],dpi:300,model:'ZT410-300dpi'};
+    window.labelPrinter={isDesktop:true,
+      list:async()=>({ok:true,printers:[{name:'ZT410',displayName:'Zebra ZT410',isDefault:true}]}),
+      print:async()=>({ok:true}),
+      status:async(t,lang)=>({ok:true,status:window.__status}),
+      sendRaw:async(t,data)=>{window.__sends.push({t,n:(String(data).match(/\^XA/g)||[]).length});
+        if(window.__failAt&&window.__sends.length===window.__failAt)return {ok:false,error:'连接断开'};
+        if(window.__cancelAfter&&window.__sends.length===window.__cancelAfter)sendCancel=true;   // 页面脚本里的 let 变量，按名字赋值
+        return {ok:true};}};});
+  const q=await c2.newPage();const errs2=[];q.on('pageerror',e=>errs2.push(e.message));
+  await q.goto(APP);await q.waitForSelector('#preview .label');await q.waitForTimeout(100);
+  const set=(id,v)=>q.evaluate(([id,v])=>{const e=document.querySelector(id);e.value=v;e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input'));},[id,v]);
+  await q.evaluate(()=>{window.showIssues=async()=>'go';window.confirm=()=>true;localStorage.removeItem('label.printlog');
+    loadDesign({v:1,label:{w:40,h:20,dpi:203},elements:[{type:'counter',x:2,y:2,size:3,name:'SN',prefix:'',start:1,step:1,pad:3,every:1,per:'label',radix:'10',suffix:'',persist:false}]});
+    document.querySelector('#copies').value='5';render();});
+  await set('#rawKind','spool');
+  const sp=await q.evaluate(async()=>{__sends.length=0;await doSendZPL();return {t:__sends[0]&&__sends[0].t,addrHidden:getComputedStyle(document.querySelector('#rawAddr').closest('label')).display==='none'};});
+  ok('按打印机名直发：目标为所选系统打印机，地址框隐藏',JSON.stringify(sp.t)==='{"kind":"spool","name":"ZT410"}'&&sp.addrHidden,JSON.stringify(sp));
+  await set('#rawKind','com');await set('#rawAddr','COM3');await set('#rawBaud','115200');
+  const cm=await q.evaluate(async()=>{__sends.length=0;await doSendZPL();return {t:__sends[0].t,vis:getComputedStyle(document.querySelector('#rawBaudWrap')).display!=='none'};});
+  ok('串口带波特率',JSON.stringify(cm.t)==='{"kind":"com","port":"COM3","baud":"115200"}'&&cm.vis,JSON.stringify(cm));
+  await set('#rawKind','tcp');await set('#rawAddr','10.0.0.9');
+  const st=await q.evaluate(async()=>{const asks=[];window.confirm=m=>{asks.push(m);return false;};__sends.length=0;await doSendZPL();window.confirm=()=>true;return {asks,sent:__sends.length};});
+  ok('网络打印机发送前检测：缺纸时询问，取消则不发',st.sent===0&&st.asks.length===1&&st.asks[0].includes('缺纸'),JSON.stringify(st));
+  const dp=await q.evaluate(async()=>{__status={ready:true,problems:[],dpi:300,model:'ZT410'};const asks=[];window.confirm=m=>{asks.push(m);return false;};__sends.length=0;await doSendZPL();window.confirm=()=>true;return {asks,sent:__sends.length};});
+  ok('设计 203 dpi、打印机 300 dpi → 提示尺寸会变',dp.sent===0&&dp.asks[0].includes('300 dpi')&&dp.asks[0].includes('68%'),JSON.stringify(dp));
+  await q.evaluate(()=>{__status={ready:true,problems:[],dpi:203,model:'ZT410'};});
+  await set('#zBatch','2');
+  const bt=await q.evaluate(async()=>{__sends.length=0;await doSendZPL();return {n:__sends.map(x=>x.n),msg:document.querySelector('#prnMsg').textContent};});
+  ok('5 张按每批 2 张分 3 次发送',JSON.stringify(bt.n)==='[2,2,1]'&&bt.msg.includes('已发送 5 张'),JSON.stringify(bt));
+  const cc=await q.evaluate(async()=>{__sends.length=0;window.__cancelAfter=1;await doSendZPL();window.__cancelAfter=0;
+    return {n:__sends.length,msg:document.querySelector('#prnMsg').textContent,resume:getComputedStyle(document.querySelector('#rawResume')).display!=='none',left:resumeState&&resumeState.list.length};});
+  ok('发送中取消：已发 2 张，可续打剩余 3 张',cc.n===1&&cc.msg.includes('已取消')&&cc.resume&&cc.left===3,JSON.stringify(cc));
+  const rs=await q.evaluate(async()=>{__sends.length=0;await doResume();const lg=JSON.parse(localStorage.getItem('label.printlog')||'[]');
+    return {n:__sends.map(x=>x.n),resume:getComputedStyle(document.querySelector('#rawResume')).display!=='none',log:lg[0]&&[lg[0].method,lg[0].labels,lg[0].serials.SN]};});
+  ok('续打：发剩余 3 张（流水号接着 003–005），并记日志',JSON.stringify(rs.n)==='[2,1]'&&!rs.resume&&rs.log[0].includes('续打')&&rs.log[1]===3&&rs.log[2]==='003 – 005',JSON.stringify(rs));
+  const fl=await q.evaluate(async()=>{__sends.length=0;window.__failAt=2;await doSendZPL();window.__failAt=0;
+    return {msg:document.querySelector('#prnMsg').textContent,left:resumeState&&resumeState.list.length};});
+  ok('第二批失败：提示可续打，剩余 3 张',fl.msg.includes('续打剩余')&&fl.left===3,JSON.stringify(fl));
+  const ds=await q.evaluate(async()=>{__status={ready:false,problems:['开盖'],dpi:203,model:'ZT410'};await doPrinterStatus();return document.querySelector('#prnMsg').textContent;});
+  ok('「检测打印机」显示状态与型号',ds.includes('开盖')&&ds.includes('ZT410'),ds);
+  ok('直发测试无 JS 错误',errs2.length===0,errs2.join(';'));
+  await c2.close();
+}
 
 ok('全程无 JS 错误',errors.length===0,errors.join(';'));
 console.log(`\n==== 移植功能验收：通过 ${pass} / 失败 ${fail} ====`);
