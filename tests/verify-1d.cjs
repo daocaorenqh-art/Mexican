@@ -85,6 +85,29 @@ const cpp = async (bits, opt) => {
   throws('Code128 中文被拒绝', () => B.encode1D('barcode', '合格证'), 'ASCII');
   throws('Code128 空内容被拒绝', () => B.encode1D('barcode', ''), '为空');
   throws('Code39 不支持的字符被拒绝', () => B.encode1D('code39', 'A_B'), 'Code39');
-  check('BARCODE_1D 列表', B.BARCODE_1D.length === 10);
+  // EAN / UPC 附加码：zxing-cpp 读附加码时把它接在主码后面（空格分隔）
+  for (const [type, input, main, add] of [['ean13', '9771234567003+02', '9771234567003', '02'], ['ean13', '978711512345+52800', '9787115123459', '52800'],
+    ['upca', '03600029145+12', '036000291452', '12'], ['ean8', '1234567+00', '12345670', '00'], ['upce', '0123456+99999', '01234565', '99999'],
+    ['ean13', '6925253841665 + 07', '6925253841665', '07']]) {
+    const r = B.encode1D(type, input);
+    check(`${type} "${input}" 主码文字 / 附加码`, r.text === main && r.addon && r.addon.text === add && r.addon.from === r.mainLen + B.ADDON.GAP, JSON.stringify([r.text, r.addon]));
+    const c = await cpp(r.bits, { eanAddOnSymbol: 'Require' });
+    let got = c && c.text.replace(/\s/g, '');
+    if (type === 'upca' && got && got.length === 13 + add.length && got[0] === '0') got = got.slice(1);
+    if (type === 'upce' && got && got.startsWith('0' + B.encode1D('upce', main).upca)) got = main + got.slice(13);
+    eq(`${type} "${input}" zxing-cpp 读出主码 + 附加码`, got, main + add);
+  }
+  throws('附加码位数不对被拒绝', () => B.encode1D('ean13', '9771234567003+123'), '2 位或 5 位');
+  throws('附加码含字母被拒绝', () => B.encode1D('ean13', '9771234567003+AB'), '2 位或 5 位');
+  // ITF-14：补 / 核对 GS1 校验位
+  for (const [input, want] of [['1069252538416', null], ['10692525384160', '10692525384160'], ['0 0012345 67890 5', '00012345678905']]) {
+    const r = B.encode1D('itf14', input), w = want || r.text;
+    check(`ITF-14 "${input}" 14 位且校验位正确`, r.text.length === 14 && +r.text[13] === B.GS1.check(r.text.slice(0, 13)), r.text);
+    eq(`ITF-14 "${input}" zxing-cpp`, ((await cpp(r.bits)) || {}).text, w);
+    eq(`ITF-14 "${input}" ZXing`, zxing1d(r.bits), w);
+  }
+  throws('ITF-14 校验位错被拒绝', () => B.encode1D('itf14', '10692525384161'), '校验位');
+  throws('ITF-14 位数不对被拒绝', () => B.encode1D('itf14', '123456'), '13 或 14 位');
+  check('BARCODE_1D 列表', B.BARCODE_1D.length === 11);
   done();
 })();

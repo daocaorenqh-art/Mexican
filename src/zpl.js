@@ -155,13 +155,17 @@ function labelItems(o,e,ctx,env){
       }
       else if(B.BARCODE_1D.includes(t)){
         const res=B.encode1D(t,text),md=Job.moduleDots(el.module,dpi),hd=Job.dots(el.h,dpi);
-        if(lang==='zpl'&&opt.barcodes==='native'&&isRightAngle(rot)&&NATIVE_1D.includes(t)){
+        if(lang==='zpl'&&opt.barcodes==='native'&&isRightAngle(rot)&&NATIVE_1D.includes(t)&&!res.addon){
           items.push({k:'native',t,el,res,x,y,rot,md,hd});continue;}
         let bm=barsBitmap(res.bits,md,hd);
+        // ITF-14 保护框（与界面 barcodeGeometry 相同：粗 BEARER.t 模块，框内左右 BEARER.quiet 模块静区）
+        if(t==='itf14'&&(el.bearer==='frame'||el.bearer==='tb')){const T=B.BEARER.t*md,ox=T+B.BEARER.quiet*md,f=Bitmap(bm.w+ox*2,hd+T*2);
+          blit(f,bm,ox,T);fillRect(f,0,0,f.w,T);fillRect(f,0,hd+T,f.w,T);
+          if(el.bearer==='frame'){fillRect(f,0,T,T,hd);fillRect(f,f.w-T,T,T,hd);}bm=f;}
         if(el.showText){
-          if(R.text){const hri=R.text(res.text,{type:'hri',size:2.7,font:'monospace',bold:false},dpi,0).bm;
-            const all=Bitmap(Math.max(bm.w,hri.w),hd+Job.dots(0.3,dpi)+hri.h);blit(all,bm,0,0);
-            blit(all,hri,Math.max(0,Math.round((bm.w-hri.w)/2)),hd+Job.dots(0.3,dpi));bm=all;}
+          if(R.text){const hri=R.text(res.text+(res.addon?' '+res.addon.text:''),{type:'hri',size:2.7,font:'monospace',bold:false},dpi,0).bm;
+            const all=Bitmap(Math.max(bm.w,hri.w),bm.h+Job.dots(0.3,dpi)+hri.h);blit(all,bm,0,0);
+            blit(all,hri,Math.max(0,Math.round((bm.w-hri.w)/2)),bm.h+Job.dots(0.3,dpi));bm=all;}
           else warn('条码下方文字需要在界面中导出');
         }
         place(x,y,bm,rot);

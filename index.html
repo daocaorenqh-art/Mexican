@@ -179,6 +179,7 @@
     <a data-ins="code93">条码 Code93</a>
     <a data-ins="codabar">条码 Codabar</a>
     <a data-ins="itf">条码 ITF-25</a>
+    <a data-ins="itf14">条码 ITF-14（箱码）</a>
     <a data-ins="qrcode">二维码 QR</a>
     <a data-ins="datamatrix">二维码 DataMatrix</a>
     <a data-ins="gs1dm">二维码 GS1 DataMatrix</a>
@@ -331,6 +332,7 @@
         <button data-add="code93">+ Code93</button>
         <button data-add="codabar">+ Codabar</button>
         <button data-add="itf">+ ITF-25</button>
+        <button data-add="itf14">+ ITF-14</button>
         <button data-add="qrcode">+ 二维码</button>
         <button data-add="datamatrix">+ DataMatrix</button>
         <button data-add="pdf417">+ PDF417</button>
@@ -542,19 +544,22 @@ function dpmmOf(dpi){return {203:8,300:12,600:24}[+dpi]||(+dpi||203)/25.4;}
 // 一维条码几何：给定模块宽 m、条高 bh、字高 fs（任意同一单位），返回要画的矩形与文字。
 // 预览和 ZPL 栅格化都调用它，保证两边完全一致。EAN-13/UPC-A/EAN-8 按 GS1 标准排版：
 // 护线下延、数字分组居中在左右两半下方，EAN-13 首位数字放在起始护线左侧，UPC-A 首末位放在两侧。
-function barcodeGeometry(type,res,m,bh,fs,showText){
-  const bits=res.bits,txt=String(res.text||'');
+function barcodeGeometry(type,res,m,bh,fs,showText,bearer){
+  const bits=res.bits,txt=String(res.text||''),ad=res.addon,n0=res.mainLen||bits.length;   // n0：主码模块数（不含附加码）
   const isEAN=type==='ean13'||type==='ean8'||type==='upca'||type==='upce';
   const q=type==='ean13'||type==='upca'||type==='upce'?8:0;   // 左侧留给首位数字的模块数
   const qr=type==='upca'||type==='upce'?8:0;                 // UPC-A / UPC-E 右侧留给末位数字
   const ext=isEAN&&showText?Math.round(fs*0.55/m):0;     // 护线下延的模块数
   const guard=new Set();
-  if(type==='upce'){const n=bits.length;[0,1,2].forEach(i=>guard.add(i));for(let i=n-6;i<n;i++)guard.add(i);}   // UPC-E 无中护线，终止符 010101
-  else if(isEAN){const n=bits.length;[0,1,2,n-3,n-2,n-1].forEach(i=>guard.add(i));
+  if(type==='upce'){const n=n0;[0,1,2].forEach(i=>guard.add(i));for(let i=n-6;i<n;i++)guard.add(i);}   // UPC-E 无中护线，终止符 010101
+  else if(isEAN){const n=n0;[0,1,2,n-3,n-2,n-1].forEach(i=>guard.add(i));
     const mid=Math.floor(n/2);for(let i=mid-2;i<=mid+2;i++)guard.add(i);
     if(type==='upca'){for(let i=3;i<10;i++)guard.add(i);for(let i=n-10;i<n-3;i++)guard.add(i);}}  // UPC-A 首末字符条也下延
+  // 附加码：条比主码短，上方留出一行写附加码数字，下端与护线齐
+  const adTop=ad&&showText?fs*1.2:0;
   const rects=[];
   for(let i=0;i<bits.length;){if(bits[i]!=='1'){i++;continue;}let j=i;while(bits[j]==='1')j++;
+    if(ad&&i>=ad.from){rects.push([(q+i)*m,adTop,(j-i)*m,bh+ext*m-adTop]);i=j;continue;}
     let k=i;while(k<j){const g=guard.has(k);let e=k;while(e<j&&guard.has(e)===g)e++;
       rects.push([(q+k)*m,0,(e-k)*m,bh+(g?ext*m:0)]);k=e;}i=j;}
   const texts=[],W=(q+bits.length+qr)*m,ty=bh+Math.max(1,m*0.6);
@@ -574,10 +579,16 @@ function barcodeGeometry(type,res,m,bh,fs,showText){
     }else if(type==='upce'&&txt.length===8){
       texts.push([txt[0],q*m/2,ty,0.75]);
       for(let i=0;i<6;i++)texts.push([txt[1+i],(q+3+7*i+3.5)*m,ty]);
-      texts.push([txt[7],(q+bits.length+qr/2)*m,ty,0.75]);
-    }else texts.push([txt,W/2,ty]);
+      texts.push([txt[7],(q+n0+qr/2)*m,ty,0.75]);
+    }else texts.push([txt,(bearer?W:(q+n0)*m)/2,ty]);
+    if(ad)texts.push([ad.text,(q+ad.from+(bits.length-ad.from)/2)*m,0]);
   }
-  return {w:W,h:bh+(showText?Math.max(ty-bh+fs*1.15,ext*m):0),rects,texts,fs};
+  const g={w:W,h:bh+(showText?Math.max(ty-bh+fs*1.15,ext*m):0),rects,texts,fs};
+  // ITF-14 保护框：全框（frame）或上下两条（tb），粗 BEARER.t 模块，框内左右留 BEARER.quiet 模块静区
+  if(bearer==='frame'||bearer==='tb'){const t=BEARER.t*m,ox=t+BEARER.quiet*m,bw=W+ox*2,bh2=bh+t*2;
+    g.rects=rects.map(r=>[r[0]+ox,r[1]+t,r[2],r[3]]).concat([[0,0,bw,t],[0,bh+t,bw,t]],bearer==='frame'?[[0,t,t,bh],[bw-t,t,t,bh]]:[]);
+    g.texts=texts.map(x=>[x[0],x[1]+ox,x[2]+t*2,x[3]]);g.w=bw;g.h=g.h+t*2;}
+  return g;
 }
 // HRI 字高：随模块宽缩放，避免小码时数字挤在一起（上限 2.7mm）
 const hriMM=el=>Math.min(2.7,Math.max(1.2,9*(+el.module||0.33)));
@@ -650,7 +661,7 @@ function renderLabel(e,idx){
       }
       else if(BARCODE_1D.includes(el.type)){
         const enc=encode1D(el.type,text);
-        const gm=barcodeGeometry(el.type,enc,snapModulePx(el.module),el.h*PXMM,hriMM(el)*PXMM,el.showText);
+        const gm=barcodeGeometry(el.type,enc,snapModulePx(el.module),el.h*PXMM,hriMM(el)*PXMM,el.showText,el.type==='itf14'&&el.bearer);
         if(el.bg)node.style.background=el.bg;
         const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),col=el.color||'#000';
         svg.setAttribute('width',gm.w);svg.setAttribute('height',gm.h);svg.setAttribute('shape-rendering','crispEdges');
@@ -774,18 +785,19 @@ const FIELDS={
     ['shape','形状','sel',['平直','上拱','下弯','波浪']],['spacing','字距(mm)','num'],['stroke','描边宽(mm)','num'],['shadow','阴影偏移(mm)','num'],
     ['hollow','空心字','bool'],['bold','加粗','bool'],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei']],['rot','旋转°','num']],
   barcode:BC('内容'),
-  ean13:BC('内容(12/13位数字)'),
-  ean8:BC('内容(7/8位数字)'),
-  upca:BC('内容(11/12位数字)'),
+  ean13:BC('内容(12/13位数字；附加码接在 + 后，如 9771234567003+02)'),
+  ean8:BC('内容(7/8位数字；可加 +2 位或 +5 位附加码)'),
+  upca:BC('内容(11/12位数字；可加 +2 位或 +5 位附加码)'),
   code39:BC('内容(字母/数字)'),
   itf:BC('内容(数字,奇数自动补0)'),
+  itf14:[...BC('内容(13 位自动补校验位，或 14 位)'),['bearer','保护框','sel',[['frame','全框'],['tb','上下两条'],['','无']]]],
   qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['ecl','纠错等级','sel',['L','M','Q','H']],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   datamatrix:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   pdf417:[['content','内容（中文按 UTF-8）','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','宽度(mm)','num'],
     ['ecl','纠错等级','sel',[['','自动（按数据量）'],['0','0'],['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8']]],['cols','数据列数（0=自动）','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   gs1dm:[['content','GS1 内容，如 (01)06925253841665(17)261020(10){批号}','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   gs1128:BC('GS1 内容，如 (01)06925253841665(17)261020(10){批号}'),
-  upce:BC('内容(6/7/8位数字，首位 0 或 1)'),
+  upce:BC('内容(6/7/8位数字，首位 0 或 1；可加 +附加码)'),
   code93:BC('内容(ASCII)'),
   codabar:BC('内容(数字 -$:/.+，可带起止符 A–D)'),
   counter:[['name','名称（其他元素用 {#名称} 引用）','text'],['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['every','每几张/条递增','num'],['suffix','后缀','text'],
@@ -799,7 +811,7 @@ const FIELDS={
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',gs1dm:'GS1 DataMatrix',pdf417:'PDF417',gs1128:'GS1-128',upce:'UPC-E',code93:'Code93',codabar:'Codabar',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',itf14:'ITF-14',qrcode:'二维码',datamatrix:'DataMatrix',gs1dm:'GS1 DataMatrix',pdf417:'PDF417',gs1128:'GS1-128',upce:'UPC-E',code93:'Code93',codabar:'Codabar',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   syncSel();
@@ -854,6 +866,7 @@ const DEFAULTS={
   upca:{type:'upca',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'03600029145'},
   code39:{type:'code39',x:3,y:12,h:12,module:0.3,showText:true,color:'#000000',bg:'',rot:0,content:'CODE39'},
   itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567890'},
+  itf14:{type:'itf14',x:3,y:3,h:12,module:0.5,showText:true,bearer:'frame',color:'#000000',bg:'',rot:0,content:'1069252538416'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,ecl:'M',color:'#000000',bg:'',rot:0,content:'https://'},
   datamatrix:{type:'datamatrix',x:3,y:3,size:12,color:'#000000',bg:'',rot:0,content:'DM-0001'},
   pdf417:{type:'pdf417',x:3,y:3,size:40,ecl:'',cols:0,color:'#000000',bg:'',rot:0,content:'PDF417-0001'},
@@ -1170,7 +1183,7 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 添加对象向导 ---------- */
 const WZ={step:0,type:'text',source:'const',value:''};
-const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['gs1128','条码 GS1-128'],['upce','条码 UPC-E'],['code93','条码 Code93'],['codabar','条码 Codabar'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['gs1dm','GS1 DataMatrix'],['pdf417','PDF417'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['itf14','条码 ITF-14（箱码）'],['gs1128','条码 GS1-128'],['upce','条码 UPC-E'],['code93','条码 Code93'],['codabar','条码 Codabar'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['gs1dm','GS1 DataMatrix'],['pdf417','PDF417'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
 const wzHasData=t=>['text','para','rich','wordart',...BARCODE_1D,...BARCODE_2D].includes(t);
 function wzFields(){const r=parseData($('#csv').value);
   const fs=r&&r.length?Object.keys(r[0]):rows&&rows.length?Object.keys(rows[0]):[];
@@ -1365,9 +1378,9 @@ function painter(el,text,dpi,idx,img){
         if(el.type==='box'){if(el.fill)g.rect(0,0,w,h);else g.rect(t/2,t/2,w-t,h-t);}
         else{if(el.fill)g.ellipse(w/2,h/2,w/2,h/2,0,0,Math.PI*2);else g.ellipse(w/2,h/2,Math.max(0,(w-t)/2),Math.max(0,(h-t)/2),0,0,Math.PI*2);}
         if(el.fill)g.fill();else{g.lineWidth=t;g.stroke();}}};}
-    case 'barcode':case 'gs1128':case 'ean13':case 'ean8':case 'upca':case 'upce':case 'code39':case 'code93':case 'codabar':case 'itf':{
+    case 'barcode':case 'gs1128':case 'ean13':case 'ean8':case 'upca':case 'upce':case 'code39':case 'code93':case 'codabar':case 'itf':case 'itf14':{
       const enc=encode1D(el.type,text);
-      const gm=barcodeGeometry(el.type,enc,moduleDots(el.module,dpi),Math.round(D(el.h)),D(hriMM(el)),el.showText);
+      const gm=barcodeGeometry(el.type,enc,moduleDots(el.module,dpi),Math.round(D(el.h)),D(hriMM(el)),el.showText,el.type==='itf14'&&el.bearer);
       return {w:gm.w,h:gm.h,paint:g=>{gm.rects.forEach(r=>g.fillRect(r[0],r[1],r[2],r[3]));
         g.textAlign='center';g.textBaseline='hanging';
         gm.texts.forEach(([t,cx,ty,sc])=>{g.font=gm.fs*(sc||1)+'px monospace';g.fillText(t,cx,ty);});}};}

@@ -99,11 +99,14 @@ function effectiveSize(el,text,measure){const size=+el.size||0,fw=+el.fitW||0;
   if(!fw||!size||!text)return size;
   const w=Math.max(...String(text).split('\n').map(l=>measure?measure(l,el):estTextW(l,size)));
   return w>fw?Math.max(+el.minSize||1,size*fw/w):size;}
+const hasBearer=el=>el.type==='itf14'&&(el.bearer==='frame'||el.bearer==='tb');
 // 元素未旋转时的宽高（mm）；enc 为缓存的编码结果
 function elementSize(el,text,dpi,enc,measure){
   const t=el.type;
   if(B.BARCODE_1D.includes(t)){const r=enc();const mm=moduleDots(el.module,dpi)*25.4/dpi;
-    return {w:r.bits.length*mm,h:(+el.h||0)+(el.showText?HRI_MM:0)};}
+    let w=r.bits.length*mm,h=(+el.h||0)+(el.showText?HRI_MM:0);
+    if(hasBearer(el)){w+=2*(B.BEARER.t+B.BEARER.quiet)*mm;h+=2*B.BEARER.t*mm;}   // ITF-14 保护框及框内静区
+    return {w,h};}
   if(B.BARCODE_2D.includes(t)){const m=enc(),w=m.w||m.size,h=m.h||m.size,k=matrixModuleDots(el.size,w,dpi)*25.4/dpi;return {w:w*k,h:h*k};}   // 边长（PDF417 为宽）按整点模块取整
   if(t==='text'||t==='counter'||t==='date'){const lines=String(text).split('\n'),sz=effectiveSize(el,text,measure),e2=Object.assign({},el,{size:sz});
     const w=Math.max(...lines.map(l=>measure?measure(l,e2):estTextW(l,sz)));return {w,h:lines.length*sz};}
@@ -149,7 +152,7 @@ function preflight(o){
       const tol=0.3;
       if(bx.x0<-tol||bx.y0<-tol||bx.x1>W+tol||bx.y1>H+tol)add(warnings,'超出标签范围（约 '+bx.x1.toFixed(1)+'×'+bx.y1.toFixed(1)+'mm，标签 '+W+'×'+H+'mm）');
       if(!(+el.rot)){
-        if(B.BARCODE_1D.includes(el.type)){const q=10*moduleDots(el.module,dpi)*25.4/dpi;
+        if(B.BARCODE_1D.includes(el.type)&&!hasBearer(el)){const q=10*moduleDots(el.module,dpi)*25.4/dpi;   // 带保护框时静区在框内
           if((+el.x||0)<q-0.05||bx.x1>W-q+0.05)add(warnings,'一维码左右静区不足 10 个模块（约 '+q.toFixed(1)+'mm），可能扫不出');}
         if(B.BARCODE_2D.includes(el.type)){const m=encode(el,text),mw=m.w||m.size,md=matrixModuleDots(el.size,mw,dpi);
           if(dots(el.size,dpi)/mw<1)add(warnings,'码图'+(el.type==='pdf417'?'宽度':'边长')+'太小：每个模块不足 1 个打印点，实际会放大到 '+(mw*md*25.4/dpi).toFixed(1)+'mm');

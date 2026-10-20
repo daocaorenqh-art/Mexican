@@ -318,6 +318,37 @@ const ITF=(()=>{
   return {modules};
 })();
 
+/* ---------- EAN / UPC 附加码（2 位 / 5 位，期刊、图书价格等） ----------
+   内容写成「主码+附加码」，如 9771234567003+02、9787115123456+52800。
+   主码与附加码之间空 9 个模块（标准 7–12）；附加码 = 起始 1011 + 各位数字（L/G 奇偶由数值决定），位间分隔 01 */
+const ADDON=(()=>{
+  const L=EANLR.L,G=["0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111"];
+  const P2=["LL","LG","GL","GG"],P5=["GGLLL","GLGLL","GLLGL","GLLLG","LGGLL","LLGGL","LLLGG","LGLGL","LGLLG","LLGLG"];
+  const GAP=9;
+  function bits(d){
+    const par=d.length===2?P2[(+d)%4]:P5[(3*(+d[0]+ +d[2]+ +d[4])+9*(+d[1]+ +d[3]))%10];
+    let s='1011';for(let i=0;i<d.length;i++){if(i)s+='01';s+=(par[i]==='L'?L:G)[+d[i]];}
+    return s;}
+  // 拆出附加码：返回 [主码, 附加码或 '']
+  function split(raw){const t=String(raw==null?'':raw);const i=t.lastIndexOf('+');if(i<0)return [t,''];
+    const a=t.slice(i+1).replace(/\s/g,'');
+    if(!/^(\d{2}|\d{5})$/.test(a))throw new Error('附加码需为 2 位或 5 位数字（收到 "'+t.slice(i+1)+'"）');
+    return [t.slice(0,i),a];}
+  // 给主码结果接上附加码：bits 连在一起（便于各输出路径直接画），addon 记下附加码起点供界面画短条和上方数字
+  function attach(res,a){if(!a)return res;const mainLen=res.bits.length;
+    return Object.assign({},res,{bits:res.bits+'0'.repeat(GAP)+bits(a),mainLen,addon:{from:mainLen+GAP,text:a}});}
+  return {bits,split,attach,GAP};
+})();
+
+/* ---------- ITF-14（箱码，GTIN-14 用交叉 25 码）----------
+   13 位自动补 GS1 校验位，14 位核对校验位。保护框（bearer bar）由界面按元素设置画：全框或上下两条，
+   粗 BEARER.t 个模块，框内左右各留 BEARER.quiet 个模块静区 */
+const BEARER={t:3,quiet:10};
+const ITF14={modules(raw){let d=digitsOf(raw,'ITF-14');
+  if(d.length===13)d+=gs1Check(d);else if(d.length===14)checkGiven(d,gs1Check(d.slice(0,13)),'ITF-14');
+  else throw new Error('ITF-14 需要 13 或 14 位数字（收到 '+d.length+' 位）');
+  return {bits:ITF.modules(d).bits,text:d};}};
+
 /* ---------- GS1 应用标识符（AI） ----------
    输入写法：(01)06925253841665(17)261020(10)B26。校验 AI 格式、长度、GTIN/SSCC 校验位、日期；
    生成条码数据（可变长 AI 后加 FNC1 分隔）和人眼可读文字。 */
@@ -545,18 +576,17 @@ const PDF417=(()=>{
 })();
 
 // 统一入口：一维码类型 → {bits,text}；预览、预检、ZPL 共用，保证三处数据一致
-const BARCODE_1D=['barcode','gs1128','ean13','ean8','upca','upce','code39','code93','codabar','itf'];
+const BARCODE_1D=['barcode','gs1128','ean13','ean8','upca','upce','code39','code93','codabar','itf','itf14'];
 const BARCODE_2D=['qrcode','datamatrix','gs1dm','pdf417'];
 function encode1D(type,text){
   switch(type){
     case 'barcode':if(String(text)==='')throw new Error('Code128 内容为空');return {bits:C128.modules(String(text)),text:String(text)};
-    case 'ean13':return EAN13.modules(text);
-    case 'ean8':return EAN8.modules(text);
-    case 'upca':return UPCA.modules(text);
+    case 'ean13':case 'ean8':case 'upca':case 'upce':{const [m,a]=ADDON.split(text);
+      return ADDON.attach({ean13:EAN13,ean8:EAN8,upca:UPCA,upce:UPCE}[type].modules(m),a);}
     case 'code39':return C39.modules(text);
     case 'itf':return ITF.modules(text);
+    case 'itf14':return ITF14.modules(text);
     case 'gs1128':{const it=GS1.parse(text);return {bits:C128.modules('\x1d'+GS1.data(it)),text:GS1.hri(it)};}
-    case 'upce':return UPCE.modules(text);
     case 'code93':return C93.modules(text);
     case 'codabar':return CODABAR.modules(text);
   }
@@ -570,6 +600,6 @@ function encode2D(type,text,ecl,cols){
   if(type==='pdf417'){if(String(text)==='')throw new Error('PDF417 内容为空');return PDF417.encode(text,{level:ecl,cols});}
   throw new Error('未知二维码类型 '+type);
 }
-const api={Codes2D,PDF417,C128,EAN13,EAN8,UPCA,C39,ITF,UPCE,C93,CODABAR,GS1,BARCODE_1D,BARCODE_2D,encode1D,encode2D};
+const api={Codes2D,PDF417,ADDON,ITF14,BEARER,C128,EAN13,EAN8,UPCA,C39,ITF,UPCE,C93,CODABAR,GS1,BARCODE_1D,BARCODE_2D,encode1D,encode2D};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else Object.assign(root,api);
 })(typeof window!=='undefined'?window:globalThis);
