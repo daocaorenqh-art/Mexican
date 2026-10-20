@@ -72,7 +72,8 @@ function mockPrinter(dpmm) {
   eq('TSPL 一批发完', printer.jobs.length, 1);
   const labs = ZPL.parseTSPL(new Uint8Array(printer.jobs[0]));
   eq('打印机收到 5 张 TSPL', labs.length, 5);
-  check('TSPL 每张含位图', labs.every((l) => l.bitmaps.length >= 2));
+  // 文字是位图；一维码 / 线条能用 BAR 矩形精确画出时用 BAR（体积小）
+  check('TSPL 每张含位图（文字）与条码（BAR 或位图）', labs.every((l) => l.bitmaps.length >= 1 && l.bitmaps.length + l.bars.length >= 2), JSON.stringify(labs.map((l) => [l.bitmaps.length, l.bars.length])));
   check('DPI 一致时不提示', !dialogs.some((m) => m.includes('dpi')));
 
   // 检测打印机

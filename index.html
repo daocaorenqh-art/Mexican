@@ -33,6 +33,7 @@
   #menubar .dd a{display:block;padding:6px 16px;cursor:pointer;white-space:nowrap;color:var(--ink)}
   #menubar .dd a:hover{background:var(--accent);color:var(--accent-ink)}
   #menubar .dd hr{border:none;border-top:1px solid var(--line);margin:4px 0}
+  #menubar .dd .sub{display:block;padding:2px 16px;font-size:11px;color:var(--muted)}
   header{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel);
          display:flex;align-items:center;gap:12px;flex-wrap:wrap;z-index:5}
   header h1{font-size:16px;margin:0;font-weight:650}
@@ -132,7 +133,9 @@
   <div class="menu"><span>文件</span><div class="dd">
     <a data-cmd="new">新建</a>
     <a data-cmd="open">打开设计…</a>
-    <a data-cmd="save">保存设计</a>
+    <a data-cmd="save">保存设计　Ctrl+S</a>
+    <a data-cmd="saveas">另存为…　Ctrl+Shift+S</a>
+    <div id="recentMenu" hidden></div>
     <a data-cmd="zpl">导出打印机指令（ZPL / TSPL）…</a>
     <hr>
     <a data-cmd="print">打印…　Ctrl+P</a>
@@ -762,7 +765,7 @@ const silentPageSize=()=>$('#pmode').value==='sheet'?$('#paper').value:{width:to
 const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']];
 const FIELDS={
   text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['fitW','适应宽度(mm，0=不缩)','num'],['minSize','最小字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
-  para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['maxLines','最多几行（0=不限）','num'],['ellipsis','超出时末行加省略号','bool'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   rich:[['content','内容（富文本）','rich'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','基础字号(mm)','num'],
     ['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei']],['rot','旋转°','num']],
   wordart:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bend','弯曲度 0-100','num'],
@@ -783,7 +786,8 @@ const FIELDS={
   codabar:BC('内容(数字 -$:/.+，可带起止符 A–D)'),
   counter:[['name','名称（其他元素用 {#名称} 引用）','text'],['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['every','每几张/条递增','num'],['suffix','后缀','text'],
     ['per','递增方式','sel',[['label','每张递增'],['record','每条记录递增（多份同号）']]],['radix','进制','sel',[['10','十进制'],['16','十六进制'],['36','36 进制（0-9A-Z）']]],
-    ['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
+    ['persist','打印后自动续号','bool'],['reset','归零周期（需勾续号）','sel',[['','不归零'],['day','每天'],['month','每月'],['year','每年']]],['resetStart','归零后从几开始','num'],
+    ['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
   date:[['format','格式（YYYY YY MM DD HH mm ss JJJ WW）','text'],['offset','偏移','num'],['unit','偏移单位','sel',[['d','天'],['m','月'],['y','年']]],
     ['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
   image:[['content','动态图片（可空：{字段} / C:\\图片\\{SKU}.png / 数据库图片字段）','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],
@@ -839,7 +843,7 @@ const DEFAULTS={
   text:{type:'text',x:3,y:3,size:4,bold:false,align:'left',font:'',rot:0,content:'文字'},
   rich:{type:'rich',x:3,y:3,w:44,size:3.5,align:'left',font:'',rot:0,content:'[b]合格证[/b] 品名：[u]{品名}[/u]\n[size=5][color=#c00000]特价[/color][/size] [i]Made in China[/i]'},
   wordart:{type:'wordart',x:3,y:3,size:5,bold:true,font:'',shape:'上拱',bend:40,spacing:0,stroke:0,shadow:0,hollow:false,rot:0,content:'艺术字 WordArt'},
-  para:{type:'para',x:3,y:3,w:40,size:3.5,bold:false,align:'left',font:'',rot:0,content:'多行文字\n第二行'},
+  para:{type:'para',x:3,y:3,w:40,size:3.5,bold:false,align:'left',font:'',rot:0,maxLines:0,ellipsis:false,content:'多行文字\n第二行'},
   barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'123456'},
   ean13:{type:'ean13',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'690123456789'},
   ean8:{type:'ean8',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567'},
@@ -853,7 +857,7 @@ const DEFAULTS={
   upce:{type:'upce',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'0123456'},
   code93:{type:'code93',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'CODE93'},
   codabar:{type:'codabar',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'A123456B'},
-  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,name:'SN',prefix:'',start:1,step:1,pad:4,every:1,per:'label',radix:'10',suffix:'',persist:false},
+  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,name:'SN',prefix:'',start:1,step:1,pad:4,every:1,per:'label',radix:'10',suffix:'',persist:false,reset:'',resetStart:1},
   date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD',offset:0,unit:'d'},
   image:{type:'image',x:3,y:3,w:15,h:15,src:'',content:'',dither:'fs',threshold:128,rot:0},
   box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0},
@@ -869,7 +873,10 @@ $('#elist').addEventListener('input',e=>{
     const fd=(FIELDS[elements[i].type]||[]).find(f=>f[0]===k),t=fd&&fd[2];   // 按字段声明的类型转换
     if(t==='num'){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
     if(t==='bool')v=v==='1';
-    elements[i][k]=v;render();commit();return;}
+    elements[i][k]=v;
+    // 手动改起始值 / 改归零周期 = 以当前周期为准，不会被马上归零覆盖
+    if(elements[i].type==='counter'&&(k==='start'||k==='reset')){const key=Job.periodKey(elements[i].reset);if(key)elements[i].period=key;else delete elements[i].period;}
+    render();commit();return;}
   const img=e.target.dataset.img;
   if(img!=null&&e.target.files[0]){const fr=new FileReader();
     fr.onload=()=>{elements[img].src=fr.result;commit();render();};fr.readAsDataURL(e.target.files[0]);}
@@ -1101,7 +1108,7 @@ function zMove(dir){const ids=selIds();if(!ids.length)return;
   else if(dir==='bwd'&&i>0){[elements[i],elements[i-1]]=[elements[i-1],elements[i]];sel=i-1;}
   commit();renderEditor();render();}
 function newDesign(){if(!confirm('新建将清空当前设计，继续？'))return;
-  elements=[];vars=[];sel=-1;designName='未命名';$('#csv').value='';setRows(null);renderVars();commit();renderEditor();render();}
+  elements=[];vars=[];sel=-1;designName='未命名';designPath=null;updateTitle();$('#csv').value='';setRows(null);renderVars();commit();renderEditor();render();}
 
 document.querySelector('#menubar').addEventListener('click',e=>{
   const ins=e.target.dataset.ins, cmd=e.target.dataset.cmd;
@@ -1111,7 +1118,8 @@ document.querySelector('#menubar').addEventListener('click',e=>{
     case 'wizard':wzOpen();break;
     case 'new':newDesign();break;
     case 'open':$('#loadBtn').click();break;
-    case 'save':$('#saveBtn').click();break;
+    case 'save':saveDesign(false);break;
+    case 'saveas':saveDesign(true);break;
     case 'zpl':exportZPL();break;
     case 'print':doPrint();break;
     case 'silentprint':doSilentPrint();break;
@@ -1147,6 +1155,8 @@ window.addEventListener('keydown',e=>{
     else if(k==='x'&&!inField){e.preventDefault();cutSel();}
     else if(k==='v'&&!inField){e.preventDefault();pasteClip();}
     else if(k==='p'){e.preventDefault();doPrint();}
+    else if(k==='s'){e.preventDefault();saveDesign(e.shiftKey);}
+    else if(k==='o'){e.preventDefault();$('#loadBtn').click();}
     return;}
   if(shopOn())return;
   if(!inField&&e.key==='Delete'){e.preventDefault();delSel();}
@@ -1200,13 +1210,23 @@ $('#wzPrev').onclick=()=>{if(WZ.step>0){WZ.step=0;wzRender();}};
 $('#wzNext').onclick=()=>{if(WZ.step===0&&wzHasData(WZ.type)){WZ.step=1;wzRender();}else wzFinish();};
 
 /* ---------- 保存 / 载入设计 ---------- */
-$('#saveBtn').onclick=()=>{
+function designJSON(){
   const P=pageSpec();
   const design={v:2,label:{w:P.lw,h:P.lh,dpi:+P.dpi,cols:+P.cols,gapX:P.gapX,gapY:P.gapY,pmode:P.pmode,paper:P.paper,mTop:P.mTop,mLeft:P.mLeft},elements,vars};
-  const blob=new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
-  URL.revokeObjectURL(a.href);
-};
+  return JSON.stringify(design,null,2);}
+// 桌面版：保存到当前文件（首次 / 另存为时弹对话框），并记入最近文件；网页版：下载 .json
+let designPath=null;
+async function saveDesign(saveAs){
+  const text=designJSON();
+  if(window.labelFile){
+    try{const r=await labelFile.save({path:designPath,text,saveAs:!!saveAs,suggest:designName});
+      if(!r)return false;designPath=r.path;designName=r.name.replace(/\.json$/i,'');updateTitle();refreshRecent();return true;}
+    catch(err){alert('保存失败：'+err.message);return false;}}
+  downloadBlob(new Blob([text],{type:'application/json'}),(designName&&designName!=='未命名'?designName:'label-design')+'.json');return true;}
+// 网页版下载文件。地址稍后再释放：点击后立刻释放，部分浏览器会丢掉文件名（变成“download”）
+function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),60000);}
+$('#saveBtn').onclick=()=>saveDesign(false);
 // 载入校验：未知类型剔除并提示；缺省字段补默认值；字段按 FIELDS 声明的类型规整（数字 / 布尔 / 颜色）；
 // 图片只接受内嵌 data: 地址（不连外网）；变量定义只保留合法项
 function sanitizeElements(list){
@@ -1261,6 +1281,10 @@ function wrapLines(text,el){
     }
     out.push(line.replace(/\s+$/,''));
   });
+  // 最多几行（0 = 不限）：超出的截掉，可在末行加省略号提示内容未完
+  const max=Math.floor(+el.maxLines||0);
+  if(max>0&&out.length>max){out.length=max;
+    if(el.ellipsis){let last=out[max-1];while(last&&wOf(last+'…')>maxW)last=[...last].slice(0,-1).join('');out[max-1]=last.replace(/\s+$/,'')+'…';}}
   return out;
 }
 // 图片：按 src 缓存已解码的 Image
@@ -1792,7 +1816,7 @@ function cropGF(r,cx,cy){
 }
 async function exportZPL(){if(!await startJob())return;
   try{const c=await buildCommands();const blob=new Blob([c.data],{type:c.ext==='zpl'?'text/plain':'application/octet-stream'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.'+c.ext;a.click();URL.revokeObjectURL(a.href);
+    downloadBlob(blob,'label.'+c.ext);
     logJob('导出 '+c.lang.toUpperCase(),printList());
     pendingPrintJob=true;askAdvanceCounters();}
   catch(err){alert('导出失败：'+err.message);}
@@ -1805,13 +1829,31 @@ function askAdvanceCounters(done){
   const cs=elements.filter(e=>e.type==='counter'&&e.persist);if(!cs.length)return;
   const list=Array.isArray(done)?done:printList();if(!list.length)return;
   if(!confirm('本次共 '+list.length+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
-  cs.forEach(e=>{e.start=(+e.start||0)+Job.counterAdvance(e,list);});commit();renderEditor();render();
+  const now=jobNow||new Date();
+  cs.forEach(e=>{const r=Job.advanceCounter(e,list,now);e.start=r.start;if(r.period)e.period=r.period;else delete e.period;});commit();renderEditor();render();
 }
 window.addEventListener('afterprint',()=>{if(jobNow)logJob('浏览器打印',printList());askAdvanceCounters();endJob();});
-$('#loadBtn').onclick=()=>$('#designIn').click();
+// 解析并载入设计文本；失败时提示并保持当前设计不变
+function openDesignText(text,name,path){let d;
+  try{d=JSON.parse(text);}catch(err){alert('读取失败：「'+name+'」不是有效的设计文件（文件内容损坏或不是本软件保存的 .json）。当前设计未改动。');return false;}
+  try{loadDesign(d);}catch(err){alert('读取失败：'+err.message);return false;}
+  designName=name.replace(/\.json$/i,'');designPath=path||null;updateTitle();return true;}
+async function openDesktop(p){
+  try{const r=await labelFile.open(p);if(r)openDesignText(r.text,r.name,r.path);}
+  catch(err){alert('打开失败：'+err.message);}
+  refreshRecent();}
+$('#loadBtn').onclick=()=>window.labelFile?openDesktop():$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
-  fr.onload=()=>{let d;try{d=JSON.parse(fr.result);}catch(err){alert('读取失败：「'+f.name+'」不是有效的设计文件（文件内容损坏或不是本软件保存的 .json）。当前设计未改动。');e.target.value='';return;}
-    try{loadDesign(d);designName=f.name.replace(/\.json$/i,'');}catch(err){alert('读取失败：'+err.message);}e.target.value='';};fr.readAsText(f);};
+  fr.onload=()=>{openDesignText(fr.result,f.name,null);e.target.value='';};fr.readAsText(f);};
+// 最近文件（桌面版）：显示在「文件」菜单里，点一下直接打开
+async function refreshRecent(){const m=$('#recentMenu');if(!m||!window.labelFile)return;
+  let list=[];try{list=await labelFile.recent();}catch(err){}
+  m.hidden=!list.length;
+  m.innerHTML=list.length?'<hr><span class="sub">最近打开</span>'+list.map(p=>`<a data-recent="${esc(p)}" title="${esc(p)}">${esc(p.split(/[\\/]/).pop())}</a>`).join(''):'';}
+$('#recentMenu').addEventListener('click',e=>{const p=e.target.dataset&&e.target.dataset.recent;if(p)openDesktop(p);});
+function updateTitle(){document.title=(designName&&designName!=='未命名'?designName+' - ':'')+BASE_TITLE;}
+const BASE_TITLE=document.title;
+refreshRecent();
 $('#themeBtn').onclick=()=>{const r=document.documentElement;
   const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
   r.setAttribute('data-theme',cur==='dark'?'light':'dark');};
@@ -2029,7 +2071,7 @@ function ranges(nums){const a=[...new Set(nums)].sort((x,y)=>x-y),out=[];
 function logJob(method,list,target){
   if(!list||!list.length)return;
   const recs=list.filter(e=>e.rec).map(e=>e.rec),serials={};
-  elements.filter(e=>e.type==='counter').forEach(c=>{serials[Job.counterName(c)]=Job.counterText(c,list[0])+(list.length>1?' – '+Job.counterText(c,list[list.length-1]):'');});
+  elements.filter(e=>e.type==='counter').forEach(c=>{serials[Job.counterName(c)]=Job.counterText(c,list[0],jobNow)+(list.length>1?' – '+Job.counterText(c,list[list.length-1],jobNow):'');});
   const usedRows=[...new Map(list.filter(e=>e.row).map(e=>[e.rec,e.row])).values()];
   const inputs=Object.assign({},jobPrompts);vars.filter(v=>v.ask&&v.name).forEach(v=>{inputs[v.name]=varValue(v);});
   const entry={t:fmtDate(new Date(),'YYYY-MM-DD HH:mm:ss'),method,target:target||'',design:designName,labels:list.length,
@@ -2056,7 +2098,7 @@ async function showLog(){
     const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
     const csv='\uFEFF'+[head.join(',')].concat(log.map(g=>[g.t,g.method,g.target,g.design,g.labels,g.recs,
       Object.keys(g.serials||{}).map(k=>k+':'+g.serials[k]).join(' '),Object.keys(g.prompts||{}).map(k=>k+'='+g.prompts[k]).join(' ')].map(q).join(','))).join('\r\n');
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='print-log.csv';a.click();URL.revokeObjectURL(a.href);}
+    downloadBlob(new Blob([csv],{type:'text/csv'}),'print-log.csv');}
   else if(r==='clear'&&confirm('清空全部打印日志？'))localStorage.removeItem(LOGKEY);
 }
 

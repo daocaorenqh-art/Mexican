@@ -105,4 +105,29 @@ eq('data: 图片照常', Job.imageSrc({}, 'data:image/png;base64,AA'), 'data:ima
   const fit = Job.preflight({ elements: els, list: L1, label: { w: 30, h: 20, dpi: 203 }, sizeOf: () => ({ w: 10, h: 5 }) });
   check('sizeOf 给出的尺寸在标签内 → 无警告', !fit.warnings.length && !fit.errors.length);
 }
+// 流水号按周期归零
+{
+  const d1 = new Date(2026, 9, 20, 23, 59), d2 = new Date(2026, 9, 21, 8, 0), m2 = new Date(2026, 10, 1, 8, 0);
+  eq('周期键：每天', Job.periodKey('day', d1), '2026-10-20');
+  eq('周期键：每月', Job.periodKey('month', d1), '2026-10');
+  eq('周期键：每年', Job.periodKey('year', d1), '2026');
+  eq('周期键：不归零', Job.periodKey('', d1), '');
+  const c = { type: 'counter', start: 57, step: 1, pad: 3, reset: 'day', resetStart: 1, period: '2026-10-20' };
+  const e0 = Job.makePrintList(null, 1, 0, 1)[0];
+  eq('同一天：接着上次的号', Job.counterText(c, e0, d1), '057');
+  eq('第二天：从 1 重新编号', Job.counterText(c, e0, d2), '001');
+  eq('归零起点可设（从 0 开始）', Job.counterText({ ...c, resetStart: 0 }, e0, d2), '000');
+  const L3 = Job.makePrintList(null, 1, 0, 3);
+  const r1 = Job.advanceCounter(c, L3, d2);
+  check('第二天打 3 张后：起始 4、周期记为当天', r1.start === 4 && r1.period === '2026-10-21', JSON.stringify(r1));
+  const r2 = Job.advanceCounter(c, L3, d1);
+  check('同一天打 3 张后：起始 60', r2.start === 60 && r2.period === '2026-10-20', JSON.stringify(r2));
+  eq('每月归零：同月第二天不归零', Job.counterText({ ...c, reset: 'month', period: '2026-10' }, e0, d2), '057');
+  eq('每月归零：下个月归零', Job.counterText({ ...c, reset: 'month', period: '2026-10' }, e0, m2), '001');
+  eq('从未打印过（无周期记录）→ 用起始值', Job.counterText({ ...c, period: undefined }, e0, d2), '057');
+  const nr = Job.advanceCounter({ ...c, reset: '' }, L3, d2);
+  check('不归零：照常顺延、不记周期', nr.start === 60 && nr.period === undefined, JSON.stringify(nr));
+  const ctx = Job.labelCtx([{ ...c, name: 'SN' }], e0, { now: d2 });
+  eq('labelCtx 的 {#SN} 也按作业时间归零', ctx.vars ? ctx.vars.SN : Job.elementText({ type: 'text', content: '{#SN}' }, ctx), '001');
+}
 done();

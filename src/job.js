@@ -36,8 +36,20 @@ function makePrintList(rows,from,to,copies,skip,opt){
    radix：10 / 16 / 36 进制 */
 function counterStep(el,e){const per=el.per==='record'?e.recPos:e.idx;
   return Math.floor(per/Math.max(1,Math.floor(+el.every||1)));}
-function counterText(el,e){
-  const v=(+el.start||0)+counterStep(el,e)*(+el.step||1);
+// reset：'day' / 'month' / 'year' 按日/月/年归零。period 记着上次续号所在的周期；
+// 打印时已进入新周期，就从 resetStart（默认 1）重新编号，不用每天手动改起始值
+const pad2=n=>String(n).padStart(2,'0');
+function periodKey(reset,now){now=now||new Date();
+  if(reset==='day')return now.getFullYear()+'-'+pad2(now.getMonth()+1)+'-'+pad2(now.getDate());
+  if(reset==='month')return now.getFullYear()+'-'+pad2(now.getMonth()+1);
+  if(reset==='year')return String(now.getFullYear());
+  return '';}
+function counterBase(el,now){
+  const key=periodKey(el.reset,now);
+  if(key&&el.period&&el.period!==key)return el.resetStart===''||el.resetStart==null?1:+el.resetStart||0;
+  return +el.start||0;}
+function counterText(el,e,now){
+  const v=counterBase(el,now)+counterStep(el,e)*(+el.step||1);
   const radix=[10,16,36].includes(+el.radix)?+el.radix:10;
   const body=(v<0?'-':'')+String(Math.abs(v).toString(radix).toUpperCase()).padStart(+el.pad||0,'0');
   return (el.prefix||'')+body+(el.suffix||'');
@@ -45,18 +57,22 @@ function counterText(el,e){
 // 打印成功后起始值应前进多少（接着上次最后一张的下一个号）
 function counterAdvance(el,list){if(!list.length)return 0;
   return (counterStep(el,list[list.length-1])+1)*(+el.step||1);}
+// 打印成功后的新起始值与所属周期（now = 这次作业的时间）
+function advanceCounter(el,list,now){
+  const key=periodKey(el.reset,now);
+  return {start:counterBase(el,now)+counterAdvance(el,list),period:key||undefined};}
 const counterName=el=>String(el.name||'SN').trim()||'SN';
 
 /* 每张标签的求值环境：数据行 + 变量（流水号按名称）+ 打印时输入 */
 function labelCtx(elements,e,extra){
   e=e||{row:null,rec:0,recPos:0,copy:1,idx:0};extra=extra||{};
   const vars=Object.assign({},extra.vars||{});
-  for(const el of elements)if(el.type==='counter'){const k=counterName(el);if(!(k in vars))vars[k]=counterText(el,e);}
+  for(const el of elements)if(el.type==='counter'){const k=counterName(el);if(!(k in vars))vars[k]=counterText(el,e,extra.now);}
   return T.makeCtx({row:e.row,vars,prompts:extra.prompts||{},defs:extra.defs||null,now:extra.now||new Date(),n:e.idx+1,rec:e.rec,copy:e.copy});
 }
 // 元素在这张标签上的文字内容
 function elementText(el,ctx,e){
-  if(el.type==='counter')return counterText(el,e||{idx:ctx.n-1,recPos:Math.max(0,ctx.rec-1)});
+  if(el.type==='counter')return counterText(el,e||{idx:ctx.n-1,recPos:Math.max(0,ctx.rec-1)},ctx.now);
   if(el.type==='date')return T.fmtDate(T.addDate(ctx.now,el.offset||0,el.unit||'d'),el.format||'YYYY-MM-DD');
   return T.evalContent(el.content,ctx);
 }
@@ -157,7 +173,7 @@ function groupIssues(arr,level){const m=new Map();
   for(const it of arr){const k=it.ei+'\u0001'+it.msg;if(!m.has(k))m.set(k,{level,ei:it.ei,el:it.el,msg:it.msg,labels:[]});m.get(k).labels.push(it.n);}
   return [...m.values()];}
 
-const api={makePrintList,effectiveSize,counterText,counterAdvance,counterName,labelCtx,elementText,promptsUsed,imageSrc,
+const api={makePrintList,effectiveSize,counterText,counterAdvance,advanceCounter,periodKey,counterBase,counterName,labelCtx,elementText,promptsUsed,imageSrc,
   dots,moduleDots,matrixModuleDots,elementSize,rotatedBox,preflight,groupIssues};
 if(isNode)module.exports=api;else root.Job=api;
 })(typeof window!=='undefined'?window:globalThis);

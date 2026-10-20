@@ -167,6 +167,53 @@ ipcMain.handle('printer:print', (e, { deviceName, pageSize }) => new Promise((re
 }));
 
 /* ---- IPC：敏感信息加密（数据库密码等，用系统钥匙串 / DPAPI，不再明文存 localStorage） ---- */
+/* ---- IPC：设计文件（打开 / 保存 / 另存为 / 最近文件） ----
+   页面只能读写用户在对话框里选过、或在最近文件列表里的路径；列表存于用户数据目录 */
+const RECENT_MAX = 8;
+const recentPath = () => path.join(app.getPath('userData'), 'recent-files.json');
+function readRecent() {
+  try { const a = JSON.parse(fs.readFileSync(recentPath(), 'utf8')); return Array.isArray(a) ? a.filter((p) => typeof p === 'string') : []; }
+  catch (err) { return []; }
+}
+function addRecent(p) {
+  const list = [p, ...readRecent().filter((x) => x !== p)].slice(0, RECENT_MAX);
+  try { fs.mkdirSync(path.dirname(recentPath()), { recursive: true }); fs.writeFileSync(recentPath(), JSON.stringify(list)); } catch (err) { /* 列表写不了不影响保存本身 */ }
+}
+const JSON_FILTER = [{ name: '标签设计', extensions: ['json'] }];
+ipcMain.handle('file:recent', (e) => {
+  trusted(e);
+  return readRecent().filter((p) => fs.existsSync(p));
+});
+ipcMain.handle('file:open', async (e, want) => {
+  trusted(e);
+  let p = want;
+  if (p && !readRecent().includes(p)) throw new Error('只能打开最近文件列表里的文件');
+  if (!p) {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), { properties: ['openFile'], filters: JSON_FILTER });
+    if (r.canceled || !r.filePaths[0]) return null;
+    p = r.filePaths[0];
+  }
+  const text = fs.readFileSync(p, 'utf8');
+  addRecent(p);
+  return { path: p, name: path.basename(p), text };
+});
+ipcMain.handle('file:save', async (e, { path: want, text, saveAs, suggest }) => {
+  trusted(e);
+  let p = !saveAs && want && readRecent().includes(want) ? want : null;
+  if (!p) {
+    const r = await dialog.showSaveDialog(BrowserWindow.fromWebContents(e.sender), {
+      defaultPath: want || ((suggest || '标签设计') + '.json'), filters: JSON_FILTER });
+    if (r.canceled || !r.filePath) return null;
+    p = /\.json$/i.test(r.filePath) ? r.filePath : r.filePath + '.json';
+  }
+  // 先写临时文件再替换，写到一半断电也不会把原设计弄坏
+  const tmp = p + '.tmp';
+  fs.writeFileSync(tmp, String(text), 'utf8');
+  fs.renameSync(tmp, p);
+  addRecent(p);
+  return { path: p, name: path.basename(p) };
+});
+
 ipcMain.handle('secret:encrypt', (e, text) => {
   trusted(e);
   if (!text || !safeStorage.isEncryptionAvailable()) return null;
