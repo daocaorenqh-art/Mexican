@@ -73,6 +73,14 @@ async function rejects(promiseFn, includes) {
   check('非法波特率被拦截', await rejects(() => sendRaw({ kind: 'com', port: 'COM1', baud: '9600 & calc' }, zpl), '波特率'));
   check('非法校验位被拦截', await rejects(() => sendRaw({ kind: 'com', port: 'COM1', baud: 9600, parity: 'x' }, zpl), '校验位'));
 
+  // 打印机收下连接后复位断开：不能报「已发送」
+  const resetter = await new Promise((resolve) => {
+    const server = net.createServer((s) => { s.once('data', () => { if (s.resetAndDestroy) s.resetAndDestroy(); else s.destroy(); }); s.on('error', () => {}); });
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, close: () => server.close() }));
+  });
+  check('打印机中途复位断开 → 报错（不误报已发送）', await rejects(() => sendRaw({ kind: 'tcp', host: '127.0.0.1', port: resetter.port }, big), '断开'));
+  resetter.close();
+
   // 二进制（TSPL 位图）原样送达
   const bin = new Uint8Array([0x42, 0x49, 0x54, 0x00, 0xFF, 0x0A, 0x80, 0xE4, 0xB8]);
   m = await mockPrinter(false);

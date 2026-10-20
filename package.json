@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node tests/verify-1d.cjs && node tests/verify-2d.cjs && node tests/textdata.test.cjs && node tests/job.test.cjs && node tests/zpl.test.cjs && node tests/tspl.test.cjs && node tests/data-sources.test.cjs && node tests/datasource.test.cjs && node tests/rawprint.test.cjs && node tests/zpl-compress.test.cjs",
+    "test": "node tests/verify-1d.cjs && node tests/verify-2d.cjs && node tests/textdata.test.cjs && node tests/job.test.cjs && node tests/zpl.test.cjs && node tests/tspl.test.cjs && node tests/data-sources.test.cjs && node tests/datasource.test.cjs && node tests/rawprint.test.cjs && node tests/zpl-compress.test.cjs && node tests/z64.test.cjs",
     "postinstall": "electron-builder install-app-deps || echo \"native database driver rebuild failed: that database type is unavailable, everything else works\"",
     "dist": "electron-builder --win --publish never",
     "dist:dir": "electron-builder --win --dir",

@@ -29,7 +29,7 @@ function printer(dpmm = 8) {
       if (t.startsWith('~HS')) { c.write('\x02030,0,0,1245,000,0,0,0,000,0,0,0\x03\r\n\x02001,0,0,0,1,2,6,0,00000000,1,000\x03\r\n\x021234,0\x03\r\n'); return; }
       if (t.startsWith('~HI')) { c.write('\x02ZT410,V75,' + dpmm + ',8192KB\x03\r\n'); return; }
       chunks.push(d); });
-    c.on('end', () => { if (chunks.length) s.jobs.push(Buffer.concat(chunks)); c.end(); });
+    c.on('end', () => { if (chunks.length) { s.jobs.push(Buffer.concat(chunks)); if (s.goOffline && s.jobs.length >= s.goOffline) { s.goOffline = 0; s.server.close(); } } c.end(); });
     c.on('error', () => {});
   });
   return new Promise((r) => s.server.listen(0, '127.0.0.1', () => { s.port = s.server.address().port; r(s); }));
@@ -68,8 +68,8 @@ rec.check('H-readonly', '套打查询只读（DELETE 被拒绝）', /只允许|�
 /* ---------- H3 网络直发 + 断点续打 ---------- */
 const P = await printer(8);
 await w.evaluate((port) => { const s = (id, v) => { const e = document.getElementById(id); if (!e) return; e.value = v; e.dispatchEvent(new Event('change')); e.dispatchEvent(new Event('input')); };
-  elements = [{ type: 'counter', name: 'SN', x: 2, y: 2, size: 3, start: 1, step: 1, pad: 4, rot: 0 },
-    { type: 'barcode', x: 8, y: 8, h: 10, module: 0.25, showText: false, rot: 0, content: 'SN{#SN}' }];
+  elements = [{ type: 'counter', name: 'SN', x: 2, y: 2, size: 3, prefix: 'SN', start: 1, step: 1, pad: 4, rot: 0 },
+    { type: 'barcode', x: 8, y: 8, h: 10, module: 0.25, showText: false, rot: 0, content: '{#SN}' }];   // 流水号带前缀 SN
   document.getElementById('csv').value = 'X\n1\n2\n3\n4\n5'; document.getElementById('applyCsv').click();
   s('rawKind', 'tcp'); s('rawAddr', '127.0.0.1'); s('rawPort', String(port)); s('zBatch', '2'); render(); }, P.port);
 await w.evaluate(() => { document.getElementById('rawSend').click(); });
@@ -79,7 +79,9 @@ const zAll = P.jobs.map((b) => b.toString('utf8')).join('');
 const n1 = zplLabelCount(zAll);
 rec.check('H-send', '直发到网络标签机：5 张全部送达', n1 === 5, n1 + ' 张；' + await w.evaluate(() => document.getElementById('prnMsg').textContent));
 const sns = [];
-for (const f of (zAll ? renderZPL(zAll, 50, 30, 203) : [])) sns.push(...(await scanPNG(f)).map((g) => g.text));
+fs.writeFileSync(OUT + 'desktop-send.bin', Buffer.concat(P.jobs));
+try { for (const f of (zAll ? renderZPL(zAll, 50, 30, 203) : [])) sns.push(...(await scanPNG(f)).map((g) => g.text)); }
+catch (e) { rec.check('H-send-render', '直发的 ZPL 能被独立渲染器解析', false, '前 120 字节：' + JSON.stringify(zAll.slice(0, 120))); }
 if (sns.length && sns.every((s) => s.startsWith('SN0'))) rec.check('H-send-serial', '直发的 5 张流水号 SN0001–SN0005', sns.join(',') === 'SN0001,SN0002,SN0003,SN0004,SN0005', sns.join(','));
 else rec.gap('H-send-serial', '直发的流水号可在条码里扫出', '条码里的 {#SN} 未替换：' + sns.slice(0, 2).join(','));
 
@@ -87,18 +89,17 @@ else rec.gap('H-send-serial', '直发的流水号可在条码里扫出', '条码
 const hasResume = await w.evaluate(() => !!document.getElementById('rawResume'));
 if (!hasResume) rec.gap('H-resume', '发送失败后续打剩余，每张恰好一次', '界面没有「续打剩余」');
 else {
-  P.jobs.length = 0;
-  let conn = 0; const orig = P.server.listeners('connection')[0];
-  P.server.removeAllListeners('connection'); P.server.on('connection', (c) => { conn++; if (conn >= 2) { c.destroy(); return; } orig(c); });
+  // 真实场景：发完第 1 批后打印机掉线（拒绝连接），恢复后续打
+  P.jobs.length = 0; P.goOffline = 1;
   await w.evaluate(() => document.getElementById('rawSend').click());
-  await w.waitForFunction(() => /失败/.test(document.getElementById('prnMsg').textContent), null, { timeout: 20000 }).catch(() => {});
+  await w.waitForFunction(() => /失败/.test(document.getElementById('prnMsg').textContent), null, { timeout: 30000 }).catch(() => {});
   const failMsg = await w.evaluate(() => document.getElementById('prnMsg').textContent);
-  P.server.removeAllListeners('connection'); P.server.on('connection', orig);
+  await new Promise((r) => P.server.listen(P.port, '127.0.0.1', r));   // 打印机恢复
   await w.evaluate(() => document.getElementById('rawResume').click());
   await w.waitForFunction(() => /已发送/.test(document.getElementById('prnMsg').textContent), null, { timeout: 20000 }).catch(() => {});
   await w.waitForTimeout(800);
   const z2 = P.jobs.map((b) => b.toString('utf8')).join(''), got = [];
-  for (const f of renderZPL(z2, 50, 30, 203)) got.push(...(await scanPNG(f)).map((g) => g.text));
+  try { for (const f of renderZPL(z2, 50, 30, 203)) got.push(...(await scanPNG(f)).map((g) => g.text)); } catch (e) { got.push('渲染失败'); }
   rec.check('H-resume', '中途失败后续打：5 张恰好各一次', zplLabelCount(z2) === 5 && new Set(got).size === got.length, `失败提示：${failMsg}；收到 ${zplLabelCount(z2)} 张：${got.join(',')}`);
 }
 

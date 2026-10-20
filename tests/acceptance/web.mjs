@@ -127,7 +127,7 @@ console.log('\n[D] 流水号');
   const page = await openApp(browser, { deviceScaleFactor: 2 });
   const canRef = await page.evaluate(() => { try { return typeof Job !== 'undefined' || /#SN/.test(document.body.innerHTML); } catch (e) { return false; } });
   await loadDesign(page, design([{ type: 'counter', name: 'SN', x: 3, y: 3, size: 3, prefix: 'SN', start: 1, step: 1, pad: 4, persist: true, rot: 0 },
-    B1('barcode', 'SN{#SN}', 10, 15, { module: 0.25 })]));
+    B1('barcode', '{#SN}', 10, 15, { module: 0.25 })]));   // 流水号元素自带前缀 SN
   await setField(page, 'copies', 3);
   const scanJob = async () => { const z = await exportCmd(page, { choice: 'ok' }); if (!z.data) return null;
     const out = []; for (const f of renderZPL(z.data.toString('utf8'), 80, 50, 203)) out.push(...(await scanPNG(f)).map((g) => g.text)); return out; };

@@ -61,6 +61,54 @@ function gfaDecode(body,bpr,rows){const out=[];let prev='';let i=0;
     out.push(line);prev=line;}
   return out;}
 
+/* ---------- Z64：同步 zlib 压缩（固定霍夫曼 + LZ77），无需 CompressionStream ----------
+   ZPL 的 :Z64: 数据 = base64(zlib(位图字节)) + ':' + CRC-16(base64 文本)。
+   浏览器自带的 CompressionStream 是异步流，逐个小位图调用开销很大；这里用纯 JS 同步实现，任何标准 zlib 解压都能还原。 */
+const LEN_BASE=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+const LEN_EXTRA=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+const DIST_BASE=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+const DIST_EXTRA=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+const LEN_CODE=new Uint16Array(259),DIST_CODE=new Uint8Array(32769);
+(()=>{for(let c=0;c<29;c++){const top=c===28?258:LEN_BASE[c]+(1<<LEN_EXTRA[c])-1;for(let l=LEN_BASE[c];l<=top&&l<=258;l++)LEN_CODE[l]=c;}
+  for(let c=0;c<30;c++)for(let d=DIST_BASE[c];d<DIST_BASE[c]+(1<<DIST_EXTRA[c])&&d<=32768;d++)DIST_CODE[d]=c;})();
+function zlibDeflate(data){
+  const n=data.length,out=new Uint8Array(n+(n>>3)+64);let op=0,bitBuf=0,bitCnt=0;
+  const put=(v,len)=>{bitBuf|=v<<bitCnt;bitCnt+=len;while(bitCnt>=8){out[op++]=bitBuf&255;bitBuf>>>=8;bitCnt-=8;}};
+  const rev=(code,len)=>{let r=0;for(let i=0;i<len;i++){r=(r<<1)|(code&1);code>>=1;}return r;};
+  const lit=(v)=>{if(v<144)put(rev(0x30+v,8),8);else if(v<256)put(rev(0x190+v-144,9),9);else if(v<280)put(rev(v-256,7),7);else put(rev(0xC0+v-280,8),8);};
+  out[op++]=0x78;out[op++]=0x01;
+  put(1,1);put(1,2);                                   // 最后一块、固定霍夫曼
+  const HB=15,head=new Int32Array(1<<HB).fill(-1),prev=new Int32Array(n);
+  const hash=(i)=>((data[i]<<10)^(data[i+1]<<5)^data[i+2])&((1<<HB)-1);
+  for(let i=0;i<n;){
+    let best=0,dist=0;
+    if(i+2<n){const h=hash(i);let j=head[h],chain=24;
+      while(j>=0&&i-j<=32768&&chain--){
+        if(data[j+best]===data[i+best]){let l=0;const max=Math.min(258,n-i);while(l<max&&data[j+l]===data[i+l])l++;if(l>best){best=l;dist=i-j;if(l===max)break;}}
+        j=prev[j];}
+      prev[i]=head[h];head[h]=i;}
+    if(best>=3){const lc=LEN_CODE[best];lit(257+lc);if(LEN_EXTRA[lc])put(best-LEN_BASE[lc],LEN_EXTRA[lc]);
+      const dc=DIST_CODE[dist];put(rev(dc,5),5);if(DIST_EXTRA[dc])put(dist-DIST_BASE[dc],DIST_EXTRA[dc]);
+      for(let k=1;k<best&&i+k+2<n;k++){const h=hash(i+k);prev[i+k]=head[h];head[h]=i+k;}
+      i+=best;}
+    else{lit(data[i]);i++;}
+  }
+  lit(256);if(bitCnt)put(0,8-bitCnt);
+  let a=1,b=0;for(let i=0;i<n;i++){a=(a+data[i])%65521;b=(b+a)%65521;}
+  out[op++]=b>>>8;out[op++]=b&255;out[op++]=a>>>8;out[op++]=a&255;
+  return out.subarray(0,op);
+}
+const CRC16T=(()=>{const t=new Uint16Array(256);for(let i=0;i<256;i++){let c=i<<8;for(let k=0;k<8;k++)c=(c&0x8000)?((c<<1)^0x1021)&0xffff:(c<<1)&0xffff;t[i]=c;}return t;})();
+function crc16(str){let c=0;for(let i=0;i<str.length;i++)c=((c<<8)&0xffff)^CRC16T[((c>>8)^str.charCodeAt(i))&255];return c.toString(16).padStart(4,'0');}
+const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function base64(u8){const parts=[];let s='';
+  for(let i=0;i<u8.length;i+=3){const a=u8[i],b=u8[i+1],c=u8[i+2],t=(a<<16)|((b||0)<<8)|(c||0);
+    s+=B64[t>>18]+B64[(t>>12)&63]+(i+1<u8.length?B64[(t>>6)&63]:'=')+(i+2<u8.length?B64[t&63]:'=');
+    if(s.length>8192){parts.push(s);s='';}}
+  parts.push(s);return parts.join('');}
+// 位图字节 → ':Z64:<base64>:<crc>'
+function z64(bytes){const b=base64(zlibDeflate(bytes));return ':Z64:'+b+':'+crc16(b);}
+
 /* ---------- 字段数据转义 ---------- */
 // 用 ^FH 十六进制转义 ^ ~ _，数据原样到达打印机（不再把 ^ ~ 换成空格）
 function fd(text){return '^FH_^FD'+String(text).replace(/[\^~_]/g,c=>'_'+c.charCodeAt(0).toString(16).toUpperCase())+'^FS';}
@@ -262,6 +310,6 @@ function parseTSPL(u8){
   return labels;
 }
 
-const api={build,buildTSPL,parseTSPL,ellipseBitmap,bitmapRects,Bitmap,setPx,getPx,fillRect,blit,barsBitmap,matrixBitmap,rotateBitmap,rotOffset,gfa,gfaDecode,compressRow,fd};
+const api={build,buildTSPL,z64,zlibDeflate,crc16,parseTSPL,ellipseBitmap,bitmapRects,Bitmap,setPx,getPx,fillRect,blit,barsBitmap,matrixBitmap,rotateBitmap,rotOffset,gfa,gfaDecode,compressRow,fd};
 if(isNode)module.exports=api;else root.ZPL=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -468,6 +468,7 @@ A1002,香蕉,2.20"></textarea>
 <script src="src/textdata.js"></script>
 <script src="src/xlsx.js"></script>
 <script src="src/job.js"></script>
+<script src="src/zpl.js"></script>
 <script>
 /* ============================================================
    标签打印工具 —— 原创实现（全部编码器自写，完全离线）
@@ -1273,8 +1274,10 @@ function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
   const cw=Math.ceil(Math.max(...pts.map(p=>p[0])))-minX, ch=Math.ceil(Math.max(...pts.map(p=>p[1])))-minY;
   if(cw<1||ch<1)return null;
   const bpr=Math.ceil(cw/8),W=bpr*8;
-  const cv=document.createElement('canvas');cv.width=W;cv.height=ch;
-  const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,W,ch);
+  // 复用同一块画布（逐张新建画布 + 读像素是大批量时的主要耗时）
+  const cv=rasterize.cv||(rasterize.cv=document.createElement('canvas'));cv.width=W;cv.height=ch;
+  const g=rasterize.g&&rasterize.g.canvas===cv?rasterize.g:(rasterize.g=cv.getContext('2d',{willReadFrequently:true}));
+  g.setTransform(1,0,0,1,0,0);g.fillStyle='#fff';g.fillRect(0,0,W,ch);
   g.save();g.translate(-minX,-minY);if(th)g.rotate(th);g.fillStyle='#000';g.strokeStyle='#000';paint(g);g.restore();
   const d=g.getImageData(0,0,W,ch).data, lum=new Float32Array(W*ch);
   for(let i=0;i<W*ch;i++){const a=d[i*4+3]/255;lum[i]=255-a*(255-(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]));}
@@ -1284,12 +1287,14 @@ function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
     if(dither){const e=v-(b?0:255);   // Floyd–Steinberg 误差扩散：照片/Logo 灰度转成黑白点阵
       if(x+1<W)lum[i+1]+=e*7/16;
       if(y+1<ch){if(x>0)lum[i+W-1]+=e*3/16;lum[i+W]+=e*5/16;if(x+1<W)lum[i+W+1]+=e/16;}}}
-  let hex='',ink=false;
-  for(let y=0;y<ch;y++)for(let bx=0;bx<bpr;bx++){let byte=0;
-    for(let k=0;k<8;k++)if(bits[y*W+bx*8+k])byte|=1<<(7-k);
-    if(byte)ink=true;hex+=(byte<16?'0':'')+byte.toString(16).toUpperCase();}
+  const bytes=new Uint8Array(bpr*ch);let ink=false;
+  for(let y=0,o=0;y<ch;y++)for(let bx=0;bx<bpr;bx++,o++){let byte=0;const i0=y*W+bx*8;
+    for(let k=0;k<8;k++)if(bits[i0+k])byte|=1<<(7-k);
+    if(byte)ink=true;bytes[o]=byte;}
   if(!ink)return null;
-  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex};
+  const HX=rasterize.HX||(rasterize.HX=Array.from({length:256},(_,v)=>(v<16?'0':'')+v.toString(16).toUpperCase()));
+  const hp=new Array(bytes.length);for(let i=0;i<bytes.length;i++)hp[i]=HX[bytes[i]];
+  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex:hp.join(''),bytes};
 }
 // 各类元素「未旋转」时的尺寸与画法（单位：打印点）
 function painter(el,text,dpi,idx,img){
@@ -1617,6 +1622,10 @@ async function buildZPL(list){
   for(const [key,cnt] of L.use)if(cnt>1&&n<999){const r=L.cache.get(key),nm='R:G'+String(++n).padStart(3,'0')+'.GRF';
     names.set(key,nm);out+='~DG'+nm+','+dgBody(r)+'\n';}
   const head='^XA\n^CI28\n^PW'+L.Wd+'\n^LL'+L.Hd+'\n^LH0,0\n'+zplSetup(pr);
+  // Z64：所有要内联的位图先并行压缩（逐个串行 await 是大批量时的主要耗时）
+  if(zplMode()==='z64'){const todo=new Set();
+    for(const parts of L.labels)for(const p of parts){if(p.gf)todo.add(p.gf);else if(p.r&&!names.has(p.r.key))todo.add(p.r);}
+    const arr=[...todo];for(let i=0;i<arr.length;i+=256)await Promise.all(arr.slice(i,i+256).map(z64Of));}
   const bodies=[];
   for(const parts of L.labels){let b='';
     for(const p of parts){
@@ -1694,7 +1703,11 @@ function crc16x(s){let c=0;for(let i=0;i<s.length;i++){c^=s.charCodeAt(i)<<8;
   for(let k=0;k<8;k++)c=(c&0x8000)?((c<<1)^0x1021)&0xffff:(c<<1)&0xffff;}return c.toString(16).padStart(4,'0');}
 async function z64Of(r){
   if(r.z64)return r.z64;
-  const bytes=new Uint8Array(r.hex.length/2);for(let i=0;i<bytes.length;i++)bytes[i]=parseInt(r.hex.substr(i*2,2),16);
+  // 同步纯 JS 压缩（src/zpl.js）：省去逐个位图的 CompressionStream 异步开销，结果是标准 zlib
+  if(window.ZPL&&ZPL.z64){let b=r.bytes;if(!b){b=new Uint8Array(r.hex.length/2);for(let i=0;i<b.length;i++)b[i]=parseInt(r.hex.substr(i*2,2),16);}
+    return (r.z64=ZPL.z64(b));}
+  let bytes=r.bytes;
+  if(!bytes){bytes=new Uint8Array(r.hex.length/2);for(let i=0;i<bytes.length;i++)bytes[i]=parseInt(r.hex.substr(i*2,2),16);}
   const z=new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
   let bin='';for(let i=0;i<z.length;i+=0x8000)bin+=String.fromCharCode.apply(null,z.subarray(i,i+0x8000));
   const b64=btoa(bin);return (r.z64=':Z64:'+b64+':'+crc16x(b64));
