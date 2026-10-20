@@ -5,7 +5,7 @@ import path from 'node:path';
 import pw from 'playwright';
 import { createRequire } from 'node:module';
 import { ROOT, OUT, recorder, openApp, supportsType, loadDesign, setCSV, importFile, setField, previewTexts, labelCount,
-  exportCmd, renderZPL, zplLabelCount, scanPNG, renderTSPL, scanPreview, has } from './_app.mjs';
+  exportCmd, renderZPL, zplLabelCount, scanPNG, renderTSPL, scanPreview, has, ZPLmod } from './_app.mjs';
 
 const require = createRequire(import.meta.url);
 const { makeZip } = require(path.join(ROOT, 'tests', 'helpers.cjs'));
@@ -211,6 +211,65 @@ console.log('\n[F] 生产流程功能');
   await page.close();
 }
 
+/* ================= J. 生产流程行为（不只是「有这个按钮」） ================= */
+console.log('\n[J] 生产流程行为');
+{
+  const page = await openApp(browser);
+  const qr = (content) => ({ type: 'qrcode', x: 40, y: 5, size: 18, ecl: 'M', rot: 0, content });
+  const scanAll = async (z) => { const out = []; for (const f of renderZPL(z.data.toString('utf8'), 80, 50, 203)) out.push(...(await scanPNG(f)).map((g) => g.text)); return out; };
+  // 打印时输入 + 日期偏移 + 流水号 都进二维码
+  await loadDesign(page, design([{ type: 'counter', name: 'SN', x: 2, y: 2, size: 3, prefix: '', start: 7, step: 1, pad: 3, rot: 0 }, qr('{?批号}|{#DATE+30:YYYYMMDD}|{#SN}')]));
+  const exp = (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); })();
+  let z = await exportCmd(page, { choice: 'ok', values: ['B2610'] });
+  let got = z.data ? await scanAll(z) : [];
+  rec.check('J-prompt-date-sn', '打印时输入的批号、保质期（+30 天）、流水号都正确进入二维码', got.includes(`B2610|${exp}|007`), got.join(',') + ' 应为 ' + `B2610|${exp}|007`);
+  // 打印日志：内容
+  await page.evaluate(() => localStorage.removeItem('label.printlog'));
+  await loadDesign(page, design([{ type: 'counter', name: 'SN', x: 2, y: 2, size: 3, prefix: 'SN', start: 1, step: 1, pad: 4, rot: 0 }, qr('{SKU}')]));
+  await setCSV(page, 'SKU\nA\nB\nC'); await setField(page, 'copies', 2);
+  z = await exportCmd(page, { choice: 'ok' });
+  const log = await page.evaluate(() => JSON.parse(localStorage.getItem('label.printlog') || '[]'));
+  const g = log[0] || {};
+  rec.check('J-log', '打印日志记下张数、记录范围、流水号区间', log.length === 1 && g.labels === 6 && g.recs === '1-3' && /SN0001.*SN0006/.test(JSON.stringify(g.serials)), JSON.stringify(g).slice(0, 200));
+  // 选择记录：只出选中的
+  await setField(page, 'copies', 1);
+  if (await page.$('#pickRecs')) {
+    await page.evaluate(() => { pickRecords(); });
+    await page.waitForSelector('#recTbl input', { timeout: 5000 }).catch(() => {});
+    const okPick = !!(await page.$('#recTbl input'));
+    if (okPick) { await page.click('[data-sa="none"]'); await page.check('#recTbl input[data-ri="1"]'); await page.click('#dlgFt button.primary'); }
+    z = await exportCmd(page, { choice: 'ok' });
+    got = z.data ? await scanAll(z) : [];
+    rec.check('J-pick', '选择记录：只出选中的 B', okPick && got.length === 1 && got[0] === 'B', got.join(','));
+  }
+  // 车间模式：设计锁定（拖不动、删不掉），但仍能打印
+  if (await has(page, 'typeof toggleShop==="function"')) {
+    await setCSV(page, 'SKU\nA');
+    page._dialogPlan = ['']; await page.evaluate(() => toggleShop()); await page.waitForTimeout(200);
+    const el = page.locator('#preview .label .el').first(), bb = await el.boundingBox();
+    const x0 = await page.evaluate(() => elements[0].x);
+    await page.mouse.move(bb.x + 3, bb.y + 3); await page.mouse.down(); await page.mouse.move(bb.x + 60, bb.y + 40, { steps: 5 }); await page.mouse.up();
+    await page.keyboard.press('Delete');
+    const after = await page.evaluate(() => ({ x: elements[0].x, n: elements.length }));
+    z = await exportCmd(page, { choice: 'ok' });
+    rec.check('J-shop', '车间模式：元素拖不动、删不掉，打印照常', after.x === x0 && after.n === 2 && !!z.data && !(await page.isVisible('#elist')), JSON.stringify(after) + (z.data ? ' 已出纸' : ' 未出纸'));
+    page._dialogPlan = ['accept']; await page.evaluate(() => toggleShop());
+  }
+  // 动态图片：字段里的图片（data: 地址）出现在 ZPL 出纸里
+  const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 40; c.height = 40; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(5, 5, 30, 30); return c.toDataURL(); });
+  await loadDesign(page, design([{ type: 'image', x: 5, y: 5, w: 20, h: 20, src: '', content: '{IMG}', rot: 0 }]));
+  await setCSV(page, 'IMG\n"' + png + '"');
+  z = await exportCmd(page, { choice: 'ok' });
+  let ink = 0;
+  if (z.data) { const f = renderZPL(z.data.toString('utf8'), 80, 50, 203)[0];
+    ink = await page.evaluate(async (b64) => { const im = new Image(); await new Promise((r) => { im.onload = r; im.src = 'data:image/png;base64,' + b64; });
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, im.width, im.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; }, fs.readFileSync(f).toString('base64')); }
+  rec.check('J-dynimg', '动态图片（数据里的图片）出现在打印机出纸上', ink > 1500, '黑点 ' + ink);
+  rec.check('J-noerror', '全程无脚本错误', page._errors.length === 0, page._errors.join('; '));
+  await page.close();
+}
+
 /* ================= I. 设计往返与健壮性 ================= */
 console.log('\n[I] 设计往返与健壮性');
 {
@@ -275,6 +334,16 @@ console.log('\n[G] 1 万条大批量');
       const got = (await scanPNG(renderZPL(pick(i), 80, 40, 203)[0])).map((g) => g.text);
       rec.check(`G-sample-${i}`, `抽查第 ${i + 1} 张：Code128 / EAN-13 / QR 都正确`, want(i).every((w) => got.includes(w)) && got.some((g) => g === want(i).join('|')), got.join(','));
     }
+  }
+  // TSPL 1 万张：耗时与体积（串口 / USB 发送时体积直接决定出纸速度）
+  t0 = Date.now(); const t = await exportCmd(page, { lang: 'tspl', choice: 'ok', timeout: 600000 }); const tT = Date.now() - t0;
+  if (t.gap) rec.gap('G-tspl', '1 万张 TSPL', t.gap);
+  else if (!t.data) rec.check('G-tspl', '1 万张 TSPL', false, '未导出');
+  else {
+    const labs = ZPLmod.parseTSPL(new Uint8Array(t.data)), n = labs.reduce((a, l) => a + l.copies, 0);
+    rec.check('G-tspl-count', '1 万张 TSPL 张数正确', n === N, n + ' 张');
+    rec.check('G-tspl-time', '1 万张 TSPL < 90 秒', tT < 90000, (tT / 1000).toFixed(1) + ' 秒');
+    rec.check('G-tspl-size', '1 万张 TSPL 体积 < 40MB（平均每张 < 4KB）', t.data.length < 40 * 1048576, (t.data.length / 1048576).toFixed(1) + 'MB');
   }
   rec.check('G-noerror', '大批量全程无脚本错误', page._errors.length === 0, page._errors.join('; '));
   await page.close();

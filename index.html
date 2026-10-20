@@ -1671,8 +1671,18 @@ async function buildTSPL(list){
   if(pr.darkness!==''&&pr.darkness!=null)head+='DENSITY '+Math.max(0,Math.min(15,Math.round(+pr.darkness/2)))+'\r\n';
   if(pr.mode==='peel')head+='SET PEEL ON\r\n';else if(pr.mode==='cut')head+='SET CUTTER 1\r\n';else if(pr.mode==='tear')head+='SET TEAR ON\r\n';
   head+='CLS\r\n';
-  const bytesOf=(hex)=>{let t='';for(let i=0;i<hex.length;i+=2){const v=parseInt(hex.substr(i,2),16);t+=String.fromCharCode(invert?(~v)&0xFF:v);}return t;};
-  const bitmap=(x,y,r)=>'BITMAP '+x+','+y+','+r.bpr+','+(r.total/r.bpr)+',0,'+bytesOf(r.hex)+'\r\n';
+  const bytesOf=(r)=>{const b=r.bytes;let t='';
+    if(b){const parts=[];for(let i=0;i<b.length;i+=4096){let c='';const e=Math.min(b.length,i+4096);for(let j=i;j<e;j++)c+=String.fromCharCode(invert?(~b[j])&0xFF:b[j]);parts.push(c);}return parts.join('');}
+    for(let i=0;i<r.hex.length;i+=2){const v=parseInt(r.hex.substr(i,2),16);t+=String.fromCharCode(invert?(~v)&0xFF:v);}return t;};
+  // TSPL 的 BITMAP 不压缩：能用更少字节的 BAR 矩形精确画出时（一维码、横竖线）改用 BAR（src/zpl.js 的 bitmapRects）。
+  // 结果按位图缓存，同一位图在多张标签上只算一次；坐标是相对位图左上角的
+  const bitmap=(x,y,r)=>{
+    if(r.tspl===undefined){const rows=r.total/r.bpr;let rects=null;
+      if(window.ZPL&&ZPL.bitmapRects){let data=r.bytes;if(!data){data=new Uint8Array(r.total);for(let i=0;i<r.total;i++)data[i]=parseInt(r.hex.substr(i*2,2),16);}
+        rects=ZPL.bitmapRects({w:r.bpr*8,h:rows,bpr:r.bpr,data},Math.floor(r.total/14));}
+      r.tspl=rects?{rects}:{bytes:bytesOf(r),rows};}
+    if(r.tspl.rects)return r.tspl.rects.map(([rx,ry,rw,rh])=>'BAR '+(x+rx)+','+(y+ry)+','+rw+','+rh+'\r\n').join('');
+    return 'BITMAP '+x+','+y+','+r.bpr+','+r.tspl.rows+',0,'+r.tspl.bytes+'\r\n';};
   const shapeCache=new Map();
   const bodies=L.labels.map(parts=>{let b='';
     for(const p of parts){
