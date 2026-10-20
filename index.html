@@ -1800,7 +1800,8 @@ function askAdvanceCounters(done){
 window.addEventListener('afterprint',()=>{if(jobNow)logJob('浏览器打印',printList());askAdvanceCounters();endJob();});
 $('#loadBtn').onclick=()=>$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
-  fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));designName=f.name.replace(/\.json$/i,'');}catch(err){alert('读取失败: '+err.message);}e.target.value='';};fr.readAsText(f);};
+  fr.onload=()=>{let d;try{d=JSON.parse(fr.result);}catch(err){alert('读取失败：「'+f.name+'」不是有效的设计文件（文件内容损坏或不是本软件保存的 .json）。当前设计未改动。');e.target.value='';return;}
+    try{loadDesign(d);designName=f.name.replace(/\.json$/i,'');}catch(err){alert('读取失败：'+err.message);}e.target.value='';};fr.readAsText(f);};
 $('#themeBtn').onclick=()=>{const r=document.documentElement;
   const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
   r.setAttribute('data-theme',cur==='dark'?'light':'dark');};
