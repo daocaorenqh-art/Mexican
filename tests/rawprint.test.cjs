@@ -32,6 +32,22 @@ async function rejects(promiseFn, includes) {
   let got = await m.received; m.close();
   check('TCP 9100：收到内容与 ZPL（含中文 UTF-8）逐字节一致', got.equals(Buffer.from(zpl, 'utf8')));
 
+  // 打印机收到连接就复位（缺纸重启 / 断网）：不能报「已发送」，否则用户以为打印了、续打也不会出现
+  {
+    // 小任务整个进了系统发送缓冲区、写入回调已经返回，之后才收到对方复位——最容易被误报为成功的情形
+    const srv = net.createServer((s) => { s.on('error', () => {}); s.once('data', () => s.resetAndDestroy()); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    check('TCP：打印机收到数据后复位 → 报错而不是成功', await rejects(() => sendRaw({ kind: 'tcp', host: '127.0.0.1', port: srv.address().port }, zpl), '断开'));
+    srv.close();
+  }
+  {
+    const m2 = await mockPrinter(true);   // 不主动断开的打印机：写完无错误即成功
+    const t0 = Date.now();
+    await sendRaw({ kind: 'tcp', host: '127.0.0.1', port: m2.port }, zpl);
+    check('TCP：不主动断开的打印机仍算成功（≤ 2 秒）', (await m2.received).equals(Buffer.from(zpl, 'utf8')) && Date.now() - t0 < 2500);
+    m2.close();
+  }
+
   const big = '^XA^FO0,0^GFA,' + 'F0'.repeat(1024 * 1024) + '^FS^XZ';
   m = await mockPrinter(false);
   await sendRaw({ kind: 'tcp', host: '127.0.0.1', port: m.port }, big);

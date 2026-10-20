@@ -24,14 +24,18 @@ function sendTcp(host, port, buf, timeoutMs = 8000) {
     let settled = false;
     const fail = (e) => { if (settled) return; settled = true; sock.destroy(); reject(e); };
     sock.setTimeout(timeoutMs, () => fail(new Error('连接打印机超时（' + host + ':' + p + '）')));
-    sock.on('error', (e) => fail(new Error('无法连接打印机：' + e.message)));
+    let connected = false;
+    sock.on('error', (e) => fail(new Error((connected ? '打印机中途断开连接，数据可能未收全：' : '无法连接打印机：') + e.message)));
     sock.on('connect', () => {
-      // 数据全部写出即视为成功；有的打印机不主动断开，稍后自行关闭
+      connected = true;
+      // 写完后不立即算成功：打印机中途复位 / 断网时数据会丢，系统只会在之后报 ECONNRESET。
+      // 等打印机正常关闭连接即成功；不主动断开的打印机，写完 1.5 秒内没出错也算成功（然后由我们关闭）
       sock.end(buf, () => {
         if (settled) return;
-        settled = true;
-        sock.setTimeout(3000, () => sock.destroy());
-        resolve();
+        sock.setTimeout(0);
+        const t = setTimeout(() => { if (settled) return; settled = true; sock.destroy(); resolve(); }, 1500);
+        sock.once('close', (hadError) => { clearTimeout(t); if (settled) return; settled = true;
+          hadError ? reject(new Error('打印机中途断开连接（' + host + ':' + p + '），数据可能未收全')) : resolve(); });
       });
     });
   });
