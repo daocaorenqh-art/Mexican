@@ -65,6 +65,8 @@ function gfaDecode(body,bpr,rows){const out=[];let prev='';let i=0;
 // 用 ^FH 十六进制转义 ^ ~ _，数据原样到达打印机（不再把 ^ ~ 换成空格）
 function fd(text){return '^FH_^FD'+String(text).replace(/[\^~_]/g,c=>'_'+c.charCodeAt(0).toString(16).toUpperCase())+'^FS';}
 const ORI={0:'N',1:'R',2:'I',3:'B'};
+// 原生指令模式下有对应打印机指令的一维码；其余（GS1-128、UPC-E、Code93、Codabar）始终按精确位图输出
+const NATIVE_1D=['barcode','ean13','ean8','upca','code39','itf'];
 
 /* ---------- 打印机参数（为空则不输出，沿用打印机设置） ---------- */
 function setupCmds(p){p=p||{};let s='';
@@ -121,7 +123,7 @@ function build(o){
         }
         else if(B.BARCODE_1D.includes(t)){
           const res=B.encode1D(t,text),md=Job.moduleDots(el.module,dpi),hd=Job.dots(el.h,dpi);
-          if(opt.barcodes==='native'&&isRightAngle(rot)){
+          if(opt.barcodes==='native'&&isRightAngle(rot)&&NATIVE_1D.includes(t)){
             const o4=ORI[((Math.round(rot/90)%4)+4)%4],f=el.showText?'Y':'N',bw=res.bits.length*md,bh=hd+(el.showText?Job.dots(3,dpi):0);
             const off=rotOffset(bw,bh,rot),pos='^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+'^BY'+Math.min(10,md);
             const d=res.text;
@@ -142,8 +144,8 @@ function build(o){
             body+=place(x,y,bm,rot);
           }
         }
-        else if(t==='qrcode'||t==='datamatrix'){
-          const m=t==='qrcode'?B.Codes2D.encodeQR(text||' ',el.ecl||'M'):B.Codes2D.encodeDM(text||' ');
+        else if(B.BARCODE_2D.includes(t)){
+          const m=B.encode2D(t,text,el.ecl);
           const md=Job.matrixModuleDots(el.size,m.size,dpi);
           if(opt.barcodes==='native'&&t==='datamatrix'&&isRightAngle(rot)){const s=m.size*md,off=rotOffset(s,s,rot);
             body+='^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+'^BX'+ORI[((Math.round(rot/90)%4)+4)%4]+','+md+',200'+fd(text||' ')+'\n';}

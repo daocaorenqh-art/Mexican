@@ -62,6 +62,13 @@ const cpp = async (m, formats) => {
     const d = Codes2D.encodeDM(t);
     check(`DataMatrix 中文 ${d.size}x${d.size} "${t.slice(0, 12)}" zxing-cpp`, (await cpp(d, ['DataMatrix'])) === t);
   }
+  // GS1 DataMatrix：首码字 FNC1(232)，可变长 AI 后 FNC1 分隔
+  const { encode2D } = require(path.join(__dirname, '..', 'src', 'barcodes.js'));
+  for (const src of ['(01)06925253841665(17)261020(10)B26(21)SN0001', '(01)06925253841665(10)LOT-A(240)PART/7']) {
+    const d = encode2D('gs1dm', src);
+    const r = await decodeBits(d.size, d.size, (x, y) => d.modules[y][x], { quiet: 2, scale: 4, formats: ['DataMatrix'], textMode: 'HRI' });
+    check(`GS1 DataMatrix ${src} zxing-cpp`, r.length && r[0].text === src);
+  }
   let threw = false; try { Codes2D.encodeQR('9'.repeat(8000), 'L'); } catch (e) { threw = true; }
   check('超长 QR 被拒绝', threw);
   threw = false; try { Codes2D.encodeDM('中'.repeat(600)); } catch (e) { threw = true; }

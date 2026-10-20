@@ -73,7 +73,7 @@ function elementSize(el,text,dpi,enc,measure){
   const t=el.type;
   if(B.BARCODE_1D.includes(t)){const r=enc();const mm=moduleDots(el.module,dpi)*25.4/dpi;
     return {w:r.bits.length*mm,h:(+el.h||0)+(el.showText?HRI_MM:0)};}
-  if(t==='qrcode'||t==='datamatrix'){const m=enc();const s=m.size*matrixModuleDots(el.size,m.size,dpi)*25.4/dpi;return {w:s,h:s};}
+  if(B.BARCODE_2D.includes(t)){const m=enc();const s=m.size*matrixModuleDots(el.size,m.size,dpi)*25.4/dpi;return {w:s,h:s};}
   if(t==='text'||t==='counter'||t==='date'){const lines=String(text).split('\n');
     const w=Math.max(...lines.map(l=>measure?measure(l,el):estTextW(l,+el.size||0)));return {w,h:lines.length*(+el.size||0)};}
   if(t==='para')return {w:+el.w||0,h:+el.size||0};
@@ -91,11 +91,11 @@ function preflight(o){
   const {elements,list,label}=o,dpi=+label.dpi||203,W=+label.w||0,H=+label.h||0;
   const errors=[],warnings=[],cache=new Map(),hasRows=list.some(e=>e.row);
   const encode=(el,text)=>{const k=el.type+'\u0001'+(el.ecl||'')+'\u0001'+text;
-    if(!cache.has(k)){let v;try{v={ok:el.type==='qrcode'?B.Codes2D.encodeQR(text||' ',el.ecl||'M'):
-      el.type==='datamatrix'?B.Codes2D.encodeDM(text||' '):B.encode1D(el.type,text)};}catch(err){v={err:err.message};}
+    if(!cache.has(k)){let v;try{v={ok:B.BARCODE_2D.includes(el.type)?B.encode2D(el.type,text,el.ecl):B.encode1D(el.type,text)};}
+      catch(err){v={err:err.message};}
       cache.set(k,v);}
     const v=cache.get(k);if(v.err)throw new Error(v.err);return v.ok;};
-  const isCode=t=>B.BARCODE_1D.includes(t)||t==='qrcode'||t==='datamatrix';
+  const isCode=t=>B.BARCODE_1D.includes(t)||B.BARCODE_2D.includes(t);
   for(const e of list){
     const ctx=labelCtx(elements,e,o),boxes=[];
     elements.forEach((el,ei)=>{
@@ -119,12 +119,12 @@ function preflight(o){
       if(!(+el.rot)){
         if(B.BARCODE_1D.includes(el.type)){const q=10*moduleDots(el.module,dpi)*25.4/dpi;
           if((+el.x||0)<q-0.05||bx.x1>W-q+0.05)add(warnings,'一维码左右静区不足 10 个模块（约 '+q.toFixed(1)+'mm），可能扫不出');}
-        if(el.type==='qrcode'||el.type==='datamatrix'){const m=encode(el,text),md=matrixModuleDots(el.size,m.size,dpi);
+        if(B.BARCODE_2D.includes(el.type)){const m=encode(el,text),md=matrixModuleDots(el.size,m.size,dpi);
           if(dots(el.size,dpi)/m.size<1)add(warnings,'码图边长太小：每个模块不足 1 个打印点，实际会放大到 '+(m.size*md*25.4/dpi).toFixed(1)+'mm');
           const q=(el.type==='qrcode'?4:1)*md*25.4/dpi;
           if((+el.x||0)<q-0.05||(+el.y||0)<q-0.05||bx.x1>W-q+0.05||bx.y1>H-q+0.05)add(warnings,(el.type==='qrcode'?'二维码四周静区不足 4 个模块':'DataMatrix 四周静区不足 1 个模块'));}
       }
-      if(['ean13','ean8','upca'].includes(el.type)){const x=moduleDots(el.module,dpi)*25.4/dpi;
+      if(['ean13','ean8','upca','upce'].includes(el.type)){const x=moduleDots(el.module,dpi)*25.4/dpi;
         if(x<0.264-0.001||x>0.66+0.001)add(warnings,'模块宽 '+x.toFixed(3)+'mm 偏离 GS1 零售码推荐范围 0.264–0.66mm');}
     });
     // 条码 / 二维码被其他内容压住会扫不出

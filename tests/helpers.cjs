@@ -24,7 +24,7 @@ async function zxing() {
   return Z;
 }
 // 1-bit 位图（{w,h,get(x,y)}）加白边、放大 → RGBA → 解码，返回 [{format,text}]
-async function decodeBits(w, h, get, { quiet = 12, scale = 3, formats } = {}) {
+async function decodeBits(w, h, get, { quiet = 12, scale = 3, formats, textMode = 'Plain' } = {}) {
   const Z = await zxing();
   const W = (w + quiet * 2) * scale, H = (h + quiet * 2) * scale, d = new Uint8ClampedArray(W * H * 4).fill(255);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (get(x, y))
@@ -32,7 +32,7 @@ async function decodeBits(w, h, get, { quiet = 12, scale = 3, formats } = {}) {
       const i = (((y + quiet) * scale + dy) * W + (x + quiet) * scale + dx) * 4; d[i] = d[i + 1] = d[i + 2] = 0;
     }
   const r = await Z.readBarcodes({ data: d, width: W, height: H, colorSpace: 'srgb' },
-    { formats: formats || [], tryHarder: true, tryRotate: true, maxNumberOfSymbols: 8, textMode: 'Plain' });
+    { formats: formats || [], tryHarder: true, tryRotate: true, maxNumberOfSymbols: 8, textMode });
   return r.filter(x => x.isValid).map(x => ({ format: x.format, text: x.text }));
 }
 

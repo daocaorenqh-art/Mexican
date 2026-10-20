@@ -121,8 +121,9 @@ function dmECC(data,n){let g=[1];
   const r=new Array(n).fill(0);
   for(const d of data){const f=d^r[0];r.shift();r.push(0);for(let i=0;i<n;i++)r[i]^=dmMul(g[i+1],f);}
   return r;}
-function dmASCII(text){const bytes=Array.from(new TextEncoder().encode(String(text)));const out=[];
+function dmASCII(text,gs1){const bytes=Array.from(new TextEncoder().encode(String(text)));const out=gs1?[232]:[];
   for(let i=0;i<bytes.length;i++){const c=bytes[i],n=bytes[i+1];
+    if(gs1&&c===29){out.push(232);continue;}  // GS1 分隔符 → FNC1
     if(c>=48&&c<=57&&n!==undefined&&n>=48&&n<=57){out.push(130+(c-48)*10+(n-48));i++;}
     else if(c<128)out.push(c+1);
     else{out.push(235);out.push(c-128+1);}}
@@ -155,9 +156,9 @@ function dmBase256UTF8(text){const bytes=Array.from(new TextEncoder().encode(Str
   const body=(n<=249?[n]:[Math.floor(n/250)+249,n%250]).concat(bytes);
   for(const v of body){const pos=out.length+1,r=((149*pos)%255)+1,t=v+r;out.push(t<=255?t:t-256);}
   return out;}
-function encodeDM(text){
-  const isAscii=!/[^\x00-\x7f]/.test(String(text));
-  const data=isAscii?dmASCII(text):dmBase256UTF8(text);
+function encodeDM(text,opt){
+  const isAscii=!/[^\x00-\x7f]/.test(String(text)),gs1=!!(opt&&opt.gs1);
+  const data=(isAscii||gs1)?dmASCII(text,gs1):dmBase256UTF8(text);
   const spec=DM_SIZES.find(s=>s[3]>=data.length);
   if(!spec)throw new Error('DataMatrix 数据过长');
   const [S,R,nReg,nData,nEcc,nBlk]=spec;
@@ -201,14 +202,17 @@ const C128 = (() => {
   const START_B=104, START_C=105, STOP=106;
   const isDigit=c=>c>='0'&&c<='9';
   function run(s,p){let n=0;while(p+n<s.length&&isDigit(s[p+n]))n++;return n;}
+  // 数据里的 \x1d 表示 FNC1（GS1-128：起始后一个、可变长 AI 之后作分隔）；C / B 子集里都是码字 102
+  const FNC1='\x1d';
   function encode(data){
-    const codes=[]; let i=0, mode;
-    if(run(data,0)>=4){mode='C';codes.push(START_C);} else {mode='B';codes.push(START_B);}
+    const codes=[]; let i=0, mode, p0=0;
+    while(data[p0]===FNC1)p0++;
+    if(run(data,p0)>=4){mode='C';codes.push(START_C);} else {mode='B';codes.push(START_B);}
     while(i<data.length){
+      if(data[i]===FNC1){codes.push(102);i++;continue;}
       if(mode==='C'){
         const r=run(data,i);
-        if(r>=2){const pairs=Math.floor(r/2);for(let p=0;p<pairs;p++){codes.push(parseInt(data.substr(i,2),10));i+=2;}
-          if(i<data.length){codes.push(100);mode='B';}}
+        if(r>=2){const pairs=Math.floor(r/2);for(let p=0;p<pairs;p++){codes.push(parseInt(data.substr(i,2),10));i+=2;}}
         else {codes.push(100);mode='B';}
       } else {
         const r=run(data,i);
@@ -314,8 +318,119 @@ const ITF=(()=>{
   return {modules};
 })();
 
+/* ---------- GS1 应用标识符（AI） ----------
+   输入写法：(01)06925253841665(17)261020(10)B26。校验 AI 格式、长度、GTIN/SSCC 校验位、日期；
+   生成条码数据（可变长 AI 后加 FNC1 分隔）和人眼可读文字。 */
+// [AI 正则, 格式, 名称]；格式 n=数字 an=字母数字，..N=最多 N 位，否则固定位数；chk=末位 GS1 校验位，date=YYMMDD
+const GS1_AI=[
+  [/^00$/,'n18 chk','SSCC'],[/^0[123]$/,'n14 chk','GTIN'],[/^1[0]$/,'an..20','批号'],[/^1[1-7]$/,'n6 date','日期'],
+  [/^20$/,'n2','变体'],[/^21$/,'an..20','序列号'],[/^22$/,'an..20','消费品变体'],[/^23\d$/,'an..28','']
+  ,[/^24[01]$/,'an..30',''],[/^242$/,'n..6',''],[/^243$/,'an..20',''],[/^25[0134]$/,'an..30',''],[/^255$/,'n..25',''],
+  [/^30$/,'n..8','数量'],[/^3[1-6]\d\d$/,'n6','计量'],[/^37$/,'n..8','数量'],[/^39[0-3]\d$/,'n..18','金额'],
+  [/^40[0-3]$/,'an..30',''],[/^41[0-7]$/,'n13 chk','GLN'],[/^42[0]$/,'an..20','邮编'],[/^421$/,'an..12',''],
+  [/^42[2-6]$/,'n..15',''],[/^7\d{3}$/,'an..30',''],[/^80\d\d$/,'an..30',''],[/^8200$/,'an..70','网址'],[/^9\d$/,'an..90','内部'],
+];
+// 预定义定长的 AI 前两位：其后不需要 FNC1 分隔
+const GS1_FIXED=new Set(['00','01','02','03','04','11','12','13','14','15','16','17','18','19','20','31','32','33','34','35','36','41']);
+const GS1_CSET=/^[!"%&'()*+,\-./0-9:;<=>?A-Z_a-z]*$/; // GS1 AI 编码字符集 82
+function gs1Check(d){let s=0;for(let i=0;i<d.length;i++)s+=(+d[d.length-1-i])*(i%2===0?3:1);return (10-s%10)%10;}
+function parseGS1(raw){
+  const src=String(raw==null?'':raw).trim(),out=[];
+  if(!src)throw new Error('GS1 内容为空');
+  const re=/\((\d{2,4})\)([^()]*)/g;let m,pos=0;
+  while((m=re.exec(src))){
+    if(m.index!==pos)throw new Error('GS1 写法应为 (AI)数据(AI)数据…，"'+src.slice(pos,m.index)+'" 无法识别');
+    pos=re.lastIndex;
+    const ai=m[1],v=m[2],def=GS1_AI.find(d=>d[0].test(ai));
+    if(!def)throw new Error('不认识的 GS1 AI ('+ai+')');
+    const [fmt,flag]=def[1].split(' '),num=fmt[0]==='n'&&fmt[1]!=='a',var_=fmt.includes('..'),len=+fmt.replace(/\D/g,'');
+    if(!v)throw new Error('AI ('+ai+') 没有数据');
+    if(num&&!/^\d+$/.test(v))throw new Error('AI ('+ai+') 只能是数字："'+v+'"');
+    if(!num&&!GS1_CSET.test(v))throw new Error('AI ('+ai+') 含 GS1 不允许的字符："'+v+'"');
+    if(var_?v.length>len:v.length!==len)throw new Error('AI ('+ai+') 应为'+(var_?'最多 ':'')+len+' 位，实际 '+v.length+' 位');
+    if(flag==='chk'&&gs1Check(v.slice(0,-1))!==+v.slice(-1))throw new Error('AI ('+ai+') 校验位错误，最后一位应为 '+gs1Check(v.slice(0,-1)));
+    if(flag==='date'){const mo=+v.slice(2,4),d=+v.slice(4,6);if(mo<1||mo>12||d>31)throw new Error('AI ('+ai+') 日期无效：'+v+'（YYMMDD）');}
+    out.push({ai,v});
+  }
+  if(pos!==src.length||!out.length)throw new Error('GS1 写法应为 (AI)数据(AI)数据…');
+  return out;
+}
+// 条码数据：\x1d = FNC1 分隔（Code128 → 码字 102，DataMatrix → 码字 232）
+function gs1Data(items){return items.map((it,i)=>it.ai+it.v+(i<items.length-1&&!GS1_FIXED.has(it.ai.slice(0,2))?'\x1d':'')).join('');}
+const gs1HRI=items=>items.map(it=>'('+it.ai+')'+it.v).join('');
+const GS1={parse:parseGS1,data:gs1Data,hri:gs1HRI,check:gs1Check};
+
+/* ---------- UPC-E（零压缩 UPC） ---------- */
+const UPCE=(()=>{
+  const {L,R}=EANLR,G=L.map(p=>p.split('').reverse().map(b=>b==='1'?'0':'1').join('')); // G = R 码倒序
+  const PAR=['EEEOOO','EEOEOO','EEOOEO','EEOOOE','EOEEOO','EOOEEO','EOOOEE','EOEOEO','EOEOOE','EOOEOE'];
+  function toUPCA(ns,d){const [a,b,c,x,y,z]=d.split('');
+    if(z<='2')return ns+a+b+z+'0000'+c+x+y;
+    if(z==='3')return ns+a+b+c+'00000'+x+y;
+    if(z==='4')return ns+a+b+c+x+'00000'+y;
+    return ns+a+b+c+x+y+'0000'+z;}
+  function modules(raw){let d=digitsOf(raw,'UPC-E');
+    if(d.length===6)d='0'+d;
+    if(d.length!==7&&d.length!==8)throw new Error('UPC-E 需要 6、7 或 8 位数字（收到 '+d.length+' 位）');
+    const ns=d[0];if(ns!=='0'&&ns!=='1')throw new Error('UPC-E 首位（数制）只能是 0 或 1');
+    const a=toUPCA(ns,d.slice(1,7));let s=0;for(let i=0;i<11;i++)s+=(+a[i])*(i%2===0?3:1);const ck=(10-s%10)%10;
+    if(d.length===8)checkGiven(d,ck,'UPC-E');
+    const par=PAR[ck];let bits='101';
+    for(let i=0;i<6;i++){const odd=(par[i]==='O')!==(ns==='1');bits+=(odd?L:G)[+d[i+1]];}
+    bits+='010101';
+    return {bits,text:d.slice(0,7)+ck,upca:a+ck};}
+  return {modules};
+})();
+
+/* ---------- Code 93（含全 ASCII 扩展、双校验字符） ---------- */
+const C93=(()=>{
+  const CH='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%';
+  const ENC=[0x114,0x148,0x144,0x142,0x128,0x124,0x122,0x150,0x112,0x10A,0x1A8,0x1A4,0x1A2,0x194,0x192,0x18A,0x168,0x164,
+    0x162,0x134,0x11A,0x158,0x14C,0x146,0x12C,0x116,0x1B4,0x1B2,0x1AC,0x1A6,0x196,0x19A,0x16C,0x166,0x136,0x13A,
+    0x12E,0x1D4,0x1D2,0x1CA,0x16E,0x176,0x1AE,0x126,0x1DA,0x1D6,0x132,0x15E];
+  const SH={'$':43,'%':44,'/':45,'+':46}; // 四个移位字符 ($) (%) (/) (+)
+  // 全 ASCII：非原生字符用移位字符 + 字母表示
+  function expand(ch){const c=ch.charCodeAt(0);
+    if(c>127)throw new Error('Code93 仅支持 ASCII');
+    if(CH.includes(ch))return [CH.indexOf(ch)];
+    const L=(sh,letter)=>[SH[sh],CH.indexOf(letter)];
+    if(c===0)return L('%','U');if(c>=1&&c<=26)return L('$',String.fromCharCode(64+c));
+    if(c>=27&&c<=31)return L('%',String.fromCharCode(65+c-27));
+    if(c>=97&&c<=122)return L('+',String.fromCharCode(c-32));
+    const slash='!"#$%&\'()*+,-./',si=slash.indexOf(ch);if(si>=0&&ch!=='$'&&ch!=='%'&&ch!=='+'&&ch!=='-'&&ch!=='.'&&ch!=='/')return L('/',String.fromCharCode(65+si));
+    if(ch===':')return L('/','Z');
+    const pct={';':'F','<':'G','=':'H','>':'I','?':'J','[':'K','\\':'L',']':'M','^':'N','_':'O','{':'P','|':'Q','}':'R','~':'S','\x7f':'T','@':'V','`':'W'};
+    if(pct[ch])return L('%',pct[ch]);
+    throw new Error('Code93 不支持字符 '+ch);}
+  const bin=v=>v.toString(2).padStart(9,'0');
+  function modules(raw){const text=String(raw==null?'':raw);if(!text)throw new Error('Code93 内容为空');
+    const vals=[];for(const ch of text)vals.push(...expand(ch));
+    const ck=(arr,maxW)=>{let s=0;for(let i=0;i<arr.length;i++)s+=arr[arr.length-1-i]*((i%maxW)+1);return s%47;};
+    const c=ck(vals,20),k=ck(vals.concat(c),15);
+    const all=[47,...vals,c,k,47];
+    return {bits:all.map(v=>bin(ENC[v])).join('')+'1',text};}
+  return {modules};
+})();
+
+/* ---------- Codabar（库德巴，起止符 A/B/C/D） ---------- */
+const CODABAR=(()=>{
+  const AL='0123456789-$:/.+ABCD';
+  const ENC=[0x003,0x006,0x009,0x060,0x012,0x042,0x021,0x024,0x030,0x048,0x00c,0x018,0x045,0x051,0x054,0x015,0x01A,0x029,0x00B,0x00E];
+  function modules(raw){let t=String(raw==null?'':raw).toUpperCase().replace(/\s/g,'');
+    if(!t)throw new Error('Codabar 内容为空');
+    if(!/^[ABCD]/.test(t))t='A'+t;if(!/[ABCD]$/.test(t)||t.length<3)t=t+'B';
+    if(/[ABCD]/.test(t.slice(1,-1)))throw new Error('Codabar 的 A/B/C/D 只能作起止符');
+    let bits='';
+    for(let i=0;i<t.length;i++){const k=AL.indexOf(t[i]);if(k<0)throw new Error('Codabar 不支持字符 '+t[i]);
+      for(let e=0;e<7;e++){const wide=(ENC[k]>>(6-e))&1;bits+=(e%2===0?'1':'0').repeat(wide?3:1);}
+      if(i<t.length-1)bits+='0';}
+    return {bits,text:t};}
+  return {modules};
+})();
+
 // 统一入口：一维码类型 → {bits,text}；预览、预检、ZPL 共用，保证三处数据一致
-const BARCODE_1D=['barcode','ean13','ean8','upca','code39','itf'];
+const BARCODE_1D=['barcode','gs1128','ean13','ean8','upca','upce','code39','code93','codabar','itf'];
+const BARCODE_2D=['qrcode','datamatrix','gs1dm'];
 function encode1D(type,text){
   switch(type){
     case 'barcode':if(String(text)==='')throw new Error('Code128 内容为空');return {bits:C128.modules(String(text)),text:String(text)};
@@ -324,9 +439,20 @@ function encode1D(type,text){
     case 'upca':return UPCA.modules(text);
     case 'code39':return C39.modules(text);
     case 'itf':return ITF.modules(text);
+    case 'gs1128':{const it=GS1.parse(text);return {bits:C128.modules('\x1d'+GS1.data(it)),text:GS1.hri(it)};}
+    case 'upce':return UPCE.modules(text);
+    case 'code93':return C93.modules(text);
+    case 'codabar':return CODABAR.modules(text);
   }
   throw new Error('未知条码类型 '+type);
 }
-const api={Codes2D,C128,EAN13,EAN8,UPCA,C39,ITF,BARCODE_1D,encode1D};
+// 二维码：{size, modules}
+function encode2D(type,text,ecl){
+  if(type==='qrcode')return Codes2D.encodeQR(text||' ',ecl||'M');
+  if(type==='datamatrix')return Codes2D.encodeDM(text||' ');
+  if(type==='gs1dm')return Codes2D.encodeDM(GS1.data(GS1.parse(text)),{gs1:true});
+  throw new Error('未知二维码类型 '+type);
+}
+const api={Codes2D,C128,EAN13,EAN8,UPCA,C39,ITF,UPCE,C93,CODABAR,GS1,BARCODE_1D,BARCODE_2D,encode1D,encode2D};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else Object.assign(root,api);
 })(typeof window!=='undefined'?window:globalThis);

@@ -148,13 +148,18 @@
     <a data-ins="text">文字</a>
     <a data-ins="para">段落（多行）</a>
     <a data-ins="barcode">条码 Code128</a>
+    <a data-ins="gs1128">条码 GS1-128</a>
     <a data-ins="ean13">条码 EAN-13</a>
     <a data-ins="ean8">条码 EAN-8</a>
     <a data-ins="upca">条码 UPC-A</a>
+    <a data-ins="upce">条码 UPC-E</a>
     <a data-ins="code39">条码 Code39</a>
+    <a data-ins="code93">条码 Code93</a>
+    <a data-ins="codabar">条码 Codabar</a>
     <a data-ins="itf">条码 ITF-25</a>
     <a data-ins="qrcode">二维码 QR</a>
     <a data-ins="datamatrix">二维码 DataMatrix</a>
+    <a data-ins="gs1dm">二维码 GS1 DataMatrix</a>
     <a data-ins="counter">流水号</a>
     <a data-ins="date">日期</a>
     <a data-ins="image">图片 / Logo</a>
@@ -279,13 +284,18 @@
       <div class="btns">
         <button data-add="text">+ 文字</button>
         <button data-add="barcode">+ Code128</button>
+        <button data-add="gs1128">+ GS1-128</button>
         <button data-add="ean13">+ EAN-13</button>
         <button data-add="ean8">+ EAN-8</button>
         <button data-add="upca">+ UPC-A</button>
+        <button data-add="upce">+ UPC-E</button>
         <button data-add="code39">+ Code39</button>
+        <button data-add="code93">+ Code93</button>
+        <button data-add="codabar">+ Codabar</button>
         <button data-add="itf">+ ITF-25</button>
         <button data-add="qrcode">+ 二维码</button>
         <button data-add="datamatrix">+ DataMatrix</button>
+        <button data-add="gs1dm">+ GS1 DataMatrix</button>
         <button data-add="counter">+ 流水号</button>
         <button data-add="date">+ 日期</button>
         <button data-add="image">+ 图片/Logo</button>
@@ -484,15 +494,15 @@ function renderLabel(e,i){
         if(el.align)node.style.textAlign=el.align;
       }
       else if(BARCODE_1D.includes(el.type)){
-        const res=encode1D(el.type,text),gap={ean13:'2px',ean8:'2px',upca:'1px',itf:'1px'}[el.type];
+        const res=encode1D(el.type,text),gap={ean13:'2px',ean8:'2px',upca:'1px',upce:'1px',itf:'1px'}[el.type];
         if(el.bg)node.style.background=el.bg;
         node.appendChild(barsSVG(res.bits,snapModulePx(el.module),el.h*PXMM,el.color));
         if(el.showText){const t=document.createElement('div');t.textContent=res.text;
           t.style.cssText='text-align:center;font:'+(2.7*PXMM)+'px/1.1 monospace;'+(gap?'letter-spacing:'+gap+';':'')+'margin-top:1px;width:100%;color:'+(el.color||'#000');
           node.appendChild(t);}
       }
-      else if(el.type==='qrcode'||el.type==='datamatrix'){
-        const m=el.type==='qrcode'?Codes2D.encodeQR(text||' ',el.ecl||'M'):Codes2D.encodeDM(text||' ');
+      else if(BARCODE_2D.includes(el.type)){
+        const m=encode2D(el.type,text,el.ecl);
         if(el.bg)node.style.background=el.bg;
         node.appendChild(matrixSVG(m.modules,m.size,el.size,el.color));
       }
@@ -602,13 +612,18 @@ const FIELDS={
   itf:BC('内容(数字,奇数自动补0)'),
   qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['ecl','纠错等级','sel',['L','M','Q','H']],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
   datamatrix:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
+  gs1dm:[['content','GS1 内容，如 (01)06925253841665(17)261020(10){批号}','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']],
+  gs1128:BC('GS1 内容，如 (01)06925253841665(17)261020(10){批号}'),
+  upce:BC('内容(6/7/8位数字，首位 0 或 1)'),
+  code93:BC('内容(ASCII)'),
+  codabar:BC('内容(数字 -$:/.+，可带起止符 A–D)'),
   counter:[['name','名称（其他元素用 {#名称} 引用）','text'],['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['every','每几张/条递增','num'],['suffix','后缀','text'],['per','递增方式','sel',[['label','每张递增'],['record','每条记录递增（多份同号）']]],['radix','进制','sel',[['10','十进制'],['16','十六进制'],['36','36 进制（0-9A-Z）']]],['persist','打印后自动续号','bool'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
   date:[['format','格式（YYYY YY MM DD HH mm ss JJJ WW）','text'],['offset','偏移','num'],['unit','偏移单位','sel',[['d','天'],['m','月'],['y','年']]],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',[['left','左'],['center','中'],['right','右']]],['rot','旋转°','num']],
   image:[['content','动态图片（可空：{字段} / C:\\图片\\{SKU}.png / 数据库图片字段）','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],['dither','黑白转换（ZPL）','sel',[['','阈值'],['fs','抖动（适合照片）']]],['threshold','阈值 0–255','num'],['rot','旋转°','num']],
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',gs1dm:'GS1 DataMatrix',gs1128:'GS1-128',upce:'UPC-E',code93:'Code93',codabar:'Codabar',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   const box=$('#elist');box.innerHTML='';
@@ -656,6 +671,11 @@ const DEFAULTS={
   itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'1234567890'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,ecl:'M',color:'#000000',bg:'',rot:0,content:'https://'},
   datamatrix:{type:'datamatrix',x:3,y:3,size:12,color:'#000000',bg:'',rot:0,content:'DM-0001'},
+  gs1dm:{type:'gs1dm',x:3,y:3,size:14,color:'#000000',bg:'',rot:0,content:'(01)06925253841665(17)271231(10)B26'},
+  gs1128:{type:'gs1128',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'(01)06925253841665(10)B26'},
+  upce:{type:'upce',x:3,y:12,h:14,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'0123456'},
+  code93:{type:'code93',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'CODE93'},
+  codabar:{type:'codabar',x:3,y:12,h:12,module:0.25,showText:true,color:'#000000',bg:'',rot:0,content:'A123456B'},
   counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,name:'SN',prefix:'',start:1,step:1,pad:4,every:1,per:'label',radix:'10',suffix:'',persist:false},
   date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD',offset:0,unit:'d'},
   image:{type:'image',x:3,y:3,w:15,h:15,src:'',content:'',dither:'',threshold:128,rot:0},
@@ -743,7 +763,7 @@ window.addEventListener('mousemove',e=>{
   if(drag.mode==='move'){el.x=Math.max(0,snap(drag.ox+dx));el.y=Math.max(0,snap(drag.oy+dy));}
   else{const o=drag.o;
     if('w' in o){el.w=Math.max(1,snap(o.w+dx));el.h=Math.max(1,snap(o.h+dy));}
-    else if(el.type==='qrcode'||el.type==='datamatrix'){el.size=Math.max(3,snap(o.size+Math.max(dx,dy)));}
+    else if(BARCODE_2D.includes(el.type)){el.size=Math.max(3,snap(o.size+Math.max(dx,dy)));}
     else if('h' in o){el.h=Math.max(2,snap(o.h+dy));}
     else if('size' in o){el.size=Math.max(1,snap(o.size+dy));}}
   render({fast:true});
@@ -855,8 +875,8 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 添加对象向导 ---------- */
 const WZ={step:0,type:'text',source:'const',value:''};
-const WZTYPES=[['text','文字'],['para','段落（多行）'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
-const wzHasData=t=>['text','para','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix'].includes(t);
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['gs1128','条码 GS1-128'],['upce','条码 UPC-E'],['code93','条码 Code93'],['codabar','条码 Codabar'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['gs1dm','GS1 DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const wzHasData=t=>['text','para'].concat(BARCODE_1D,BARCODE_2D).includes(t);
 function wzFields(){const r=parseData($('#csv').value);if(r&&r.length)return Object.keys(r[0]);
   if(rows&&rows.length)return Object.keys(rows[0]);return [];}
 function wzOpen(){WZ.step=0;WZ.type='text';WZ.source='const';WZ.value='';$('#wizard').style.display='flex';wzRender();}

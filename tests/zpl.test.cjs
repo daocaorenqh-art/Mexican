@@ -65,6 +65,21 @@ const build = (elements, extra) => ZPL.build(Object.assign({ label: { w: 80, h: 
     const got = await decodeLabel(renderZPL(r.zpl)[0].bm);
     check(`${c.type} 旋转 ${rot}° 打印点阵可扫`, got.some(g => g.text === c.want || (c.type === 'upca' && g.text === '0' + c.want)), JSON.stringify(got));
   }
+  // 新码制（位图输出）：GS1 按人眼格式读回
+  for (const c of [{ type: 'gs1128', content: '(01)06925253841665(17)261020(10)B26', hri: true },
+    { type: 'gs1dm', content: '(01)06925253841665(10)LOT7(21)SN01', size: 14, hri: true },
+    { type: 'upce', content: '0123456', want: '01234565' }, { type: 'code93', content: 'Code93 x', want: 'Code93 x' },
+    { type: 'codabar', content: 'A40156B', want: 'A40156B' }]) {
+    for (const rot of [0, 90]) {
+      const el = Object.assign({ x: rot ? 75 : 10, y: rot ? 4 : 25, h: 12, module: 0.25, showText: false, rot }, c);
+      const bm = renderZPL(build([el], { label: { w: 100, h: 70, dpi: 203 } }).zpl)[0].bm;
+      const got = await decodeBits(bm.w, bm.h, (x, y) => ZPL.getPx(bm, x, y), { quiet: 10, scale: 2, textMode: c.hri ? 'HRI' : 'Plain' });
+      const want = c.want || c.content;
+      check(`${c.type} 旋转 ${rot}° 打印点阵可扫`, got.some(g => g.text === want || (c.type === 'codabar' && 'A' + g.text + 'B' === want) || (c.type === 'upce' && g.text.length === 13)), JSON.stringify(got));
+    }
+  }
+  check('原生模式下 GS1-128 自动改用精确位图', /\^GFA/.test(build([{ type: 'gs1128', x: 5, y: 5, h: 10, module: 0.25, content: '(10)A1' }], { options: { barcodes: 'native' } }).zpl));
+
   // 位置：5mm @203dpi = 40 点；旋转 90° 时外框左移条高
   let z = build([{ type: 'barcode', x: 5, y: 5, h: 10, module: 0.25, content: 'ABC' }]).zpl;
   check('^FO 按 mm→点换算', /\^FO40,40\^GFA/.test(z), z.slice(0, 120));
