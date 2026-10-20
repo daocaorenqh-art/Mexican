@@ -18,6 +18,26 @@ eq('无数据时 1 张', Job.makePrintList(null, 1, 0, 3).length, 3);
 L = Job.makePrintList(rows, 1, 0, 1, new Set([2]));
 check('跳过出错标签后序号保持不变', L.length === 4 && L[2].idx === 3);
 
+// 记录选择 / 数量字段
+const qrows = [{ SKU: 'A', QTY: '2' }, { SKU: 'B', QTY: '0' }, { SKU: 'C', QTY: 'x' }, { SKU: 'D', QTY: '3' }];
+L = Job.makePrintList(qrows, 1, 0, 1, null, { qtyField: 'QTY' });
+eq('数量字段：A×2 + D×3，0 和非数字不打', L.map(e => e.row.SKU).join(''), 'AADDD');
+check('数量字段：同一记录的份号 / 记录序号', L[4].copy === 3 && L[4].recPos === 1 && L[4].rec === 4, JSON.stringify(L[4]));
+eq('数量字段 × 每条份数', Job.makePrintList(qrows, 1, 0, 2, null, { qtyField: 'QTY' }).length, 10);
+L = Job.makePrintList(qrows, 1, 0, 1, null, { selected: new Set([1, 3]) });
+eq('只打选中的记录', L.map(e => e.row.SKU).join(''), 'BD');
+eq('选中记录的序号连续', L.map(e => e.recPos).join(','), '0,1');
+L = Job.makePrintList(qrows, 1, 0, 1, null, { selected: new Set() });
+check('一条都没选：给出原因', L.length === 0 && /没有选中/.test(L.error));
+L = Job.makePrintList(qrows, 2, 3, 1, null, { qtyField: 'QTY' });
+check('范围内数量都无效：给出原因', L.length === 0 && /数量字段/.test(L.error), L.error);
+// 文字适应宽度
+eq('未超宽不缩小', Job.effectiveSize({ size: 4, fitW: 50 }, 'AB'), 4);
+check('超宽按比例缩小', Math.abs(Job.effectiveSize({ size: 4, fitW: 10 }, '中文中文中文') - 10 / 24 * 4) < 1e-9);
+eq('不小于最小字号', Job.effectiveSize({ size: 4, fitW: 1, minSize: 2 }, '很长很长很长的内容'), 2);
+const fitR = Job.preflight({ elements: [{ type: 'text', x: 1, y: 1, size: 5, fitW: 40, content: '这是一段非常非常非常长的商品名称文字' }], list: Job.makePrintList(null, 1, 0, 1), label: { w: 50, h: 30, dpi: 203 }, now: new Date() });
+check('适应宽度后不再报超出标签', !fitR.warnings.length, JSON.stringify(fitR.warnings.map(w => w.msg)));
+
 // 流水号
 const c = { type: 'counter', start: 1, step: 1, pad: 4, prefix: 'SN', suffix: '' };
 L = Job.makePrintList(rows, 1, 2, 2);

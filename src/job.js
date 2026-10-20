@@ -7,18 +7,27 @@ const T=isNode?require('./textdata.js'):root;
 
 /* ---------- 出标签序列 ----------
    每项：{row, rec(第几条记录，无数据为 0), recPos(在本次范围内的第几条，0 起), copy(第几份，1 起), idx(本次第几张，0 起)}
-   范围填反等错误时返回空数组，并在 .error 上给出原因（不再悄悄改打第 1 条）。 */
-function makePrintList(rows,from,to,copies,skip){
+   范围填反等错误时返回空数组，并在 .error 上给出原因（不再悄悄改打第 1 条）。
+   opt.selected：只打这些记录（0 起的下标 Set）；opt.qtyField：每条记录的份数取该字段（× 每条份数，非数字 / 0 不打） */
+function makePrintList(rows,from,to,copies,skip,opt){
+  opt=opt||{};
   const has=!!(rows&&rows.length),base=has?rows:[null],n=base.length;
   const f=Math.max(1,Math.floor(+from||1)),tRaw=Math.floor(+to||0),t=tRaw>0?Math.min(n,tRaw):n;
   const cp=Math.max(1,Math.floor(+copies||1)),out=[];
   if(f>n){out.error='起始记录 '+f+' 超出数据条数 '+n;return out;}
   if(f>t){out.error='打印范围有误：从第 '+f+' 条到第 '+t+' 条';return out;}
-  let idx=0;
-  for(let i=f-1;i<t;i++)for(let c=0;c<cp;c++){
-    const e={row:base[i],rec:has?i+1:0,recPos:i-(f-1),copy:c+1,idx:idx++};
-    if(!skip||!skip.has(e.idx))out.push(e);
+  let idx=0,pos=0;
+  for(let i=f-1;i<t;i++){
+    if(has&&opt.selected&&!opt.selected.has(i))continue;
+    let n=cp;
+    if(has&&opt.qtyField){const q=Math.floor(Number(String(base[i][opt.qtyField]??'').trim()));n=q>0&&isFinite(q)?q*cp:0;}
+    for(let c=0;c<n;c++){
+      const e={row:base[i],rec:has?i+1:0,recPos:pos,copy:c+1,idx:idx++};
+      if(!skip||!skip.has(e.idx))out.push(e);
+    }
+    if(n)pos++;
   }
+  if(!out.length&&!out.error)out.error=has&&opt.selected&&!opt.selected.size?'没有选中任何记录':has&&opt.qtyField?'所选记录的数量字段「'+opt.qtyField+'」都不是正数':'没有要出的标签';
   return out;
 }
 
@@ -68,14 +77,19 @@ const moduleDots=(mm,dpi)=>Math.max(1,dots(mm,dpi));
 const matrixModuleDots=(sizeMM,n,dpi)=>Math.max(1,Math.floor(dots(sizeMM,dpi)/n));
 const HRI_MM=3; // 一维码下方人眼可读文字约占高度
 function estTextW(text,sizeMM){let w=0;for(const ch of String(text))w+=/[⺀-￿]/.test(ch)?sizeMM:sizeMM*0.6;return w;}
+// 文字「适应宽度」：设了最大宽度（fitW）且内容超宽时按比例缩小字号（不小于 minSize，默认 1mm）
+function effectiveSize(el,text,measure){const size=+el.size||0,fw=+el.fitW||0;
+  if(!fw||!size||!text)return size;
+  const w=Math.max(...String(text).split('\n').map(l=>measure?measure(l,el):estTextW(l,size)));
+  return w>fw?Math.max(+el.minSize||1,size*fw/w):size;}
 // 元素未旋转时的宽高（mm）；enc 为缓存的编码结果
 function elementSize(el,text,dpi,enc,measure){
   const t=el.type;
   if(B.BARCODE_1D.includes(t)){const r=enc();const mm=moduleDots(el.module,dpi)*25.4/dpi;
     return {w:r.bits.length*mm,h:(+el.h||0)+(el.showText?HRI_MM:0)};}
   if(B.BARCODE_2D.includes(t)){const m=enc();const s=m.size*matrixModuleDots(el.size,m.size,dpi)*25.4/dpi;return {w:s,h:s};}
-  if(t==='text'||t==='counter'||t==='date'){const lines=String(text).split('\n');
-    const w=Math.max(...lines.map(l=>measure?measure(l,el):estTextW(l,+el.size||0)));return {w,h:lines.length*(+el.size||0)};}
+  if(t==='text'||t==='counter'||t==='date'){const lines=String(text).split('\n'),sz=effectiveSize(el,text,measure),e2=Object.assign({},el,{size:sz});
+    const w=Math.max(...lines.map(l=>measure?measure(l,e2):estTextW(l,sz)));return {w,h:lines.length*sz};}
   if(t==='para')return {w:+el.w||0,h:+el.size||0};
   return {w:+el.w||0,h:+el.h||0};
 }
@@ -141,7 +155,7 @@ function groupIssues(arr,level){const m=new Map();
   for(const it of arr){const k=it.ei+'\u0001'+it.msg;if(!m.has(k))m.set(k,{level,ei:it.ei,el:it.el,msg:it.msg,labels:[]});m.get(k).labels.push(it.n);}
   return [...m.values()];}
 
-const api={makePrintList,counterText,counterAdvance,counterName,labelCtx,elementText,promptsUsed,imageSrc,
+const api={makePrintList,effectiveSize,counterText,counterAdvance,counterName,labelCtx,elementText,promptsUsed,imageSrc,
   dots,moduleDots,matrixModuleDots,elementSize,rotatedBox,preflight,groupIssues};
 if(isNode)module.exports=api;else root.Job=api;
 })(typeof window!=='undefined'?window:globalThis);

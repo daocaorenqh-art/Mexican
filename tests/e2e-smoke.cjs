@@ -86,6 +86,31 @@ const ROOT = path.join(__dirname, '..');
     check(`对齐到标签水平居中（${el.type}${el.rot ? ' 旋转' : ' 居中锚点'}）`, off < 1.5, off);
   }
 
+  // 数量字段 + 记录选择
+  await page.evaluate(() => { elements = [{ type: 'text', x: 2, y: 2, size: 3, content: '{SKU}', rot: 0 }]; $('#csv').value = 'SKU,数量\nA,2\nB,0\nC,3'; $('#applyCsv').click(); });
+  eq('自动识别「数量」字段', await page.inputValue('#qtyField'), '数量');
+  eq('按数量出标签 2+0+3', await page.locator('#preview .label').count(), 5);
+  await page.evaluate(() => { pickRecords(); });
+  await page.waitForSelector('#recTbl input');
+  await page.click('[data-sa="none"]'); await page.check('#recTbl input[data-ri="2"]'); await page.click('#dlgFt button.primary');
+  eq('只打选中的 C×3', await page.locator('#preview .label').count(), 3);
+  check('选择状态显示', (await page.innerText('#selInfo')).includes('已选 1 / 3'));
+  // 打印日志
+  await page.evaluate(() => localStorage.removeItem('label.printlog'));
+  dl = page.waitForEvent('download'); await page.evaluate(() => { exportZPL(); }); await dl;
+  const log = await page.evaluate(() => JSON.parse(localStorage.getItem('label.printlog')));
+  check('导出后写入打印日志（张数 / 记录 / 数据）', log.length === 1 && log[0].labels === 3 && log[0].recs === '3' && log[0].rows.length === 1, JSON.stringify(log[0]));
+  // 文字适应宽度
+  const fs1 = await page.evaluate(() => { elements = [{ type: 'text', x: 2, y: 2, size: 5, fitW: 20, content: '很长很长很长的商品名称文字', rot: 0 }]; setRows(null); return parseFloat(document.querySelector('#preview .el').style.fontSize); });
+  check('超宽文字自动缩小字号', fs1 < 5 * 3.78 * 0.5, fs1);
+  // 车间模式
+  page.once('dialog', (d) => d.accept(''));
+  await page.evaluate(() => toggleShop()); await page.waitForTimeout(200);
+  check('车间模式隐藏元素面板和画布工具', !(await page.isVisible('#elist')) && !(await page.isVisible('#canvasbar')) && await page.isVisible('#printBtn'));
+  page.once('dialog', (d) => d.accept());
+  await page.evaluate(() => toggleShop()); await page.waitForTimeout(200);
+  check('退出车间模式', await page.isVisible('#elist'));
+
   // GBK CSV
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lbl-'));
   fs.writeFileSync(path.join(tmp, 'gbk.csv'), Buffer.from('c6b7c3fb2c534b550ad3eac9a12c41310a', 'hex')); // 品名,SKU\n雨伞,A1

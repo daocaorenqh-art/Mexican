@@ -96,6 +96,10 @@
   .wzbody .opt label{display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer}
   .wzbody .opt label:hover{background:var(--bg)}
   .wzft{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+  body.shop #elist,body.shop #elist~.btns,body.shop #elist~.hint,body.shop #canvasbar,body.shop #saveBtn,
+  body.shop #menubar .menu:nth-child(2),body.shop #menubar .menu:nth-child(3),body.shop .pagepanel{display:none !important}
+  body.shop .label .el{cursor:default}
+  body.shop header h1::after{content:'（车间模式）';font-size:12px;color:var(--muted);font-weight:400}
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
   @media print{
@@ -172,10 +176,14 @@
     <a data-cmd="zoomin">放大</a>
     <a data-cmd="zoomout">缩小</a>
     <a data-cmd="zoomreset">实际大小</a>
+    <hr>
+    <a data-cmd="shop">车间模式（只打印）开/关</a>
   </div></div>
   <div class="menu"><span>工具</span><div class="dd">
     <a data-cmd="dbfocus">数据库套打</a>
     <a data-cmd="csvfocus">CSV 数据套打</a>
+    <a data-cmd="pick">选择要打印的记录…</a>
+    <a data-cmd="log">打印日志…</a>
   </div></div>
 </div>
 <header>
@@ -196,7 +204,7 @@
 <div class="wrap">
   <!-- 左侧设置 -->
   <div>
-    <div class="panel">
+    <div class="panel pagepanel">
       <h2>标签 & 纸张</h2>
       <div class="row">
         <label class="f"><span>标签宽 (<span class="ul">mm</span>)</span><input id="lw" type="number" value="50" min="1" step="1"></label>
@@ -287,7 +295,7 @@
       <p class="hint" id="prnMsg">USB 打印机：选「本机打印机按名称」，用上面选中的系统打印机直发（无需共享）；个别新式驱动不接受 RAW 时再改用「共享」。</p>
     </div>
 
-    <div class="panel">
+    <div class="panel pagepanel">
       <h2>元素</h2>
       <div id="elist"></div>
       <div class="btns">
@@ -321,6 +329,10 @@
 A1001,苹果,3.50
 A1002,香蕉,2.20"></textarea>
       <div id="fields" style="margin:8px 0"></div>
+      <div class="row">
+        <label class="f"><span>数量字段（每条打几张）</span><select id="qtyField"><option value="">不使用（按「每条份数」）</option></select></label>
+        <label class="f"><span>记录 <span id="selInfo"></span></span><button id="pickRecs" disabled>选择记录…</button></label>
+      </div>
       <div class="btns">
         <button id="importFile">导入 CSV 文件…</button>
         <input id="fileIn" type="file" accept=".csv,.txt,.tsv,.xlsx" hidden>
@@ -426,7 +438,7 @@ let elements=[
 let rows=null, sel=-1;
 const PXMM=3.78; // 屏幕预览 1mm≈3.78px(96dpi)
 let UNIT='mm'; // 显示单位；内部一律用 mm 存储
-const LENKEYS=new Set(['x','y','size','h','module','w','border']); // 需随单位换算的长度字段
+const LENKEYS=new Set(['x','y','size','h','module','w','border','fitW','minSize']); // 需随单位换算的长度字段
 const toMM=v=>UNIT==='cm'?(+v||0)*10:(+v||0);      // 输入(显示单位)→mm
 const fromMM=mm=>UNIT==='cm'?+(mm/10).toFixed(3):+(+mm).toFixed(3); // mm→显示单位
 
@@ -488,7 +500,7 @@ function renderLabel(e,i){
       const text=Job.elementText(el,ctx,e);
       if(el.type==='text'||el.type==='counter'||el.type==='date'){
         node.textContent=text;
-        node.style.fontSize=(el.size*PXMM)+'px';
+        node.style.fontSize=(Job.effectiveSize(el,text,measureMM)*PXMM)+'px';
         node.style.fontWeight=el.bold?'700':'400';
         if(el.font)node.style.fontFamily=el.font;
         if(el.align&&ANCHOR[el.align]){node.style.textAlign=el.align;node.style.display='inline-block';tf.push(ANCHOR[el.align]);}
@@ -564,7 +576,7 @@ function wrapWithRulers(lab,Wmm,Hmm){
 let jobSkip=null, jobNow=null, jobPrompts={};
 try{jobPrompts=JSON.parse(localStorage.getItem('label.prompts')||'{}')||{};}catch(e){}
 const jobOpts=()=>({prompts:jobPrompts,now:jobNow||new Date()});
-function printList(){return Job.makePrintList(rows,$('#rFrom').value,$('#rTo').value,$('#copies').value,jobSkip);}
+function printList(){return Job.makePrintList(rows,$('#rFrom').value,$('#rTo').value,$('#copies').value,jobSkip,{selected:selectedRecs,qtyField:$('#qtyField').value});}
 const PREVIEW_CAP=200;   // 预览最多渲染的张数；打印/导出 ZPL 不受此限
 let printingAll=false;   // 打印期间临时全量渲染
 function render(opt){
@@ -611,7 +623,7 @@ function updatePageStyle(){
 /* ---------- 元素编辑 UI ---------- */
 const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['h','条高(mm)','num'],['module','模块宽(mm)','num'],['showText','显示文字','bool'],['color','前景色','color'],['bg','背景色','color'],['rot','旋转°','num']];
 const FIELDS={
-  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['fitW','适应宽度(mm，0=不缩)','num'],['minSize','最小字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   barcode:BC('内容'),
   ean13:BC('内容(12/13位数字)'),
@@ -698,7 +710,7 @@ document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
 $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
-    if(['x','y','size','h','module','w','border','rot','start','step','pad','every','offset','threshold'].includes(k)){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
+    if(['x','y','size','h','module','w','border','rot','start','step','pad','every','offset','threshold','fitW','minSize'].includes(k)){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
     if(['bold','showText','fill','persist'].includes(k))v=v==='1';
     elements[i][k]=v;render();commit();return;}
   const img=e.target.dataset.img;
@@ -721,8 +733,9 @@ function refreshFields(){
   showFieldTags(r&&r.length?Object.keys(r[0]):[]);
 }
 $('#csv').addEventListener('input',refreshFields);
-$('#applyCsv').onclick=()=>{rows=parseData($('#csv').value);if(!rows){alert('需要至少表头 + 一行数据');return;}render();};
-$('#clearCsv').onclick=()=>{rows=null;render();};
+$('#applyCsv').onclick=()=>{const r=parseData($('#csv').value);if(!r){alert('需要至少表头 + 一行数据');return;}setRows(r);};
+$('#pickRecs').onclick=pickRecords;$('#qtyField').onchange=render;
+$('#clearCsv').onclick=()=>setRows(null);
 $('#importFile').onclick=()=>$('#fileIn').click();
 $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
   fr.onload=async()=>{
@@ -730,7 +743,7 @@ $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new Fi
       let t;
       if(/\.xlsx$/i.test(f.name)){const r=await XLSX.readRows(fr.result);t=r?XLSX.toTSV(r):'';}
       else t=decodeText(fr.result);
-      $('#csv').value=t;refreshFields();rows=parseData(t);
+      $('#csv').value=t;refreshFields();setRows(parseData(t));
       if(!rows)alert('需要至少表头 + 一行数据');
     }catch(err){alert('读取失败：'+err.message);}
     render();e.target.value='';};
@@ -758,6 +771,7 @@ $('#printBtn').onclick=()=>doPrint();
 let drag=null;
 const zf=()=>(+$('#zoom').value/100)||1;
 $('#preview').addEventListener('mousedown',e=>{
+  if(shopOn())return;
   const h=e.target.closest('.rz'), elNode=e.target.closest('.el');
   if(h){const ei=+h.dataset.ei;drag={mode:'resize',ei,sx:e.clientX,sy:e.clientY,o:{...elements[ei]}};
     document.body.style.userSelect='none';e.preventDefault();return;}
@@ -797,7 +811,7 @@ $('#canvasbar').addEventListener('click',e=>{
   el.x=+((+el.x||0)+dx).toFixed(2);el.y=+((+el.y||0)+dy).toFixed(2);commit();render();renderEditor();
 });
 window.addEventListener('keydown',e=>{
-  if(sel<0||sel>=elements.length)return;
+  if(sel<0||sel>=elements.length||shopOn())return;
   const tag=(e.target.tagName||'').toLowerCase();
   if(tag==='input'||tag==='textarea'||tag==='select')return;
   const step=e.shiftKey?2:0.5,el=elements[sel];let hit=true;
@@ -840,7 +854,7 @@ function zMove(dir){if(sel<0)return;const i=sel;
   else if(dir==='back'){elements.unshift(elements.splice(i,1)[0]);sel=0;}
   commit();renderEditor();render();}
 function newDesign(){if(!confirm('新建将清空当前设计，继续？'))return;
-  elements=[];rows=null;sel=-1;$('#csv').value='';showFieldTags([]);commit();renderEditor();render();}
+  elements=[];sel=-1;$('#csv').value='';designName='未命名';setRows(null);commit();renderEditor();render();}
 
 document.querySelector('#menubar').addEventListener('click',e=>{
   const ins=e.target.dataset.ins, cmd=e.target.dataset.cmd;
@@ -864,6 +878,9 @@ document.querySelector('#menubar').addEventListener('click',e=>{
     case 'zoomout':$('#zoom').value=Math.max(50,(+$('#zoom').value)-10);$('#zoom').oninput();break;
     case 'zoomreset':$('#zoom').value=100;$('#zoom').oninput();break;
     case 'dbfocus':{const p=$('#dbPanel');if(p&&p.style.display!=='none')p.scrollIntoView({behavior:'smooth'});else alert('数据库套打仅在桌面安装版可用');break;}
+    case 'shop':toggleShop();break;
+    case 'pick':pickRecords();break;
+    case 'log':showLog();break;
     case 'csvfocus':$('#csv').scrollIntoView({behavior:'smooth'});$('#csv').focus();break;
   }
 });
@@ -871,6 +888,7 @@ window.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase();
   const inField=tag==='input'||tag==='textarea'||tag==='select';
   if(e.ctrlKey||e.metaKey){const k=e.key.toLowerCase();
+    if(shopOn()&&k!=='p')return;
     if(k==='z'&&!inField){e.preventDefault();undo();}
     else if(k==='y'&&!inField){e.preventDefault();redo();}
     else if(k==='c'&&!inField){e.preventDefault();copySel();}
@@ -878,6 +896,7 @@ window.addEventListener('keydown',e=>{
     else if(k==='v'&&!inField){e.preventDefault();pasteClip();}
     else if(k==='p'){e.preventDefault();doPrint();}
     return;}
+  if(shopOn())return;
   if(!inField&&e.key==='Delete'){e.preventDefault();delSel();}
   if(!inField&&e.key==='Insert'){e.preventDefault();wzOpen();}
 });
@@ -927,6 +946,105 @@ $('#wizard').onclick=e=>{if(e.target.id==='wizard')wzClose();};
 $('#wzPrev').onclick=()=>{if(WZ.step>0){WZ.step=0;wzRender();}};
 $('#wzNext').onclick=()=>{if(WZ.step===0&&wzHasData(WZ.type)){WZ.step=1;wzRender();}else wzFinish();};
 
+/* ---------- 记录选择 / 数量字段 ---------- */
+let selectedRecs=null;   // null = 全部；Set(0 起下标) = 只打选中的
+// 换了数据：清空选择、刷新数量字段下拉
+function setRows(r){
+  rows=r;selectedRecs=null;
+  const keys=rows&&rows.length?Object.keys(rows[0]):[],q=$('#qtyField'),old=q.value;
+  q.innerHTML='<option value="">不使用（按「每条份数」）</option>'+keys.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('');
+  q.value=keys.includes(old)?old:(keys.find(k=>/^(数量|qty|quantity|张数|打印数量)$/i.test(k))||'');
+  showFieldTags(keys);updateSelInfo();render();
+}
+function updateSelInfo(){const n=rows?rows.length:0;
+  $('#selInfo').textContent=!n?'':selectedRecs?'已选 '+selectedRecs.size+' / '+n+' 条':'全部 '+n+' 条';
+  $('#pickRecs').disabled=!n;}
+async function pickRecords(){
+  if(!rows||!rows.length)return;
+  const keys=Object.keys(rows[0]),cols=keys.slice(0,5),cur=new Set(selectedRecs||rows.map((_,i)=>i));
+  const body=`<div style="display:flex;gap:6px;margin-bottom:8px"><input id="recQ" placeholder="搜索任意字段…">
+    <button data-sa="all">全选</button><button data-sa="none">全不选</button><button data-sa="inv">反选</button></div>
+    <div id="recCnt" class="hint" style="margin:0 0 6px"></div>
+    <div style="max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:6px"><table id="recTbl" style="width:100%;border-collapse:collapse;font-size:12px"></table></div>`;
+  const LIMIT=2000;
+  const r=await dialog('选择要打印的记录',body,[{id:'ok',label:'确定',primary:true},{id:null,label:'取消'}],b=>{
+    const tbl=b.querySelector('#recTbl'),q=b.querySelector('#recQ');
+    const match=()=>{const s=q.value.trim().toLowerCase();const out=[];
+      for(let i=0;i<rows.length;i++){if(!s||keys.some(k=>String(rows[i][k]).toLowerCase().includes(s)))out.push(i);}return out;};
+    const draw=()=>{const ids=match();
+      tbl.innerHTML='<tr><th></th><th>#</th>'+cols.map(k=>`<th style="text-align:left">${esc(k)}</th>`).join('')+'</tr>'
+        +ids.slice(0,LIMIT).map(i=>`<tr><td><input type="checkbox" data-ri="${i}" style="width:auto"${cur.has(i)?' checked':''}></td><td>${i+1}</td>`
+          +cols.map(k=>`<td>${esc(String(rows[i][k]).slice(0,40))}</td>`).join('')+'</tr>').join('');
+      b.querySelector('#recCnt').textContent='已选 '+cur.size+' / '+rows.length+' 条'+(ids.length>LIMIT?'；只显示前 '+LIMIT+' 条匹配，全选 / 反选作用于全部匹配记录':'');
+      b._ids=ids;};
+    q.oninput=draw;
+    tbl.onchange=e=>{const i=+e.target.dataset.ri;if(e.target.checked)cur.add(i);else cur.delete(i);b.querySelector('#recCnt').textContent='已选 '+cur.size+' / '+rows.length+' 条';};
+    b.querySelectorAll('[data-sa]').forEach(x=>x.onclick=()=>{const ids=b._ids;
+      if(x.dataset.sa==='all')ids.forEach(i=>cur.add(i));else if(x.dataset.sa==='none')ids.forEach(i=>cur.delete(i));
+      else ids.forEach(i=>cur.has(i)?cur.delete(i):cur.add(i));draw();});
+    draw();});
+  if(r!=='ok')return;
+  selectedRecs=cur.size===rows.length?null:cur;updateSelInfo();render();
+}
+
+/* ---------- 打印日志（追溯 / 补打） ---------- */
+let designName='未命名';
+const LOGKEY='label.printlog';
+function readLog(){try{return JSON.parse(localStorage.getItem(LOGKEY)||'[]')||[];}catch(e){return [];}}
+// 连续记录号压缩成区间：1-5,8,10-12
+function ranges(nums){const a=[...new Set(nums)].sort((x,y)=>x-y),out=[];
+  for(let i=0;i<a.length;){let j=i;while(j+1<a.length&&a[j+1]===a[j]+1)j++;out.push(i===j?String(a[i]):a[i]+'-'+a[j]);i=j+1;}return out.join(',');}
+function logJob(method,list,target){
+  if(!list||!list.length)return;
+  const recs=list.filter(e=>e.rec).map(e=>e.rec),serials={};
+  elements.filter(e=>e.type==='counter').forEach(c=>{serials[Job.counterName(c)]=Job.counterText(c,list[0])+(list.length>1?' – '+Job.counterText(c,list[list.length-1]):'');});
+  const usedRows=[...new Map(list.filter(e=>e.row).map(e=>[e.rec,e.row])).values()];
+  const entry={t:fmtDate(new Date(),'YYYY-MM-DD HH:mm:ss'),method,target:target||'',design:designName,labels:list.length,
+    recs:ranges(recs),serials,prompts:Object.assign({},jobPrompts),rows:usedRows.length<=1000?usedRows:null};
+  const log=readLog();log.unshift(entry);
+  try{localStorage.setItem(LOGKEY,JSON.stringify(log.slice(0,500)));}
+  catch(e){entry.rows=null;try{localStorage.setItem(LOGKEY,JSON.stringify(log.slice(0,200)));}catch(e2){}}
+}
+async function showLog(){
+  const log=readLog();
+  const body=log.length?`<div style="max-height:52vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr><th style="text-align:left">时间</th><th>方式</th><th>张数</th><th style="text-align:left">设计 / 记录 / 流水号 / 输入</th><th></th></tr>`
+    +log.map((g,i)=>`<tr style="border-top:1px solid var(--line)"><td>${esc(g.t)}</td><td>${esc(g.method)}${g.target?'<br><span class="hint">'+esc(g.target)+'</span>':''}</td><td style="text-align:center">${g.labels}</td>
+      <td>${esc(g.design)}${g.recs?'<br>记录 '+esc(g.recs):''}${Object.keys(g.serials||{}).map(k=>'<br>'+esc(k)+'：'+esc(g.serials[k])).join('')}${Object.keys(g.prompts||{}).length?'<br>'+Object.keys(g.prompts).map(k=>esc(k)+'='+esc(g.prompts[k])).join('，'):''}</td>
+      <td>${g.rows?`<button data-lg="${i}">载入数据</button>`:''}</td></tr>`).join('')+'</table></div>'
+    :'<p>还没有打印记录。</p>';
+  const r=await dialog('打印日志（最近 '+log.length+' 次）',body,[{id:'csv',label:'导出 CSV'},{id:'clear',label:'清空'},{id:null,label:'关闭',primary:true}],b=>{
+    b.querySelectorAll('[data-lg]').forEach(x=>x.onclick=()=>{const g=log[+x.dataset.lg];
+      $('#csv').value=XLSX.toTSV(g.rows);setRows(parseData($('#csv').value));Object.assign(jobPrompts,g.prompts||{});render();
+      $('#dlgFt button.primary').click();alert('已载入这次打印的 '+g.rows.length+' 条数据和输入值。流水号不会自动回退，补打同号请先调整流水号起始值。');});});
+  if(r==='csv'){const head=['时间','方式','目标','设计','张数','记录','流水号','输入'];
+    const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const csv='﻿'+[head.join(',')].concat(log.map(g=>[g.t,g.method,g.target,g.design,g.labels,g.recs,
+      Object.keys(g.serials||{}).map(k=>k+':'+g.serials[k]).join(' '),Object.keys(g.prompts||{}).map(k=>k+'='+g.prompts[k]).join(' ')].map(q).join(','))).join('\r\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='print-log.csv';a.click();URL.revokeObjectURL(a.href);}
+  else if(r==='clear'&&confirm('清空全部打印日志？'))localStorage.removeItem(LOGKEY);
+}
+
+/* ---------- 车间模式（只打印） ----------
+   隐藏设计相关的面板和菜单，画布不能拖动编辑；可设退出密码（只存 SHA-256） */
+async function sha256(s){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}catch(e){return 'plain:'+s;}}
+const shopOn=()=>document.body.classList.contains('shop');
+function setShop(on){document.body.classList.toggle('shop',on);sel=-1;renderEditor();render();}
+async function toggleShop(){
+  let st={};try{st=JSON.parse(localStorage.getItem('label.shop')||'{}')||{};}catch(e){}
+  if(!shopOn()){
+    const pw=prompt('进入车间模式（只能载入设计、选数据、打印）。\n可设置退出密码，留空则不设：','');
+    if(pw===null)return;
+    st={on:true,hash:pw?await sha256(pw):''};
+  } else {
+    if(st.hash){const pw=prompt('输入退出密码：');if(pw===null)return;if((await sha256(pw))!==st.hash){alert('密码不对');return;}}
+    st={on:false};
+  }
+  try{localStorage.setItem('label.shop',JSON.stringify(st));}catch(e){}
+  setShop(st.on);
+}
+
 /* ---------- 保存 / 载入设计 ---------- */
 $('#saveBtn').onclick=()=>{
   const P=pageSpec();
@@ -936,7 +1054,7 @@ $('#saveBtn').onclick=()=>{
   URL.revokeObjectURL(a.href);
 };
 // 载入校验：未知类型剔除并提示；缺省字段补默认值；数值字段转数字；图片只接受内嵌 data: 地址（不连外网）
-const NUMKEYS=['x','y','size','h','module','w','border','rot','start','step','pad','every','offset','threshold'];
+const NUMKEYS=['x','y','size','h','module','w','border','rot','start','step','pad','every','offset','threshold','fitW','minSize'];
 function sanitizeElements(list){
   const bad=[],out=[];
   for(const el of list){
@@ -1080,8 +1198,9 @@ async function preloadImages(){
     const im=new Image();im.onload=()=>{imageCache.set(s,im);res();};im.onerror=()=>res();im.src=s;})));
 }
 const RASTER={
-  text(text,el,dpi,rot){return cached(['t',text,el.size,el.bold,el.font,el.align,rot,dpi].join('\u0001'),()=>{
-    const px=Math.max(8,Math.round(el.size*dpi/25.4)),font=FONT(el).replace('PX',px+'px');
+  text(text,el,dpi,rot){const sz=el.type==='hri'?el.size:Job.effectiveSize(el,text,measureMM);
+    return cached(['t',text,sz,el.bold,el.font,el.align,rot,dpi].join('\u0001'),()=>{
+    const px=Math.max(8,Math.round(sz*dpi/25.4)),font=FONT(el).replace('PX',px+'px');
     const lines=String(text).split('\n'),ws=lines.map(l=>measurePx(l,font)),w=Math.max(1,Math.ceil(Math.max(...ws)));
     const h=Math.ceil(px*(lines.length+0.25)),ax=el.align==='center'?-w/2:el.align==='right'?-w:0;
     return rasterLocal(ax,w,h,rot,g=>{g.font=font;g.textBaseline='top';
@@ -1134,7 +1253,7 @@ async function exportZPL(){
   try{const r=await buildJobCommands();
     const blob=new Blob([r.data],{type:'application/octet-stream'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.'+r.ext;a.click();URL.revokeObjectURL(a.href);
-    pendingPrintJob=true;askAdvanceCounters();}
+    logJob('导出 '+r.ext.toUpperCase(),jobList);pendingPrintJob=true;askAdvanceCounters();}
   finally{endJob();}
 }
 // 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延到本次最后一张的下一个号，下次接着编号不重号
@@ -1147,9 +1266,9 @@ function askAdvanceCounters(){
   if(!confirm('本次共 '+list.length+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
   cs.forEach(e=>{e.start=(+e.start||0)+Job.counterAdvance(e,list);});commit();renderEditor();render();
 }
-window.addEventListener('afterprint',()=>{askAdvanceCounters();if(jobNow)endJob();});
+window.addEventListener('afterprint',()=>{if(jobNow&&jobList)logJob('浏览器打印',jobList);askAdvanceCounters();if(jobNow)endJob();});
 $('#loadBtn').onclick=()=>$('#designIn').click();
-$('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
+$('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;designName=f.name.replace(/\.json$/i,'');const fr=new FileReader();
   fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));}catch(err){alert('读取失败: '+err.message);}};fr.readAsText(f);};
 $('#themeBtn').onclick=()=>{const r=document.documentElement;
   const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
@@ -1186,7 +1305,7 @@ if(window.labelDB&&window.labelDB.isDesktop){
   $('#dbRun').onclick=async()=>{msg('查询中…',true);const r=await window.labelDB.query(cfg(),$('#dbSql').value);
     if(!r.ok){msg('查询失败：'+r.error,false);return;}
     if(!r.rows||!r.rows.length){msg('查询无数据',false);return;}
-    rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);saveCfg();};
+    setRows(r.rows);msg('已取 '+rows.length+' 行',true);saveCfg();};
   syncDb();restoreCfg().then(syncDb);
 }
 
@@ -1202,9 +1321,10 @@ async function doSilentPrint(){
   // 标签机模式：页面尺寸 = 标签尺寸（微米）；整页模式：所选纸张
   const L=labelSpec(),page=$('#pmode').value==='sheet'?$('#paper').value:{width:Math.round(L.w*1000),height:Math.round(L.h*1000)};
   let r;try{r=await window.labelPrinter.print(dev,{pageSize:page});}finally{printingAll=false;render();}
-  if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else{pendingPrintJob=false;prnMsg('打印失败：'+r.error,false);}
+  if(r.ok){prnMsg('已发送到打印机：'+dev,true);logJob('静默打印',jobList,dev);askAdvanceCounters();}else{pendingPrintJob=false;prnMsg('打印失败：'+r.error,false);}
   endJob();
 }
+function describeTarget(){const t=rawTarget();return t.kind==='tcp'?t.host+':'+t.port:t.kind==='com'?t.port:t.name;}
 function rawTarget(){const k=$('#rawKind').value,a=$('#rawAddr').value.trim();
   return k==='tcp'?{kind:'tcp',host:a,port:+$('#rawPort').value||9100}:k==='spool'?{kind:'spool',name:$('#prnList').value}:k==='share'?{kind:'share',name:a}:{kind:'com',port:a,baud:$('#rawBaud').value};}
 // 网络打印机发送前检查：缺纸 / 开盖等问题、设计 DPI 与打印机不符。返回 false 表示取消
@@ -1244,14 +1364,14 @@ async function doSendZPL(){
   try{
     if(!(await checkPrinterBeforeSend()))return;
     const done=await sendBatches(jobList);
-    if(done.length){jobList=done;pendingPrintJob=true;askAdvanceCounters();}
+    if(done.length){jobList=done;logJob(cmdLang().toUpperCase()+' 直发',done,describeTarget());pendingPrintJob=true;askAdvanceCounters();}
   }finally{endJob();}
 }
 // 续打：沿用上次作业的标签（含当时的日期 / 输入值），从未发送的那张开始
 async function doResume(){
   if(!resumeState)return;
   const st=resumeState;jobList=st.list;jobNow=st.now||new Date();
-  try{const done=await sendBatches(st.list);if(done.length){jobList=done;pendingPrintJob=true;askAdvanceCounters();}}
+  try{const done=await sendBatches(st.list);if(done.length){jobList=done;logJob(cmdLang().toUpperCase()+' 续打',done,describeTarget());pendingPrintJob=true;askAdvanceCounters();}}
   finally{endJob();}
 }
 async function doPrinterStatus(){
@@ -1289,6 +1409,7 @@ if(hasPrinter()){
 
 /* ---------- 启动 ---------- */
 syncPmode();
+try{if((JSON.parse(localStorage.getItem('label.shop')||'{}')||{}).on)document.body.classList.add('shop');}catch(e){}
 try{const s=localStorage.getItem('label.autosave');if(s)applySnap(s);}catch(e){}
 renderEditor();render();commit();
 </script>
