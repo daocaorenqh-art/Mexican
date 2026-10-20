@@ -1,5 +1,6 @@
 // 里程碑 1（打印输出正确性 A1–A12）在界面上的回归测试：每项对应 docs/print-test-research.md 的 A 组条目
-import { S, OUT, ROOT, APP } from './_lib.mjs';
+import { S, OUT, ROOT, APP, ZR } from './_lib.mjs';
+import { execFileSync } from 'node:child_process';
 import pw from 'playwright';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -103,6 +104,19 @@ const qrOf=async lab=>{const big=[...lab.matchAll(/\^GFA,(\d+),\d+,(\d+),([0-9A-
   return decodeBits(bpr*8,total/bpr,(x,y)=>(parseInt(hex.substr((y*bpr+(x>>3))*2,2),16)>>(7-(x&7)))&1);};
 const q3=await qrOf(zs[2]);ok('ZPL 第 3 张的二维码读回 SN0009',zs.length===4&&q3.some(g=>g.text==='SN0009'),zs.length+' '+JSON.stringify(q3));
 await p.evaluate(()=>{document.querySelector('#copies').value=1;render();});
+
+console.log('\n[B4 实心椭圆在 ZPL 里是实心的（独立渲染器 Zebrash 出纸）]');
+await design([{type:'ellipse',x:10,y:5,w:30,h:20,border:0.3,fill:true},{type:'ellipse',x:45,y:25,w:10,h:10,border:0.3,fill:false}]);
+const ez=await p.evaluate(()=>buildZPL());
+const ge=[...ez.matchAll(/\^GE(\d+),(\d+),(\d+)/g)].map(m=>m.slice(1).map(Number));
+ok('实心椭圆输出为位图，空心椭圆仍用原生 ^GE 边框',ge.length===1&&ge[0][2]<4&&/\^FO\d+,\d+\^GFA/.test(ez),JSON.stringify(ge));
+fs.writeFileSync(OUT+'ellipse.zpl',ez);
+execFileSync('node',[ZR,OUT+'ellipse.zpl',OUT+'ellipse','60','40','8'],{stdio:'pipe'});
+const px=await p.evaluate(async src=>{   // Zebrash 不支持 ^GE，只核对位图输出的实心椭圆
+const im=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=src;});
+  const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const g=c.getContext('2d');g.drawImage(im,0,0);
+  const at=(x,y)=>g.getImageData(x,y,1,1).data[0];return {center:at(25*8,15*8),inside:at(14*8,15*8),outside:at(11*8,6*8)};},'data:image/png;base64,'+fs.readFileSync(OUT+'ellipse-0.png').toString('base64'));
+ok('出纸图：实心椭圆中心与内部是黑的、外接框角落是白的',px.center<128&&px.inside<128&&px.outside>128,JSON.stringify(px));
 
 console.log('\n[A10 打印范围填反]');
 await design([{type:'text',x:2,y:2,size:3,content:'{N}'}],'N\n1\n2\n3\n4\n5');

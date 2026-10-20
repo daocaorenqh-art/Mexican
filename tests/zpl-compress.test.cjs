@@ -33,9 +33,13 @@ const check = (name, cond, extra) => { if (cond) pass++; else { fail++; console.
 const rt = (name, hex, bpr) => {
   let dec, enc; try { enc = acsEncode(hex, bpr); dec = acsDecode(enc, bpr); } catch (e) { dec = 'ERR ' + e.message; }
   check(name, dec === hex, dec === hex ? '' : `bpr=${bpr} enc=${String(enc).slice(0, 60)}`);
+  // 「!」的含义各实现不一（填 F 还是填十六进制 1），编码器不得输出
+  check(name + '（不含 !）', !String(enc).includes('!'), String(enc).slice(0, 60));
   return enc;
 };
 
+rt('整行全黑（行尾全 F）', 'F'.repeat(60) + 'F'.repeat(60), 30);
+rt('行尾全 F', '00' + 'F'.repeat(58), 30);
 check('计数字母：1→G 19→Y 20→g 400→z 419→zY 1000→zzp', ['G','Y','g','z','zY','zzp'].every((v, i) => {
   const s = new Function(html.slice(a, html.indexOf('function acsEncode', a)) + '\nreturn acsRun;')()([1,19,20,400,419,1000][i]); return s === v; }));
 rt('全白行', '00'.repeat(30), 30);

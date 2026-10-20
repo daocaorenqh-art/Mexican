@@ -1429,7 +1429,8 @@ async function buildZPL(){
     elements.forEach(el=>{
       const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
       let text;try{text=elementText(el,elCtx(base),item);}catch(e){text='';}
-      if(!RASTER_ONLY.has(el.type)&&!isRot(el)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
+      // 实心椭圆走位图：^GE 的「加粗到实心」依赖固件，位图与预览逐点一致
+      if(!RASTER_ONLY.has(el.type)&&!isRot(el)&&!(el.type==='ellipse'&&el.fill)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
       // 「品名：{字段}」这类模板：静态文字与字段值分开转位图，静态部分全批只发一次（串口打印快很多）
       const segs=el.type==='text'?textSegments(el,row,elCtx(base)):null;
       if(segs&&segs.length>1){
@@ -1472,7 +1473,7 @@ async function buildZPL(){
   return out;
 }
 // ZPL 位图压缩（ZPL 手册「Alternative Data Compression Scheme」，所有斑马机通用）：
-//   G–Y=重复1–19次、g–y=20–380、z=400，可叠加；按行再用 ,(本行余下全0) !(全F) :(同上一行)
+//   G–Y=重复1–19次、g–y=20–380、z=400，可叠加；按行再用 ,(本行余下全0) :(同上一行)；不用 !（见 acsEncode）
 // 文字位图多为空白行/重复行，通常可压到原来的 1/5～1/20，串口打印时尤其关键
 function acsRun(n){let s='';while(n>=400){s+='z';n-=400;}if(n>=20){s+='_ghijklmnopqrstuvwxy'[(n/20)|0];n%=20;}if(n)s+='_GHIJKLMNOPQRSTUVWXY'[n];return s;}
 function acsEncode(hex,bpr){
@@ -1482,9 +1483,10 @@ function acsEncode(hex,bpr){
     if(row===prev){out+=':';continue;}
     prev=row;
     let body=row,tail='';
-    const z=row.match(/0+$/),f=row.match(/F+$/);
+    // 行尾全 F 不用「!」：手册写「fills the line with ones (1)」，有的实现（如 Zebrash）按十六进制 1 填充，
+    // 整行全黑会打成虚线；改用重复计数，所有固件含义一致
+    const z=row.match(/0+$/);
     if(z&&z[0].length>=2){body=row.slice(0,-z[0].length);tail=',';}
-    else if(f&&f[0].length>=2){body=row.slice(0,-f[0].length);tail='!';}
     out+=body.replace(/([0-9A-F])\1{2,}/g,(m,c)=>acsRun(m.length)+c)+tail;
   }
   return out;
