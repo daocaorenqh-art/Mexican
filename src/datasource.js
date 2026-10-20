@@ -7,6 +7,7 @@
      { type:'postgres', host, port, user, password, database }
      { type:'mssql',    host, port, user, password, database }
    每个驱动按需 require；没装的驱动给出友好提示而不是崩溃。
+   每种库实现 open(cfg) → { q(sql, params), close() }，查询/测试/列表/列字段都走同一条连接路径。
    query() 统一返回纯对象数组 [{列:值, ...}, ...]，正好对接 index.html 的套打。 */
 
 function need(name) {
@@ -16,75 +17,90 @@ function need(name) {
   }
 }
 
-const adapters = {
-  async sqlite(cfg, sql) {
-    const Database = need('better-sqlite3');
-    const db = new Database(cfg.file, { readonly: true, fileMustExist: true });
-    try { return db.prepare(sql).all(); }
-    finally { db.close(); }
+// ODBC 连接串取值：用 {} 包裹、} 转义为 }}，避免路径/密码里的 ; 或 } 截断连接串
+const odbcVal = (v) => '{' + String(v == null ? '' : v).replace(/}/g, '}}') + '}';
+
+const drivers = {
+  sqlite: {
+    async open(cfg) {
+      const Database = need('better-sqlite3');
+      const db = new Database(cfg.file, { readonly: true, fileMustExist: true });
+      return { q: async (sql, p = []) => db.prepare(sql).all(...p), close: async () => db.close() };
+    },
+    tables: "SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    columns: 'SELECT name FROM pragma_table_info(?)'
   },
 
-  async access(cfg, sql) {
-    const odbc = need('odbc');
-    const driver = cfg.driver || 'Microsoft Access Driver (*.mdb, *.accdb)';
-    const connStr = `Driver={${driver}};Dbq=${cfg.file};Uid=${cfg.user || ''};Pwd=${cfg.password || ''};`;
-    const conn = await odbc.connect(connStr);
-    try { return await conn.query(sql); }
-    finally { await conn.close(); }
+  access: {
+    async open(cfg) {
+      const odbc = need('odbc');
+      const driver = cfg.driver || 'Microsoft Access Driver (*.mdb, *.accdb)';
+      const conn = await odbc.connect(`Driver=${odbcVal(driver)};Dbq=${odbcVal(cfg.file)};Uid=${odbcVal(cfg.user)};Pwd=${odbcVal(cfg.password)};`);
+      return {
+        q: async (sql, p = []) => conn.query(sql, p),
+        close: () => conn.close(),
+        tablesFn: async () => (await conn.tables(null, null, null, 'TABLE')).map(r => r.TABLE_NAME),
+        columnsFn: async (t) => (await conn.columns(null, null, t, null)).map(r => r.COLUMN_NAME)
+      };
+    }
   },
 
-  async mysql(cfg, sql) {
-    const mysql = need('mysql2/promise');
-    const conn = await mysql.createConnection({
-      host: cfg.host || 'localhost', port: cfg.port || 3306,
-      user: cfg.user, password: cfg.password, database: cfg.database
-    });
-    try { const [rows] = await conn.query(sql); return rows; }
-    finally { await conn.end(); }
+  mysql: {
+    async open(cfg) {
+      const mysql = need('mysql2/promise');
+      const c = await mysql.createConnection({
+        host: cfg.host || 'localhost', port: cfg.port || 3306,
+        user: cfg.user, password: cfg.password, database: cfg.database
+      });
+      return { q: async (sql, p = []) => (await c.query(sql, p))[0], close: () => c.end() };
+    },
+    tables: 'SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME',
+    columns: 'SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION'
   },
 
-  async postgres(cfg, sql) {
-    const { Client } = need('pg');
-    const client = new Client({
-      host: cfg.host || 'localhost', port: cfg.port || 5432,
-      user: cfg.user, password: cfg.password, database: cfg.database
-    });
-    await client.connect();
-    try { const r = await client.query(sql); return r.rows; }
-    finally { await client.end(); }
+  postgres: {
+    async open(cfg) {
+      const { Client } = need('pg');
+      const c = new Client({
+        host: cfg.host || 'localhost', port: cfg.port || 5432,
+        user: cfg.user, password: cfg.password, database: cfg.database
+      });
+      await c.connect();
+      return { q: async (sql, p = []) => (await c.query(sql, p)).rows, close: () => c.end() };
+    },
+    tables: "SELECT table_name AS name FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_name",
+    columns: 'SELECT column_name AS name FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position'
   },
 
-  async mssql(cfg, sql) {
-    const mssql = need('mssql');
-    const pool = await mssql.connect({
-      server: cfg.host || 'localhost', port: cfg.port || 1433,
-      user: cfg.user, password: cfg.password, database: cfg.database,
-      options: { encrypt: cfg.encrypt !== false, trustServerCertificate: true }
-    });
-    try { const r = await pool.request().query(sql); return r.recordset; }
-    finally { await pool.close(); }
+  mssql: {
+    async open(cfg) {
+      const mssql = need('mssql');
+      // 独立连接池：不用 mssql.connect() 的全局池，避免并发查询互相关闭连接
+      const pool = await new mssql.ConnectionPool({
+        server: cfg.host || 'localhost', port: cfg.port || 1433,
+        user: cfg.user, password: cfg.password, database: cfg.database,
+        options: { encrypt: cfg.encrypt !== false, trustServerCertificate: true }
+      }).connect();
+      return {
+        q: async (sql, p = []) => { const r = pool.request(); p.forEach((v, i) => r.input('p' + i, v)); return (await r.query(sql)).recordset; },
+        close: () => pool.close()
+      };
+    },
+    tables: 'SELECT TABLE_NAME AS name FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME',
+    columns: 'SELECT COLUMN_NAME AS name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @p0 ORDER BY ORDINAL_POSITION'
   }
 };
 
-// 各类型的轻量连接测试 SQL
-const PING = {
-  sqlite: 'SELECT 1',
-  access: 'SELECT 1',
-  mysql: 'SELECT 1',
-  postgres: 'SELECT 1',
-  mssql: 'SELECT 1'
-};
-
-function pick(cfg) {
-  const fn = adapters[cfg && cfg.type];
-  if (!fn) throw new Error('不支持的数据库类型：' + (cfg && cfg.type));
-  return fn;
+async function withConn(cfg, fn) {
+  const d = drivers[cfg && cfg.type];
+  if (!d) throw new Error('不支持的数据库类型：' + (cfg && cfg.type));
+  const c = await d.open(cfg);
+  try { return await fn(c, d); }
+  finally { try { await c.close(); } catch (e) { /* 关闭失败不影响结果 */ } }
 }
 
-async function query(cfg, sql) {
-  if (!sql || !String(sql).trim()) throw new Error('SQL 不能为空');
-  const rows = await pick(cfg)(cfg, sql);
-  // 规整成纯对象，值统一转字符串（null -> ''），方便标签套打
+// 规整成纯对象，值统一转字符串（null -> ''），方便标签套打
+function normalize(rows) {
   return (rows || []).map(r => {
     const o = {};
     for (const k of Object.keys(r)) {
@@ -95,10 +111,34 @@ async function query(cfg, sql) {
   });
 }
 
+async function query(cfg, sql) {
+  if (!sql || !String(sql).trim()) throw new Error('SQL 不能为空');
+  return normalize(await withConn(cfg, c => c.q(sql)));
+}
+
 async function test(cfg) {
-  // Access 用文件存在性 + 一次 ODBC 连接；其余跑 PING
-  await pick(cfg)(cfg, PING[cfg.type] || 'SELECT 1');
+  await withConn(cfg, c => c.q('SELECT 1'));
   return true;
 }
 
-module.exports = { query, test };
+async function listTables(cfg) {
+  return withConn(cfg, async (c, d) => c.tablesFn ? c.tablesFn() : (await c.q(d.tables)).map(r => r.name));
+}
+
+// 字段名查询一律参数化，表名不拼进 SQL
+async function listColumns(cfg, table) {
+  const t = String(table == null ? '' : table);
+  if (!t) throw new Error('请先选择表');
+  return withConn(cfg, async (c, d) => c.columnsFn ? c.columnsFn(t) : (await c.q(d.columns, [t])).map(r => r.name));
+}
+
+// 标识符按各库规则加引号并转义（表名虽来自数据库目录，仍防特殊字符破坏语句）
+function quoteIdent(type, name) {
+  const n = String(name);
+  if (type === 'mysql') return '`' + n.replace(/`/g, '``') + '`';
+  if (type === 'mssql' || type === 'access') return '[' + n.replace(/]/g, ']]') + ']';
+  return '"' + n.replace(/"/g, '""') + '"';
+}
+function selectAll(cfg, table) { return 'SELECT * FROM ' + quoteIdent(cfg && cfg.type, table); }
+
+module.exports = { query, test, listTables, listColumns, selectAll, quoteIdent, _odbcVal: odbcVal };

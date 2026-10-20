@@ -9,7 +9,15 @@ contextBridge.exposeInMainWorld('labelDB', {
   isDesktop: true,
   test: (cfg) => ipcRenderer.invoke('db:test', cfg),
   query: (cfg, sql) => ipcRenderer.invoke('db:query', { cfg, sql }),
-  pickFile: (kind) => ipcRenderer.invoke('db:pickFile', kind)
+  pickFile: (kind) => ipcRenderer.invoke('db:pickFile', kind),
+  tables: (cfg) => ipcRenderer.invoke('db:tables', cfg),
+  columns: (cfg, table) => ipcRenderer.invoke('db:columns', { cfg, table })
+});
+
+// 敏感信息（数据库密码）加解密，由主进程交给系统完成
+contextBridge.exposeInMainWorld('labelSecret', {
+  encrypt: (plain) => ipcRenderer.invoke('secret:encrypt', plain),
+  decrypt: (b64) => ipcRenderer.invoke('secret:decrypt', b64)
 });
 
 // 打印机：列表、ZPL 直发、指定打印机静默打印

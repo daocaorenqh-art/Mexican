@@ -312,6 +312,9 @@ A1002,香蕉,2.20"></textarea>
         </div>
         <label class="f"><span>数据库名</span><input id="dbName"></label>
       </div>
+      <label class="f"><span>表 / 视图</span>
+        <div style="display:flex;gap:6px"><select id="dbTable"><option value="">（先点「浏览表」）</option></select><button id="dbBrowse">浏览表</button></div></label>
+      <div id="dbCols" style="margin:-4px 0 8px"></div>
       <label class="f"><span>SQL 查询</span><textarea id="dbSql" placeholder="SELECT * FROM products"></textarea></label>
       <div class="btns">
         <button id="dbTest">测试连接</button>
@@ -711,7 +714,7 @@ function evalContent(str,row){
   if(str[0]==='='){ // 表达式模式
     try{return evalExpr(str.slice(1),row);}catch(e){return '⚠'+e.message;}
   }
-  return str.replace(/\{([\w.]+)\}/g,(_,k)=>fieldVal(k,row)); // 简单插值 {字段}
+  return str.replace(/\{([^{}\n]+)\}/g,(_,k)=>fieldVal(k,row)); // 简单插值 {字段}（支持中文、空格等字段名）
 }
 function evalExpr(src,row){
   let i=0;
@@ -1419,19 +1422,38 @@ if(window.labelDB&&window.labelDB.isDesktop){
   const msg=(s,ok)=>{const m=$('#dbMsg');m.textContent=s;m.style.color=ok?'var(--muted)':'#c00';};
   // 记住上次连接（本机 localStorage）
   const KEY='labelDB.cfg';
-  const saveCfg=()=>{try{localStorage.setItem(KEY,JSON.stringify({c:cfg(),sql:$('#dbSql').value}));}catch(e){}};
-  const restoreCfg=()=>{try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(!s)return;const c=s.c||{};
+  const sec=window.labelSecret;
+  // 密码交给系统加密（Windows DPAPI）后保存；无法加密时不保存密码，绝不明文落盘
+  const saveCfg=async()=>{try{const c=cfg(),pwd=c.password;delete c.password;
+      const pwdEnc=pwd&&sec?await sec.encrypt(pwd):null;
+      localStorage.setItem(KEY,JSON.stringify({c,pwdEnc,sql:$('#dbSql').value}));}catch(e){}};
+  const restoreCfg=async()=>{try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(!s)return;const c=s.c||{};
     if(c.type)$('#dbType').value=c.type;if(c.file)$('#dbPath').value=c.file;
     if(c.host)$('#dbHost').value=c.host;if(c.port)$('#dbPort').value=c.port;
-    if(c.user)$('#dbUser').value=c.user;if(c.password)$('#dbPass').value=c.password;
-    if(c.database)$('#dbName').value=c.database;if(s.sql)$('#dbSql').value=s.sql;}catch(e){}};
+    if(c.user)$('#dbUser').value=c.user;if(c.database)$('#dbName').value=c.database;if(s.sql)$('#dbSql').value=s.sql;
+    syncDb();
+    const pwd=s.pwdEnc&&sec?(await sec.decrypt(s.pwdEnc))||'':(c.password||'');
+    if(pwd)$('#dbPass').value=pwd;
+    if(c.password)await saveCfg();   // 旧版本存的明文：读出后立即改为加密保存并清除明文
+  }catch(e){}};
+  // 表 / 字段浏览：选表后自动生成按该库规则转义的查询，字段可点击复制为 {字段}
+  $('#dbBrowse').onclick=async()=>{msg('读取表…',true);const r=await window.labelDB.tables(cfg());
+    if(!r.ok){msg('读取失败：'+r.error,false);return;}
+    $('#dbTable').innerHTML='<option value="">（选择表）</option>'+r.tables.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    $('#dbCols').innerHTML='';msg('共 '+r.tables.length+' 个表 / 视图',true);saveCfg();};
+  $('#dbTable').onchange=async()=>{const t=$('#dbTable').value;$('#dbCols').innerHTML='';if(!t)return;
+    const r=await window.labelDB.columns(cfg(),t);if(!r.ok){msg('读取字段失败：'+r.error,false);return;}
+    $('#dbSql').value=r.sql;
+    $('#dbCols').innerHTML=r.columns.map(c=>`<span class="tag" title="点击复制">{${esc(c)}}</span>`).join('');
+    $('#dbCols').querySelectorAll('.tag').forEach((el,i)=>el.onclick=()=>navigator.clipboard?.writeText('{'+r.columns[i]+'}'));
+    msg('共 '+r.columns.length+' 个字段，已生成查询；点「取数生成标签」',true);};
   $('#dbTest').onclick=async()=>{msg('测试中…',true);const r=await window.labelDB.test(cfg());
     msg(r.ok?'连接成功':('连接失败：'+r.error),r.ok);if(r.ok)saveCfg();};
   $('#dbRun').onclick=async()=>{msg('查询中…',true);const r=await window.labelDB.query(cfg(),$('#dbSql').value);
     if(!r.ok){msg('查询失败：'+r.error,false);return;}
     if(!r.rows||!r.rows.length){msg('查询无数据',false);return;}
     rows=r.rows;showFieldTags(Object.keys(rows[0]));render();msg('已取 '+rows.length+' 行',true);saveCfg();};
-  restoreCfg();syncDb();
+  syncDb();restoreCfg();
 }
 
 /* ---------- 打印机（仅桌面版，window.labelPrinter 存在时） ---------- */

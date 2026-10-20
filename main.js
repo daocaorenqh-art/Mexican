@@ -1,7 +1,7 @@
 'use strict';
 /* Electron 主进程：开窗口 + 通过 IPC 处理数据库请求。
    渲染进程（index.html）不直接碰数据库，只通过 preload 暴露的安全接口调用。 */
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('path');
 const datasource = require('./src/datasource');
 const rawprint = require('./src/rawprint');
@@ -62,6 +62,38 @@ ipcMain.handle('db:pickFile', async (_e, kind) => {
     : [{ name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3'] }];
   const r = await dialog.showOpenDialog({ properties: ['openFile'], filters });
   return r.canceled ? null : r.filePaths[0];
+});
+
+// 列出表 / 视图
+ipcMain.handle('db:tables', async (_e, cfg) => {
+  try {
+    return { ok: true, tables: await datasource.listTables(cfg) };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+});
+
+// 列出某表字段，并给出按该库规则引号转义后的 SELECT
+ipcMain.handle('db:columns', async (_e, { cfg, table }) => {
+  try {
+    return { ok: true, columns: await datasource.listColumns(cfg, table), sql: datasource.selectAll(cfg, table) };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+});
+
+/* ---- IPC：密码加密（交给操作系统，Windows 为 DPAPI：只有本机本用户能解开） ---- */
+ipcMain.handle('secret:encrypt', (_e, plain) => {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  return safeStorage.encryptString(String(plain)).toString('base64');
+});
+ipcMain.handle('secret:decrypt', (_e, b64) => {
+  try {
+    if (!b64 || !safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.decryptString(Buffer.from(String(b64), 'base64'));
+  } catch (err) {
+    return null;
+  }
 });
 
 /* ---- IPC：打印机 ---- */
