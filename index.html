@@ -99,6 +99,9 @@
   .wzbody p{margin:0 0 10px;color:var(--muted)}
   .wzbody .opt label{display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer}
   .wzbody .opt label:hover{background:var(--bg)}
+  .rtbar{display:flex;flex-wrap:wrap;gap:4px;margin:-2px 0 4px}
+  .rtbar button{padding:2px 7px;min-width:0}
+  .rtbar input[type=color]{width:28px;height:24px;padding:0;border:1px solid var(--line)}
   .wzft{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
   .tag{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:5px;
        padding:1px 6px;font-size:11px;color:var(--muted);margin:2px 4px 2px 0;cursor:pointer}
@@ -157,6 +160,7 @@
     <hr>
     <a data-ins="text">文字</a>
     <a data-ins="para">段落（多行）</a>
+    <a data-ins="rich">富文本（混排粗体/斜体/颜色/字号）</a>
     <a data-ins="wordart">艺术字（弧形/描边/阴影）</a>
     <a data-ins="barcode">条码 Code128</a>
     <a data-ins="ean13">条码 EAN-13</a>
@@ -260,6 +264,7 @@
       <div id="elist"></div>
       <div class="btns">
         <button data-add="text">+ 文字</button>
+        <button data-add="rich">+ 富文本</button>
         <button data-add="wordart">+ 艺术字</button>
         <button data-add="barcode">+ Code128</button>
         <button data-add="ean13">+ EAN-13</button>
@@ -888,6 +893,13 @@ function renderLabel(row,idx){
         if(el.font)node.style.fontFamily=el.font;
         if(el.align&&el.align!=='left'){node.style.textAlign=el.align;node.style.display='inline-block';}
       }
+      else if(el.type==='rich'){
+        // 预览与 ZPL 共用 richLayout/drawRich：断行、字号混排、下划线位置完全一致
+        const L=richLayout(el,richResolve(el.content,row)),S=PXMM*4,cv=document.createElement('canvas');
+        cv.width=Math.max(1,Math.ceil(L.w*S));cv.height=Math.max(1,Math.ceil(L.h*S));
+        cv.style.width=(L.w*PXMM)+'px';cv.style.height=(L.h*PXMM)+'px';cv.style.display='block';
+        drawRich(cv.getContext('2d'),L,el,S,false);node.appendChild(cv);
+      }
       else if(el.type==='wordart'){
         // 预览与 ZPL 共用 wordartLayout/drawWordart，屏幕上的弧度、描边、阴影即打印结果
         const L=wordartLayout(el,text),S=PXMM*4,cv=document.createElement('canvas');
@@ -1012,6 +1024,8 @@ const BC=lbl=>[['content',lbl,'text'],['x','X(mm)','num'],['y','Y(mm)','num'],['
 const FIELDS={
   text:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
   para:[['content','内容（可多行）','area'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei','monospace']],['rot','旋转°','num']],
+  rich:[['content','内容（富文本）','rich'],['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['size','基础字号(mm)','num'],
+    ['align','对齐','sel',['left','center','right']],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei']],['rot','旋转°','num']],
   wordart:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bend','弯曲度 0-100','num'],
     ['shape','形状','sel',['平直','上拱','下弯','波浪']],['spacing','字距(mm)','num'],['stroke','描边宽(mm)','num'],['shadow','阴影偏移(mm)','num'],
     ['hollow','空心字','bool'],['bold','加粗','bool'],['font','字体','sel',['','Arial','SimHei','SimSun','Microsoft YaHei']],['rot','旋转°','num']],
@@ -1029,7 +1043,7 @@ const FIELDS={
   box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
   ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
+const TYPENAME={text:'文字',rich:'富文本',wordart:'艺术字',para:'段落',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',datamatrix:'DataMatrix',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   syncSel();
@@ -1052,6 +1066,12 @@ function renderEditor(){
         if(numBuf.length===2)flush();}
       else{flush();
         if(t==='text')h+=`<label class="f"><span>${label}</span><input data-k="${k}" data-i="${idx}" value="${esc(el[k]??'')}"></label>`;
+        else if(t==='rich')h+=`<label class="f"><span>${label}</span></label><div class="rtbar" data-i="${idx}">
+          <button data-rt="b" title="粗体"><b>B</b></button><button data-rt="i" title="斜体"><i>I</i></button><button data-rt="u" title="下划线"><u>U</u></button>
+          <button data-rt="size" title="字号(mm)">字号</button><input type="color" data-rtc="${idx}" title="文字颜色" value="#c00000">
+          <button data-rt="color" title="把选中文字设为左边的颜色">着色</button><button data-rt="clear" title="去掉选中部分的格式">清除</button>
+          <button data-rt="rtf" title="导入 RTF 文件（写字板/Word 另存为 RTF）">导入 RTF…</button></div>
+          <textarea data-k="${k}" data-i="${idx}" data-rich="1" style="min-height:64px">${esc(el[k]??'')}</textarea>`;
         else if(t==='area')h+=`<label class="f"><span>${label}</span><textarea data-k="${k}" data-i="${idx}" style="min-height:48px">${esc(el[k]??'')}</textarea></label>`;
         else if(t==='bool')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}"><option value="1"${el[k]?' selected':''}>是</option><option value="0"${!el[k]?' selected':''}>否</option></select></label>`;
         else if(t==='sel')h+=`<label class="f"><span>${label}</span><select data-k="${k}" data-i="${idx}">`+opts.map(o=>`<option value="${o}"${(el[k]??'')===o?' selected':''}>${o||'默认'}</option>`).join('')+`</select></label>`;
@@ -1068,6 +1088,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 /* ---------- 事件 ---------- */
 const DEFAULTS={
   text:{type:'text',x:3,y:3,size:4,bold:false,align:'left',font:'',rot:0,content:'文字'},
+  rich:{type:'rich',x:3,y:3,w:44,size:3.5,align:'left',font:'',rot:0,content:'[b]合格证[/b] 品名：[u]{品名}[/u]\n[size=5][color=#c00000]特价[/color][/size] [i]Made in China[/i]'},
   wordart:{type:'wordart',x:3,y:3,size:5,bold:true,font:'',shape:'上拱',bend:40,spacing:0,stroke:0,shadow:0,hollow:false,rot:0,content:'艺术字 WordArt'},
   para:{type:'para',x:3,y:3,w:40,size:3.5,bold:false,align:'left',font:'',rot:0,content:'多行文字\n第二行'},
   barcode:{type:'barcode',x:3,y:12,h:12,module:0.33,showText:true,color:'#000000',bg:'',rot:0,content:'123456'},
@@ -1091,8 +1112,9 @@ document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
 $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
-    if(['x','y','size','h','module','w','border','rot','start','step','pad'].includes(k)){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
-    if(['bold','showText','fill','persist'].includes(k))v=v==='1';
+    const fd=(FIELDS[elements[i].type]||[]).find(f=>f[0]===k),t=fd&&fd[2];   // 按字段声明的类型转换
+    if(t==='num'){v=parseFloat(v)||0;if(LENKEYS.has(k))v=toMM(v);}
+    if(t==='bool')v=v==='1';
     elements[i][k]=v;render();commit();return;}
   const img=e.target.dataset.img;
   if(img!=null&&e.target.files[0]){const fr=new FileReader();
@@ -1344,8 +1366,8 @@ window.addEventListener('keydown',e=>{
 
 /* ---------- 添加对象向导 ---------- */
 const WZ={step:0,type:'text',source:'const',value:''};
-const WZTYPES=[['text','文字'],['para','段落（多行）'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
-const wzHasData=t=>['text','para','wordart','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix'].includes(t);
+const WZTYPES=[['text','文字'],['para','段落（多行）'],['rich','富文本'],['wordart','艺术字'],['barcode','条码 Code128'],['ean13','条码 EAN-13'],['ean8','条码 EAN-8'],['upca','条码 UPC-A'],['code39','条码 Code39'],['itf','条码 ITF-25'],['qrcode','二维码 QR'],['datamatrix','DataMatrix'],['counter','流水号'],['date','日期'],['image','图片/Logo'],['box','矩形/线条'],['ellipse','椭圆']];
+const wzHasData=t=>['text','para','rich','wordart','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix'].includes(t);
 function wzFields(){const r=parseData($('#csv').value);
   const fs=r&&r.length?Object.keys(r[0]):rows&&rows.length?Object.keys(rows[0]):[];
   return [...new Set([...fs,...vars.map(v=>v.name).filter(Boolean)])];}
@@ -1474,6 +1496,8 @@ function painter(el,text,dpi,idx,img){
       return {w:wd,h:lines.length*lh,paint:g=>{g.font=fontOf(el,px);g.textBaseline='top';
         lines.forEach((ln,i)=>{const lw=g.measureText(ln).width;
           const x0=el.align==='center'?(wd-lw)/2:el.align==='right'?wd-lw:0;g.fillText(ln,x0,i*lh);});}};}
+    case 'rich':{const L=richLayout(el,text),s=dpmmOf(dpi);if(!L.lines.some(l=>l.items.length))return null;
+      return {w:L.w*s,h:L.h*s,paint:g=>drawRich(g,L,el,s,true)};}
     case 'wordart':{if(!text)return null;const L=wordartLayout(el,text),s=dpmmOf(dpi);
       return {w:L.w*s,h:L.h*s,paint:g=>drawWordart(g,L,el,s)};}
     case 'image':{if(!img)return null;const w=D(el.w),h=D(el.h);
@@ -1498,6 +1522,177 @@ function painter(el,text,dpi,idx,img){
   }
   return null;
 }
+/* ---------- 富文本 ----------
+   标记：[b]粗[/b] [i]斜[/i] [u]下划线[/u] [size=5]字号 mm[/size] [color=#c00000]颜色[/color]，可嵌套，\n 换行。
+   只认这几种标记、参数严格校验，其它内容一律按普通文字显示（不生成 HTML，无注入风险）。 */
+const RICH_LB='\uE000';   // 字段值里的 [ 先换成占位符，避免数据内容被当成格式标记
+function richResolve(src,row){return String(src??'').replace(/\{([^{}\n]+)\}/g,(_,k)=>String(fieldVal(k,row)).replace(/\[/g,RICH_LB));}
+function parseRich(src){
+  const out=[],stack=[{tag:'',st:{}}],re=/\[(\/?)(b|i|u|size|color)(?:=([^\]\n]{1,24}))?\]/gi;
+  let last=0,m;const cur=()=>stack[stack.length-1].st;
+  const push=t=>{if(t)out.push({t:t.split(RICH_LB).join('['),...cur()});};
+  while((m=re.exec(src))){
+    const close=!!m[1],tag=m[2].toLowerCase(),arg=(m[3]||'').trim();let st=null;
+    if(!close){
+      if(tag==='size'){const n=parseFloat(arg);if(n>=0.5&&n<=100)st={size:n};}
+      else if(tag==='color'){if(/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(arg))st={color:arg};}
+      else if(!arg)st={[tag]:true};
+      if(!st)continue;   // 参数不合法：当普通文字
+      push(src.slice(last,m.index));last=re.lastIndex;stack.push({tag,st:{...cur(),...st}});}
+    else{const k=stack.map(x=>x.tag).lastIndexOf(tag);if(k<1)continue;
+      push(src.slice(last,m.index));last=re.lastIndex;stack.length=k;}
+  }
+  push(src.slice(last));return out;
+}
+const richFont=(el,r,px)=>(r.i?'italic ':'')+(r.b?'bold ':'')+px+'px '+(el.font||LABEL_FONT);
+// 富文本排版（mm）：按样式切词 → 贪心断行（英文单词不拆、中文逐字可断）→ 每行按最大字号定行高和基线
+function richLayout(el,text){
+  const base=+el.size||3.5,maxW=Math.max(1,+el.w||1),toks=[];
+  parseRich(String(text??'')).forEach(r=>{const sz=r.size||base;
+    (r.t.match(/\n|[A-Za-z0-9_\-.,:;!?'"()\/%#@&+*=<>]+|[^\S\n]+|[^\s]/gu)||[]).forEach(t=>{
+      if(t==='\n'){toks.push({nl:true,size:sz});return;}
+      _measureCtx.font=richFont(el,r,100);toks.push({t,r,size:sz,w:_measureCtx.measureText(t).width*sz/100,sp:/^\s+$/.test(t)});});});
+  const lines=[];let line=[],lw=0;
+  const end=(sz)=>{while(line.length&&line[line.length-1].sp){lw-=line.pop().w;}lines.push({items:line,w:lw,sz});line=[];lw=0;};
+  for(const tk of toks){
+    if(tk.nl){end(tk.size);continue;}
+    if(!line.length&&tk.sp)continue;
+    if(lw+tk.w>maxW&&line.length){end(tk.size);if(tk.sp)continue;}
+    if(tk.w>maxW&&!tk.sp&&tk.t.length>1){   // 超长单词逐字拆
+      for(const ch of tk.t){_measureCtx.font=richFont(el,tk.r,100);const w=_measureCtx.measureText(ch).width*tk.size/100;
+        if(lw+w>maxW&&line.length)end(tk.size);line.push({...tk,t:ch,w});lw+=w;}continue;}
+    line.push(tk);lw+=tk.w;}
+  end(base);
+  let y=0;lines.forEach(l=>{const mx=l.items.length?Math.max(...l.items.map(t=>t.size)):l.sz;
+    l.top=y;l.h=mx*1.25;l.base=y+mx*0.125+mx*0.88;y+=l.h;
+    let x=el.align==='center'?(maxW-l.w)/2:el.align==='right'?maxW-l.w:0;
+    l.items.forEach(t=>{t.x=x;x+=t.w;});});
+  return {w:maxW,h:Math.max(y,base*1.25),lines};
+}
+// 画富文本；mono=true（热敏机）时一律黑色，屏幕预览显示原色
+function drawRich(g,L,el,scale,mono){
+  g.save();g.textBaseline='alphabetic';g.textAlign='left';
+  L.lines.forEach(l=>l.items.forEach(t=>{
+    g.font=richFont(el,t.r,t.size*scale);g.fillStyle=mono?'#000':(t.r.color||'#000');
+    const bx=t.x*scale,by=l.base*scale;g.fillText(t.t,bx,by);
+    if(t.r.u)g.fillRect(bx,by+t.size*0.1*scale,t.w*scale,Math.max(1,t.size*0.07*scale));}));
+  g.restore();
+}
+// 选中文字加/去格式（编辑框工具条）
+function richWrap(ta,tag,arg){
+  const a=ta.selectionStart,b=ta.selectionEnd,v=ta.value,selTxt=v.slice(a,b);
+  let ins;
+  if(tag==='clear')ins=selTxt.replace(/\[\/?(b|i|u|size|color)(=[^\]\n]*)?\]/gi,'');
+  else{const o='['+tag+(arg!=null?'='+arg:'')+']',c='[/'+tag+']';ins=o+selTxt+c;}
+  ta.value=v.slice(0,a)+ins+v.slice(b);ta.focus();
+  ta.selectionStart=a;ta.selectionEnd=a+ins.length;ta.dispatchEvent(new Event('input',{bubbles:true}));
+}
+// 正文字号：字数最多的那个字号（导入时设为元素的基础字号，标记里不再重复）
+function mainSize(runs){const cnt={};runs.forEach(r=>{const k=r.size||0;cnt[k]=(cnt[k]||0)+r.t.replace(/\s/g,'').length;});   // 0=未指定字号
+  let best=0,n=-1;for(const k in cnt)if(cnt[k]>n){n=cnt[k];best=+k;}return best||undefined;}
+// 样式段 → 标记文本（相邻同样式合并；与 base 相同的字号不加标记；纯空白不带下划线以外的格式）
+function runsToRich(runs,base){
+  if(base===undefined)base=mainSize(runs);
+  const norm=r=>{const x={t:r.t,u:!!r.u,b:!!r.b,i:!!r.i,size:r.size&&r.size!==base?r.size:undefined,
+    color:r.color&&!/^#0{3}(0{3})?$/i.test(r.color)?r.color:undefined};
+    if(/^\s+$/.test(x.t)&&!x.u){x.b=x.i=false;x.color=undefined;}return x;};
+  const same=(a,b)=>a&&b&&a.b===b.b&&a.i===b.i&&a.u===b.u&&a.size===b.size&&a.color===b.color;
+  const merged=[];runs.map(norm).forEach(r=>{if(!r.t)return;const p=merged[merged.length-1];if(same(p,r))p.t+=r.t;else merged.push({...r});});
+  while(merged.length&&/^\s*$/.test(merged[merged.length-1].t))merged.pop();
+  if(merged.length)merged[merged.length-1].t=merged[merged.length-1].t.replace(/\s+$/,'');
+  return merged.map(r=>{let o='',c='';
+    if(r.size){o+='[size='+r.size+']';c='[/size]'+c;}
+    if(r.color){o+='[color='+r.color+']';c='[/color]'+c;}
+    if(r.b){o+='[b]';c='[/b]'+c;} if(r.i){o+='[i]';c='[/i]'+c;} if(r.u){o+='[u]';c='[/u]'+c;}
+    return o+r.t+c;}).join('');
+}
+// RTF（写字板/Word/WPS 另存为 RTF）→ 样式段。只取文字与 粗/斜/下划线/字号/颜色，图片、表格等其它内容忽略
+function rtfToRuns(rtf){
+  const runs=[],colors=[];let st={b:false,i:false,u:false,size:0,color:''},stack=[],skip=0,depth=0,uc=1,pendingSkip=0,bytes=[];
+  let gbk;try{gbk=new TextDecoder('gbk');}catch(e){gbk=null;}
+  const out=t=>{if(skip||!t)return;const p=runs[runs.length-1];
+    if(p&&p.b===st.b&&p.i===st.i&&p.u===st.u&&p.size===st.size&&p.color===st.color)p.t+=t;else runs.push({...st,t});};
+  const flushBytes=()=>{if(!bytes.length)return;const u8=new Uint8Array(bytes);bytes=[];
+    out(gbk?gbk.decode(u8):String.fromCharCode(...u8));};
+  let i=0,inColorTbl=false,ctr={r:0,g:0,b:0};
+  while(i<rtf.length){const ch=rtf[i];
+    if(ch==='{'){flushBytes();stack.push({st:{...st},skip,inColorTbl,uc});depth++;i++;continue;}
+    if(ch==='}'){flushBytes();const s0=stack.pop();if(s0){st=s0.st;skip=s0.skip;inColorTbl=s0.inColorTbl;uc=s0.uc;}depth--;i++;continue;}
+    if(ch==='\\'){
+      const nx=rtf[i+1];
+      if(nx==="'"){const h=parseInt(rtf.substr(i+2,2),16);i+=4;if(pendingSkip>0){pendingSkip--;continue;}if(!skip)bytes.push(h);continue;}
+      flushBytes();
+      if(nx==='\\'||nx==='{'||nx==='}'){out(nx);i+=2;continue;}
+      if(nx==='*'){skip=1;i+=2;continue;}
+      if(nx==='~'){out(' ');i+=2;continue;}
+      const m=/^\\([a-zA-Z]+)(-?\d+)? ?/.exec(rtf.slice(i,i+40));
+      if(!m){i+=2;continue;}
+      i+=m[0].length;const w=m[1],n=m[2]!=null?+m[2]:null;
+      switch(w){
+        case 'fonttbl':case 'stylesheet':case 'info':case 'pict':case 'object':case 'header':case 'footer':case 'listtable':case 'listoverridetable':case 'themedata':case 'latentstyles':skip=1;break;
+        case 'colortbl':inColorTbl=true;skip=1;break;
+        case 'red':ctr.r=n||0;break; case 'green':ctr.g=n||0;break; case 'blue':ctr.b=n||0;break;
+        case 'b':st.b=n!==0;break; case 'i':st.i=n!==0;break;
+        case 'ul':st.u=n!==0;break; case 'ulnone':st.u=false;break;
+        case 'fs':st.size=n?+(n/2*0.3528).toFixed(2):0;break;   // 半磅 → mm
+        case 'cf':st.color=colors[n]||'';break;
+        case 'plain':st={b:false,i:false,u:false,size:0,color:''};break;
+        case 'par':case 'line':out('\n');break;
+        case 'tab':out(' ');break;
+        case 'uc':uc=n||1;break;
+        case 'ansicpg':try{gbk=new TextDecoder(n===936?'gbk':n===950?'big5':n===65001?'utf-8':'windows-'+n);}catch(e){}break;   // 按文件声明的代码页解码
+        case 'u':{let c=n;if(c<0)c+=65536;out(String.fromCharCode(c));pendingSkip=uc;break;}
+      }
+      continue;}
+    if(inColorTbl&&ch===';'){colors.push(colors.length||ctr.r||ctr.g||ctr.b?'#'+[ctr.r,ctr.g,ctr.b].map(v=>v.toString(16).padStart(2,'0')).join(''):'');ctr={r:0,g:0,b:0};i++;continue;}
+    if(ch==='\r'||ch==='\n'){i++;continue;}
+    if(pendingSkip>0){pendingSkip--;i++;continue;}
+    flushBytes();out(ch);i++;}
+  flushBytes();
+  return runs.map(r=>({t:r.t,b:r.b,i:r.i,u:r.u,size:r.size||undefined,color:r.color||undefined}));
+}
+// 粘贴 HTML（Word/WPS/网页复制）→ 样式段；DOMParser 只解析不执行，脚本/图片不会运行或加载
+function htmlToRuns(html){
+  const doc=new DOMParser().parseFromString(html,'text/html'),runs=[];
+  const pxToMM=v=>{const m=/^([\d.]+)(px|pt)$/i.exec(v||'');if(!m)return undefined;return +((m[2].toLowerCase()==='pt'?+m[1]*0.3528:+m[1]/PXMM)).toFixed(2);};
+  const hex=c=>{const m=/rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c||'');if(m)return '#'+[m[1],m[2],m[3]].map(v=>(+v).toString(16).padStart(2,'0')).join('');
+    return /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(c||'')?c:undefined;};
+  const walk=(n,st)=>{
+    if(n.nodeType===3){const t=n.nodeValue.replace(/\s+/g,' ');if(t)runs.push({...st,t});return;}
+    if(n.nodeType!==1)return;const tag=n.tagName.toLowerCase();
+    if(['script','style','head','title','meta','img','svg'].includes(tag))return;
+    const s={...st},cs=n.style||{};
+    if(tag==='b'||tag==='strong'||/bold|[6-9]00/.test(cs.fontWeight||''))s.b=true;
+    if(tag==='i'||tag==='em'||cs.fontStyle==='italic')s.i=true;
+    if(tag==='u'||/underline/.test(cs.textDecoration||''))s.u=true;
+    const sz=pxToMM(cs.fontSize);if(sz)s.size=sz;
+    const col=hex(cs.color||n.getAttribute('color'));if(col)s.color=col;
+    if(tag==='br'){runs.push({...st,t:'\n'});return;}
+    n.childNodes.forEach(c=>walk(c,s));
+    if(['p','div','li','h1','h2','h3','h4','tr'].includes(tag))runs.push({...st,t:'\n'});};
+  walk(doc.body,{});return runs;
+}
+document.addEventListener('click',e=>{
+  const bt=e.target.closest('[data-rt]');if(!bt)return;
+  const bar=bt.closest('.rtbar'),ta=bar&&bar.nextElementSibling;if(!ta)return;const kind=bt.dataset.rt;
+  if(kind==='size'){const v=prompt('字号（mm，0.5–100）','5');if(v==null)return;const n=parseFloat(v);if(!(n>=0.5&&n<=100)){alert('字号需在 0.5–100 mm 之间');return;}richWrap(ta,'size',n);}
+  else if(kind==='color')richWrap(ta,'color',bar.querySelector('[data-rtc]').value);
+  else if(kind==='rtf'){const f=document.createElement('input');f.type='file';f.accept='.rtf';
+    f.onchange=()=>{const file=f.files[0];if(!file)return;const fr=new FileReader();
+      fr.onload=()=>{const runs=rtfToRuns(String(fr.result)),base=mainSize(runs),i=+ta.dataset.i;
+        if(base&&elements[i]){elements[i].size=base;const sz=document.querySelector(`#elist [data-i="${i}"][data-k="size"]`);if(sz)sz.value=fromMM(base);}
+        ta.value=runsToRich(runs,base);ta.dispatchEvent(new Event('input',{bubbles:true}));};fr.readAsText(file,'latin1');};f.click();}
+  else richWrap(ta,kind);
+});
+// 富文本框里粘贴：带格式的 RTF/HTML 转成标记，否则按纯文本
+document.addEventListener('paste',e=>{
+  const ta=e.target;if(!ta||!ta.dataset||!ta.dataset.rich)return;const cd=e.clipboardData;if(!cd)return;
+  const rtf=cd.getData('text/rtf'),html=cd.getData('text/html');if(!rtf&&!html)return;
+  const runs=rtf?rtfToRuns(rtf):htmlToRuns(html),ins=runsToRich(runs);if(!ins)return;
+  e.preventDefault();const a=ta.selectionStart,b=ta.selectionEnd;
+  ta.value=ta.value.slice(0,a)+ins+ta.value.slice(b);ta.selectionStart=ta.selectionEnd=a+ins.length;ta.dispatchEvent(new Event('input',{bubbles:true}));
+});
+
 // 艺术字布局（单位 mm）：逐字沿平直/上拱/下弯/波浪路径排列并按切线方向旋转，返回包围盒与每个字的中心和角度
 function wordartLayout(el,text){
   _measureCtx.font=fontOf(el,100);
@@ -1554,7 +1749,7 @@ function nativeZPL(el,text,dpi,x,y){
     return o+'^GE'+w+','+h+','+t+',B^FS\n';}
   return null;
 }
-const RASTER_ONLY=new Set(['wordart','text','counter','date','para','image','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix']);
+const RASTER_ONLY=new Set(['rich','wordart','text','counter','date','para','image','barcode','ean13','ean8','upca','code39','itf','qrcode','datamatrix']);
 async function buildZPL(){
   const dpi=+$('#dpi').value||203;
   const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
@@ -1567,7 +1762,7 @@ async function buildZPL(){
     const parts=[];
     elements.forEach(el=>{
       const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
-      let text;try{text=evalContent(el.content,row);}catch(e){text='';}
+      let text;try{text=el.type==='rich'?richResolve(el.content,row):evalContent(el.content,row);}catch(e){text='';}
       if(!RASTER_ONLY.has(el.type)&&!isRot(el)){let z;try{z=nativeZPL(el,text,dpi,x,y);}catch(e){z=null;}if(z)parts.push(z);return;}
       // 「品名：{字段}」这类模板：静态文字与字段值分开转位图，静态部分全批只发一次（串口打印快很多）
       const segs=el.type==='text'?textSegments(el,row):null;
