@@ -2,7 +2,7 @@
    运行：npm test */
 const net = require('net');
 const path = require('path');
-const { sendRaw } = require(path.join(__dirname, '..', 'src', 'rawprint.js'));
+const { sendRaw, printerStatus, parseHS } = require(path.join(__dirname, '..', 'src', 'rawprint.js'));
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('  ✗', name, extra || ''); } };
@@ -59,6 +59,51 @@ async function rejects(promiseFn, includes) {
   const shareFails = await rejects(() => sendRaw({ kind: 'share', name: 'NoSuchPrinter_xyz' }, zpl),
     process.platform === 'win32' ? '发送失败' : '仅支持 Windows');
   check('共享打印机：不存在时报错（非 Windows 明确提示仅支持 Windows）', shareFails);
+
+  // 按打印机名 RAW 直发（Windows 后台打印）：Windows 上验证内联 C# 能编译运行（不存在的打印机 → 找不到）
+  check('按打印机名直发：空名称被拒绝', await rejects(() => sendRaw({ kind: 'spool', name: '' }, zpl), '打印机名无效'));
+  check('按打印机名直发：控制字符被拒绝', await rejects(() => sendRaw({ kind: 'spool', name: 'a\nb' }, zpl), '打印机名无效'));
+  check('按打印机名直发：不存在的打印机明确报错', await rejects(() => sendRaw({ kind: 'spool', name: 'NoSuchPrinter_xyz "&calc' }, zpl),
+    process.platform === 'win32' ? '找不到打印机' : '仅支持 Windows'));
+
+  // 串口参数白名单
+  const { serialMode } = require(path.join(__dirname, '..', 'src', 'rawprint.js'));
+  check('串口参数生成 mode 参数', JSON.stringify(serialMode({ baud: 9600, parity: 'N', dataBits: 8, stopBits: 1 })) === '["BAUD=9600","PARITY=n","DATA=8","STOP=1"]');
+  check('未设波特率时不改串口设置', serialMode({}) === null);
+  check('非法波特率被拦截', await rejects(() => sendRaw({ kind: 'com', port: 'COM1', baud: '9600 & calc' }, zpl), '波特率'));
+  check('非法校验位被拦截', await rejects(() => sendRaw({ kind: 'com', port: 'COM1', baud: 9600, parity: 'x' }, zpl), '校验位'));
+
+  // 二进制（TSPL 位图）原样送达
+  const bin = new Uint8Array([0x42, 0x49, 0x54, 0x00, 0xFF, 0x0A, 0x80, 0xE4, 0xB8]);
+  m = await mockPrinter(false);
+  await sendRaw({ kind: 'tcp', host: '127.0.0.1', port: m.port }, bin);
+  got = await m.received; m.close();
+  check('二进制数据逐字节一致（不按 UTF-8 转换）', got.equals(Buffer.from(bin)));
+
+  // 打印机状态：模拟斑马机回应 ~HS / ~HI，模拟 TSC 回应 ESC !?
+  const STX = '\x02', ETX = '\x03\r\n';
+  const statusPrinter = (respond) => new Promise((resolve) => {
+    const server = net.createServer((s) => { s.on('data', (d) => { const r = respond(d); if (r != null) s.write(r); }); s.on('error', () => {}); });
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, close: () => server.close() }));
+  });
+  const hs = (paper, pause, head, ribbon) => STX + `030,${paper},${pause},1245,000,0,0,0,000,0,0,0` + ETX
+    + STX + `001,0,${head},${ribbon},1,2,6,0,00000005,1,000` + ETX + STX + '1234,0' + ETX;
+  let sp = await statusPrinter((d) => d.toString().includes('~HS') ? hs(0, 0, 0, 0) : d.toString().includes('~HI') ? STX + 'ZT410-300dpi,V75.20.01Z,12,8192KB' + ETX : null);
+  let st = await printerStatus({ kind: 'tcp', host: '127.0.0.1', port: sp.port }, 'zpl'); sp.close();
+  check('斑马机就绪 + 读出 300dpi 与型号', st.ready && st.dpi === 300 && st.model === 'ZT410-300dpi' && st.labelsRemaining === 5, JSON.stringify(st));
+  sp = await statusPrinter((d) => d.toString().includes('~HS') ? hs(1, 1, 1, 1) : null);
+  st = await printerStatus({ kind: 'tcp', host: '127.0.0.1', port: sp.port }, 'zpl'); sp.close();
+  check('缺纸 / 暂停 / 开盖 / 缺碳带都识别（~HI 无回应不影响）', !st.ready && ['缺纸', '暂停中', '打印头抬起', '缺碳带'].every((p) => st.problems.includes(p)), JSON.stringify(st.problems));
+  sp = await statusPrinter((d) => (d[0] === 0x1B && d[1] === 0x21 && d[2] === 0x3F) ? Buffer.from([0x04 | 0x10]) : null);
+  st = await printerStatus({ kind: 'tcp', host: '127.0.0.1', port: sp.port }, 'tspl'); sp.close();
+  check('TSPL 状态字节：缺纸 + 暂停', st.paperOut && st.paused && !st.headUp && !st.ready, JSON.stringify(st));
+  sp = await statusPrinter(() => Buffer.from([0x00]));
+  st = await printerStatus({ kind: 'tcp', host: '127.0.0.1', port: sp.port }, 'tspl'); sp.close();
+  check('TSPL 就绪', st.ready);
+  sp = await statusPrinter(() => null);
+  check('打印机不回应状态 → 明确报错', await rejects(() => printerStatus({ kind: 'tcp', host: '127.0.0.1', port: sp.port }, 'zpl'), '没有回应')); sp.close();
+  check('共享打印机不支持读状态', await rejects(() => printerStatus({ kind: 'share', name: 'ZT410' }), '只有网络打印机'));
+  check('状态格式错误被识别', (() => { try { parseHS(Buffer.from('xx')); return false; } catch (e) { return true; } })());
 
   console.log(`ZPL 直发校验：通过 ${pass} / 失败 ${fail}`);
   process.exit(fail ? 1 : 0);

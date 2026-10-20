@@ -13,8 +13,8 @@
     { "type": "text", "x": 5,  "y": 60, "size": 3.6, "bold": true,  "rot": 0, "content": "质量等级：{DENGJI}" },
     { "type": "text", "x": 5,  "y": 67, "size": 3.6, "bold": true,  "rot": 0, "content": "执行标准：QB/T1333-2018" },
     { "type": "text", "x": 5,  "y": 74, "size": 4.2, "bold": true,  "rot": 0, "content": "=\"零售价：\"+[JYPRICE]+\".00\"" },
-    { "type": "text", "x": 44, "y": 83, "size": 3.4, "bold": true,  "rot": 0, "content": "=[YW]+\"Z\"" },
-    { "type": "barcode", "x": 5, "y": 82, "h": 10, "module": 0.33, "showText": true, "rot": 0, "content": "{SKU}" },
+    { "type": "text", "x": 46, "y": 75, "size": 3.4, "bold": true,  "rot": 0, "content": "=[YW]+\"Z\"" },
+    { "type": "barcode", "x": 5, "y": 82, "h": 10, "module": 0.25, "showText": true, "rot": 0, "content": "{SKU}" },
     { "type": "ean13",   "x": 5, "y": 97, "h": 12, "module": 0.33, "showText": true, "rot": 0, "content": "{BARCODE1}" }
   ]
 }

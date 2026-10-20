@@ -23,7 +23,7 @@ const rejects = async (fn, inc) => { try { await fn(); return false; } catch (e)
   let Database = null;
   try { Database = require('better-sqlite3'); } catch (e) { /* 可选依赖未装 */ }
   // CI 中驱动必须在：可选依赖安装失败时 npm 会静默跳过，安装包就会缺 SQLite 驱动
-  if (process.env.CI) {
+  if (process.env.REQUIRE_DRIVERS) {   // 打包流程设置：驱动缺失即失败
     check('CI：better-sqlite3 已安装（否则安装包缺少 SQLite 驱动）', !!Database);
     if (process.platform === 'win32') {
       let odbcOk = false; try { require('odbc'); odbcOk = true; } catch (e) { console.log('    odbc 加载失败：' + e.message); }

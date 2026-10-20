@@ -55,7 +55,12 @@ async function run(win, pageErrors) {
     try {
       const rows = await datasource.query({ type: 'sqlite', file }, 'SELECT a FROM t');
       if (!rows.length || rows[0].a !== '合格证') throw new Error(JSON.stringify(rows));
-      return '读写正常';
+      // 再从页面经 IPC 查一次：验证预加载接口、主进程来源校验、只读查询限制整条链路
+      const r = await js('window.labelDB.query(' + JSON.stringify({ type: 'sqlite', file }) + ', "SELECT a FROM t")');
+      if (!r.ok || !r.rows.length || r.rows[0].a !== '合格证') throw new Error('IPC 查询失败：' + JSON.stringify(r));
+      const w = await js('window.labelDB.query(' + JSON.stringify({ type: 'sqlite', file }) + ', "DELETE FROM t")');
+      if (w.ok) throw new Error('非 SELECT 语句没有被拦截');
+      return '读写正常，页面经 IPC 查询正常，非 SELECT 已拦截';
     } finally { fs.rmSync(file, { force: true }); }
   });
   for (const m of ['mysql2/promise', 'pg', 'mssql']) await check(m + ' 驱动', () => { require(m); return '已加载'; });

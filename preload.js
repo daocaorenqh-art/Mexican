@@ -11,10 +11,12 @@ contextBridge.exposeInMainWorld('labelDB', {
   query: (cfg, sql) => ipcRenderer.invoke('db:query', { cfg, sql }),
   pickFile: (kind) => ipcRenderer.invoke('db:pickFile', kind),
   tables: (cfg) => ipcRenderer.invoke('db:tables', cfg),
-  columns: (cfg, table) => ipcRenderer.invoke('db:columns', { cfg, table })
+  columns: (cfg, table) => ipcRenderer.invoke('db:columns', { cfg, table }),
+  encrypt: (text) => ipcRenderer.invoke('secret:encrypt', text),
+  decrypt: (b64) => ipcRenderer.invoke('secret:decrypt', b64)
 });
 
-// 敏感信息（数据库密码）加解密，由主进程交给系统完成
+// 敏感信息（数据库密码）加解密，由主进程交给系统完成（labelDB.encrypt/decrypt 的同名接口）
 contextBridge.exposeInMainWorld('labelSecret', {
   encrypt: (plain) => ipcRenderer.invoke('secret:encrypt', plain),
   decrypt: (b64) => ipcRenderer.invoke('secret:decrypt', b64)
@@ -25,5 +27,6 @@ contextBridge.exposeInMainWorld('labelPrinter', {
   isDesktop: true,
   list: () => ipcRenderer.invoke('printer:list'),
   sendRaw: (target, data) => ipcRenderer.invoke('printer:sendRaw', { target, data }),
-  print: (deviceName) => ipcRenderer.invoke('printer:print', { deviceName })
+  status: (target, lang) => ipcRenderer.invoke('printer:status', { target, lang }),
+  print: (deviceName, opts) => ipcRenderer.invoke('printer:print', { deviceName, pageSize: opts && opts.pageSize })
 });
