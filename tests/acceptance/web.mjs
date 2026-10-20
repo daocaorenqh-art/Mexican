@@ -312,6 +312,44 @@ console.log('\n[K] 流水号归零 / 段落行数');
   await page.close();
 }
 
+/* ================= P. PDF417（判定一律用 zxing-cpp） ================= */
+console.log('\n[P] PDF417');
+{
+  const page = await openApp(browser, { deviceScaleFactor: 3 });
+  if (!(await supportsType(page, 'pdf417'))) rec.gap('P-pdf417', 'PDF417', '界面没有这种元素');
+  else {
+    const want = ['合格证 女包 SN0001', '合格证 男鞋 SN0002'];
+    await loadDesign(page, design([{ type: 'counter', name: 'SN', x: 2, y: 2, size: 3, prefix: 'SN', start: 1, step: 1, pad: 4, rot: 0 },
+      { type: 'pdf417', x: 8, y: 10, size: 60, ecl: '', cols: 0, rot: 0, content: '合格证 {品名} {#SN}' }], 80, 50));
+    await setCSV(page, '品名\n女包\n男鞋');
+    const pv = [...(await scanPreview(page, 0)), ...(await scanPreview(page, 1))].map((g) => g.text);
+    rec.check('P-preview', 'PDF417 预览：中文 + 字段 + 流水号扫回原文', want.every((w) => pv.includes(w)), pv.join(' | '));
+    const z = await exportCmd(page, { choice: 'ok' });
+    const zg = [];
+    if (z.data) for (const f of renderZPL(z.data.toString('utf8'), 80, 50, 203)) zg.push(...(await scanPNG(f)).map((g) => g.text));
+    rec.check('P-zpl', 'PDF417 ZPL 出纸（Zebrash）：两张都扫回原文', want.every((w) => zg.includes(w)), zg.join(' | '));
+    const t = await exportCmd(page, { lang: 'tspl', choice: 'ok' });
+    const tg = [];
+    if (t.data) for (const f of await renderTSPL(page, t.data, 80, 50, 203)) tg.push(...(await scanPNG(f.file)).map((g) => g.text));
+    rec.check('P-tspl', 'PDF417 TSPL 出纸：两张都扫回原文', want.every((w) => tg.includes(w)), tg.join(' | '));
+    // 指定列数生效，且照样能扫
+    const cols = await page.evaluate(() => [3, 6].map((c) => encode2D('pdf417', 'PDF417 列数测试 0123456789', '', c).cols));
+    await loadDesign(page, design([{ type: 'pdf417', x: 5, y: 10, size: 70, ecl: '', cols: 6, rot: 0, content: 'PDF417 列数测试 0123456789' }], 80, 50));
+    const z6 = await exportCmd(page, { choice: 'ok' });
+    const g6 = z6.data ? (await scanPNG(renderZPL(z6.data.toString('utf8'), 80, 50, 203)[0])).map((g) => g.text) : [];
+    rec.check('P-cols', '指定列数生效（3 / 6 列），6 列的码出纸可扫', cols.join(',') === '3,6' && g6.includes('PDF417 列数测试 0123456789'), `列数 ${cols.join(',')}；扫到 ${g6.join(',')}`);
+    // 预检：贴边静区不足 → 警告；内容超长 → 错误、不出纸
+    await loadDesign(page, design([{ type: 'pdf417', x: 0.1, y: 10, size: 40, ecl: '', cols: 0, rot: 0, content: 'EDGE-0001' }], 80, 50));
+    const e1 = await exportCmd(page, { choice: 'cancel', timeout: 5000 });
+    rec.check('P-quiet', '预检：PDF417 贴边（静区不足）给出警告', e1.dialogs.some((d) => /静区/.test(d)), e1.dialogs.join(' / ').slice(0, 160));
+    await loadDesign(page, design([{ type: 'pdf417', x: 5, y: 5, size: 70, ecl: '', cols: 0, rot: 0, content: '超长'.repeat(1500) }], 80, 50));
+    const e2 = await exportCmd(page, { choice: 'skip', timeout: 5000 });
+    rec.check('P-toolong', '预检：PDF417 内容超长报错且不出纸', !e2.data && e2.dialogs.some((d) => /过长|超长|太长|容量/.test(d)), e2.dialogs.join(' / ').slice(0, 160));
+  }
+  rec.check('P-noerror', '全程无脚本错误', page._errors.length === 0, page._errors.join('; '));
+  await page.close();
+}
+
 /* ================= I. 设计往返与健壮性 ================= */
 console.log('\n[I] 设计往返与健壮性');
 {

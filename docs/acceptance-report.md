@@ -1,7 +1,7 @@
 # 交付验收报告
 
-- 版本：`242fe51`　生成时间：2026-10-20 08:31 UTC
-- 结果：**达标 103 / 103**；不达标 0；缺口（界面尚未提供）0
+- 版本：`debb01f`　生成时间：2026-10-20 08:58 UTC
+- 结果：**达标 110 / 110**；不达标 0；缺口（界面尚未提供）0
 - 判定方法：界面实际操作 + 独立工具判定（Zebrash 渲染 ZPL 出纸、zxing-cpp 扫码、Chromium 打印 PDF、真实 SQLite、模拟网络标签机）
 - 交付条件：不达标 = 0 且缺口 = 0；另附真机现场测试单（docs/handoff-local.md）
 
@@ -77,7 +77,7 @@
 | ✅ | F-fit | 文字适应宽度：界面已提供 |  |
 | ✅ | F-qty-out | 数量字段：A×2 + C×3 = 5 张 | 5 张 |
 | ✅ | J-prompt-date-sn | 打印时输入的批号、保质期（+30 天）、流水号都正确进入二维码 | B2610\|20261119\|007 应为 B2610\|20261119\|007 |
-| ✅ | J-log | 打印日志记下张数、记录范围、流水号区间 | {"t":"2026-10-20 08:29:56","method":"导出 ZPL","target":"","design":"未命名","labels":6,"recs":"1-3","serials":{"SN":"SN0001 – SN0006"},"prompts":{"批号":"B2610"},"rows":[{"SKU":"A"},{"SKU":"B"},{"SKU":"C"}] |
+| ✅ | J-log | 打印日志记下张数、记录范围、流水号区间 | {"t":"2026-10-20 08:55:50","method":"导出 ZPL","target":"","design":"未命名","labels":6,"recs":"1-3","serials":{"SN":"SN0001 – SN0006"},"prompts":{"批号":"B2610"},"rows":[{"SKU":"A"},{"SKU":"B"},{"SKU":"C"}] |
 | ✅ | J-pick | 选择记录：只出选中的 B | B |
 | ✅ | J-shop | 车间模式：元素拖不动、删不掉，打印照常 | {"x":2,"n":2} 已出纸 |
 | ✅ | J-dynimg | 动态图片（数据里的图片）出现在打印机出纸上 | 黑点 14374 |
@@ -87,19 +87,26 @@
 | ✅ | K-reset-same-day | 同一天再打：接着 0004 编号，不再归零 | SN0004,SN0005,SN0006 |
 | ✅ | K-para-lines | 段落最多 2 行：预览以 … 结尾，出纸高度约 2 行 | 预览 "产\n品执行国家标准，请…"，2 行；出纸墨迹高 52 点（1 行约 24 点） |
 | ✅ | K-noerror | 全程无脚本错误 |  |
-| ✅ | I-defaults | 全部 22 种元素的默认值都能正常渲染 | text,rich,wordart,para,barcode,ean13,ean8,upca,code39,itf,qrcode,datamatrix,gs1dm,gs1128,upce,code93,codabar,counter,date,image,box,ellipse |
-| ✅ | I-roundtrip | 保存设计 → 载入后所有元素字段原样 | 22/22 个；差异 0： |
+| ✅ | P-preview | PDF417 预览：中文 + 字段 + 流水号扫回原文 | 合格证 女包 SN0001 \| 合格证 男鞋 SN0002 |
+| ✅ | P-zpl | PDF417 ZPL 出纸（Zebrash）：两张都扫回原文 | 合格证 女包 SN0001 \| 合格证 男鞋 SN0002 |
+| ✅ | P-tspl | PDF417 TSPL 出纸：两张都扫回原文 | 合格证 女包 SN0001 \| 合格证 男鞋 SN0002 |
+| ✅ | P-cols | 指定列数生效（3 / 6 列），6 列的码出纸可扫 | 列数 3,6；扫到 PDF417 列数测试 0123456789 |
+| ✅ | P-quiet | 预检：PDF417 贴边（静区不足）给出警告 | 打印前预检｜警告（可以继续，但建议检查）：  ⚠ 第 1, 2 张 · #1 PDF417：PDF417 四周静区不足 2 个模块 |
+| ✅ | P-toolong | 预检：PDF417 内容超长报错且不出纸 | 打印前预检｜2 张标签有错误，直接打印会出错误内容或扫不出的码：  ✗ 第 1, 2 张 · #1 PDF417：PDF417 内容太长（7504 个数据码字，上限 926） |
+| ✅ | P-noerror | 全程无脚本错误 |  |
+| ✅ | I-defaults | 全部 23 种元素的默认值都能正常渲染 | text,rich,wordart,para,barcode,ean13,ean8,upca,code39,itf,qrcode,datamatrix,pdf417,gs1dm,gs1128,upce,code93,codabar,counter,date,image,box,ellipse |
+| ✅ | I-roundtrip | 保存设计 → 载入后所有元素字段原样 | 23/23 个；差异 0： |
 | ✅ | I-undo | 撤消 / 重做 | [5,1,5] |
 | ✅ | I-autosave | 意外关闭后重开，设计自动恢复 |  |
 | ✅ | I-badautosave | 自动保存损坏时仍能正常启动 |  |
 | ✅ | I-baddesign | 载入损坏的设计文件：提示错误、原设计不丢 | alert:读取失败：「bad-design.json」不是有效的设计文件（文件内容损坏或不是本软件保存的 .json）。当前设计未改动。 |
 | ✅ | G-import | 导入并预览 1 万条 < 5 秒 | 0.3 秒 |
 | ✅ | G-export-count | 1 万张生成 ZPL 张数正确 | 10000 张 |
-| ✅ | G-export-time | 1 万张生成 ZPL < 90 秒 | 45.4 秒，10.3MB |
+| ✅ | G-export-time | 1 万张生成 ZPL < 90 秒 | 41.1 秒，10.3MB |
 | ✅ | G-sample-0 | 抽查第 1 张：Code128 / EAN-13 / QR 都正确 | SKU00001\|6920000000012,SKU00001,6920000000012 |
 | ✅ | G-sample-9999 | 抽查第 10000 张：Code128 / EAN-13 / QR 都正确 | SKU10000\|6920000100002,SKU10000,6920000100002 |
 | ✅ | G-tspl-count | 1 万张 TSPL 张数正确 | 10000 张 |
-| ✅ | G-tspl-time | 1 万张 TSPL < 90 秒 | 37.6 秒 |
+| ✅ | G-tspl-time | 1 万张 TSPL < 90 秒 | 35.1 秒 |
 | ✅ | G-tspl-size | 1 万张 TSPL 体积 < 40MB（平均每张 < 4KB） | 34.0MB |
 | ✅ | G-noerror | 大批量全程无脚本错误 |  |
 
@@ -114,7 +121,7 @@
 | ✅ | H-readonly | 套打查询只读（DELETE 被拒绝） | 查询失败：只允许 SELECT 查询（套打只读取数据） |
 | ✅ | H-send | 直发到网络标签机：5 张全部送达 | 5 张；已发送 5 张标签到打印机 |
 | ✅ | H-send-serial | 直发的 5 张流水号 SN0001–SN0005 | SN0001,SN0002,SN0003,SN0004,SN0005 |
-| ✅ | H-resume | 中途失败后续打：5 张恰好各一次 | 失败提示：第 3 张起发送失败：无法连接打印机：connect ECONNREFUSED 127.0.0.1:46879（已发送 2 张，可「续打剩余」）；收到 5 张：SN0001,SN0002,SN0003,SN0004,SN0005 |
+| ✅ | H-resume | 中途失败后续打：5 张恰好各一次 | 失败提示：第 3 张起发送失败：无法连接打印机：connect ECONNREFUSED 127.0.0.1:39247（已发送 2 张，可「续打剩余」）；收到 5 张：SN0001,SN0002,SN0003,SN0004,SN0005 |
 | ✅ | H-status | 检测打印机：读出 300 dpi 并提示与设计不符 | 打印机就绪；ZT410；300 dpi（与设计精度 203 不符） |
 | ✅ | H-noerror | 桌面版全程无脚本错误 |  |
 
