@@ -122,6 +122,7 @@
     <a data-cmd="new">新建</a>
     <a data-cmd="open">打开设计…</a>
     <a data-cmd="save">保存设计</a>
+    <a data-cmd="zpl">导出 ZPL（斑马机）…</a>
     <hr>
     <a data-cmd="print">打印…　Ctrl+P</a>
   </div></div>
@@ -551,6 +552,10 @@ function barsSVG(bits, modPx, heightPx, color){
   }
   return svg;
 }
+/* ---- 打印机点换算 / 条码整点对齐（保证热敏机上可扫） ---- */
+function mm2dots(mm,dpi){return Math.round((+mm||0)*dpi/25.4);}
+function moduleDots(moduleMM,dpi){return Math.max(1,Math.round((+moduleMM||0)*dpi/25.4));}
+function snapModulePx(moduleMM){const dpi=+$('#dpi').value||203;const d=moduleDots(moduleMM,dpi);return (d*25.4/dpi)*PXMM;}
 
 /* ---------- 渲染单张标签 ---------- */
 function fmtDate(d,f){const p=(n,l=2)=>String(n).padStart(l,'0');
@@ -591,7 +596,7 @@ function renderLabel(row,idx){
       else if(['barcode','ean13','ean8','upca','code39','itf'].includes(el.type)){
         const draw1D=(res,gap)=>{
           if(el.bg)node.style.background=el.bg;
-          node.appendChild(barsSVG(res.bits,el.module*PXMM,el.h*PXMM,el.color));
+          node.appendChild(barsSVG(res.bits,snapModulePx(el.module),el.h*PXMM,el.color));
           if(el.showText){const t=document.createElement('div');t.textContent=res.text;
             t.style.cssText='text-align:center;font:'+(2.7*PXMM)+'px/1.1 monospace;'+(gap?'letter-spacing:'+gap+';':'')+'margin-top:1px;width:100%;color:'+(el.color||'#000');
             node.appendChild(t);}
@@ -880,6 +885,7 @@ document.querySelector('#menubar').addEventListener('click',e=>{
     case 'new':newDesign();break;
     case 'open':$('#loadBtn').click();break;
     case 'save':$('#saveBtn').click();break;
+    case 'zpl':exportZPL();break;
     case 'print':window.print();break;
     case 'undo':undo();break; case 'redo':redo();break;
     case 'cut':cutSel();break; case 'copy':copySel();break; case 'paste':pasteClip();break; case 'del':delSel();break;
@@ -967,6 +973,65 @@ function loadDesign(d){
     $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);}
   elements=d.elements;sel=-1;renderEditor();render();commit();
 }
+
+/* ---------- 导出 ZPL（Zebra 指令，直发热敏机） ---------- */
+function zEsc(s){return String(s).replace(/[\^~]/g,' ');}
+// 把文字栅格化成 1-bit 位图用 ^GFA 输出：中文/任意字体都能准确打印
+function textGF(text,sizeMM,bold,font,dpi){
+  const px=Math.max(8,Math.round(sizeMM*dpi/25.4));
+  const probe=document.createElement('canvas').getContext('2d');
+  const ff=(bold?'bold ':'')+px+'px '+(font||'sans-serif');
+  probe.font=ff;const w=Math.max(1,Math.ceil(probe.measureText(text).width));
+  const h=Math.ceil(px*1.25), bytesPerRow=Math.ceil(w/8), W=bytesPerRow*8;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=h;
+  const c=cv.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,W,h);
+  c.fillStyle='#000';c.textBaseline='top';c.font=ff;c.fillText(text,0,0);
+  const d=c.getImageData(0,0,W,h).data;let hex='';const total=bytesPerRow*h;
+  for(let y=0;y<h;y++)for(let bx=0;bx<bytesPerRow;bx++){let byte=0;
+    for(let bit=0;bit<8;bit++){const px2=bx*8+bit,i=(y*W+px2)*4;
+      if((d[i]+d[i+1]+d[i+2])/3<128)byte|=(1<<(7-bit));}
+    hex+=byte.toString(16).padStart(2,'0').toUpperCase();}
+  return {gf:'^GFA,'+total+','+total+','+bytesPerRow+','+hex,w,h};
+}
+function buildZPL(){
+  const dpi=+$('#dpi').value||203;
+  const Wd=mm2dots(toMM($('#lw').value),dpi), Hd=mm2dots(toMM($('#lh').value),dpi);
+  const list=rows?rows:[null];let out='';
+  list.forEach((row,idx)=>{
+    out+='^XA\n^CI28\n^PW'+Wd+'\n^LL'+Hd+'\n';
+    elements.forEach(el=>{
+      const x=mm2dots(el.x,dpi), y=mm2dots(el.y,dpi);
+      let text;try{text=evalContent(el.content,row);}catch(e){text='';}
+      const bh=mm2dots(el.h,dpi), by=Math.min(10,moduleDots(el.module,dpi));
+      switch(el.type){
+        case 'text': case 'counter': case 'date':{
+          let t=text;
+          if(el.type==='counter'){const n=(+el.start||0)+idx*(+el.step||1);t=(el.prefix||'')+String(n).padStart(+el.pad||0,'0')+(el.suffix||'');}
+          if(el.type==='date')t=fmtDate(new Date(),el.format||'YYYY-MM-DD');
+          if(!t)break;const g=textGF(t,el.size,el.bold,el.font,dpi);
+          out+='^FO'+x+','+y+g.gf+'^FS\n';break;}
+        case 'para':{if(!text)break;const fh=mm2dots(el.size,dpi),wd=mm2dots(el.w,dpi);
+          out+='^FO'+x+','+y+'^A0N,'+fh+','+fh+'^FB'+wd+',30,0,L,0^FD'+zEsc(text)+'^FS\n';break;}
+        case 'barcode':out+='^FO'+x+','+y+'^BY'+by+'^BCN,'+bh+','+(el.showText?'Y':'N')+',N,N^FD'+zEsc(text)+'^FS\n';break;
+        case 'ean13':out+='^FO'+x+','+y+'^BY'+by+'^BEN,'+bh+','+(el.showText?'Y':'N')+',N^FD'+String(text).replace(/\D/g,'').slice(0,12)+'^FS\n';break;
+        case 'ean8':out+='^FO'+x+','+y+'^BY'+by+'^B8N,'+bh+','+(el.showText?'Y':'N')+',N^FD'+String(text).replace(/\D/g,'').slice(0,7)+'^FS\n';break;
+        case 'upca':out+='^FO'+x+','+y+'^BY'+by+'^BUN,'+bh+','+(el.showText?'Y':'N')+',N^FD'+String(text).replace(/\D/g,'').slice(0,11)+'^FS\n';break;
+        case 'code39':out+='^FO'+x+','+y+'^BY'+by+'^B3N,N,'+bh+','+(el.showText?'Y':'N')+',N^FD'+text+'^FS\n';break;
+        case 'itf':out+='^FO'+x+','+y+'^BY'+by+'^B2N,'+bh+','+(el.showText?'Y':'N')+',N,N^FD'+String(text).replace(/\D/g,'')+'^FS\n';break;
+        case 'qrcode':{const mag=Math.max(1,Math.round(mm2dots(el.size,dpi)/(String(text).length>20?33:21)));
+          out+='^FO'+x+','+y+'^BQN,2,'+mag+'^FDLA,'+zEsc(text)+'^FS\n';break;}
+        case 'box':{const w=mm2dots(el.w,dpi),hh=mm2dots(el.h,dpi),th=Math.max(1,mm2dots(el.border,dpi));
+          out+='^FO'+x+','+y+'^GB'+w+','+hh+','+(el.fill?Math.min(w,hh):th)+',B^FS\n';break;}
+        case 'ellipse':{const w=mm2dots(el.w,dpi),hh=mm2dots(el.h,dpi),th=Math.max(1,mm2dots(el.border,dpi));
+          out+='^FO'+x+','+y+'^GE'+w+','+hh+','+th+',B^FS\n';break;}
+      }
+    });
+    out+='^PQ1\n^XZ\n';
+  });
+  return out;
+}
+function exportZPL(){const z=buildZPL();const blob=new Blob([z],{type:'text/plain'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);}
 $('#loadBtn').onclick=()=>$('#designIn').click();
 $('#designIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
   fr.onload=()=>{try{loadDesign(JSON.parse(fr.result));}catch(err){alert('读取失败: '+err.message);}};fr.readAsText(f);};
