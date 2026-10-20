@@ -889,17 +889,26 @@ function printList(){
   for(let i=from-1;i<Math.max(from-1,to);i++)for(let c=0;c<copies;c++)out.push(base[i]);
   return out.length?out:[base[0]];
 }
-function render(){
-  const pv=$('#preview');pv.innerHTML='';
+const PREVIEW_CAP=200;   // 预览最多渲染的张数；打印/导出 ZPL 不受此限
+let printingAll=false;   // 打印期间临时全量渲染
+function render(opt){
+  const pv=$('#preview');
   const cols=+$('#cols').value||0;
   const gapX=toMM($('#gapX').value)*PXMM, gapY=toMM($('#gapY').value)*PXMM;
   const W=toMM($('#lw').value), H=toMM($('#lh').value), rulerOn=$('#rulerChk').checked;
+  const list=printList(), shown=printingAll?list:list.slice(0,PREVIEW_CAP);
+  // 拖动中只重绘正在编辑的第一张，松手后再全量刷新
+  if(opt&&opt.fast&&pv.firstChild){const lab=renderLabel(shown[0],0);
+    pv.replaceChild(rulerOn?wrapWithRulers(lab,W,H):lab,pv.firstChild);return;}
+  pv.innerHTML='';
   if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
   else{pv.style.display='flex';}
   pv.style.gap=gapY+'px '+gapX+'px';
-  const list=printList();
-  list.forEach((r,i)=>{const lab=renderLabel(r,i);pv.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
-  $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'');
+  const frag=document.createDocumentFragment();
+  shown.forEach((r,i)=>{const lab=renderLabel(r,i);frag.appendChild(i===0&&rulerOn?wrapWithRulers(lab,W,H):lab);});
+  pv.appendChild(frag);
+  $('#pager').textContent=(rows?('共 '+list.length+' 张标签（'+rows.length+' 条记录）'):(list.length>1?'共 '+list.length+' 张标签':'单张预览（未加载数据）'))+(cols>0?('，每行 '+cols):'')
+    +(shown.length<list.length?'；预览前 '+shown.length+' 张，打印/导出为全部 '+list.length+' 张':'');
 }
 
 /* ---------- 元素编辑 UI ---------- */
@@ -1047,9 +1056,12 @@ window.addEventListener('mousemove',e=>{
     else if(el.type==='qrcode'||el.type==='datamatrix'){el.size=Math.max(3,snap(o.size+Math.max(dx,dy)));}
     else if('h' in o){el.h=Math.max(2,snap(o.h+dy));}
     else if('size' in o){el.size=Math.max(1,snap(o.size+dy));}}
-  render();
+  render({fast:true});
 });
-window.addEventListener('mouseup',()=>{if(drag){drag=null;document.body.style.userSelect='';commit();renderEditor();}});
+window.addEventListener('mouseup',()=>{if(drag){drag=null;document.body.style.userSelect='';commit();renderEditor();render();}});
+// 打印时临时全量渲染（预览只放前 PREVIEW_CAP 张）
+window.addEventListener('beforeprint',()=>{pendingPrintJob=true;if(!printingAll){printingAll=true;render();}});
+window.addEventListener('afterprint',()=>{if(printingAll){printingAll=false;render();}});
 
 /* ---------- 对齐到标签 / 标尺 / 方向键微调 ---------- */
 $('#rulerChk').onchange=render;
@@ -1262,11 +1274,13 @@ function buildZPL(){
 }
 function exportZPL(){const z=buildZPL();const blob=new Blob([z],{type:'text/plain'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label.zpl';a.click();URL.revokeObjectURL(a.href);
-  askAdvanceCounters();}
+  pendingPrintJob=true;askAdvanceCounters();}
 // 勾了「打印后自动续号」的流水号：确认已打印后，起始值顺延实际张数，下次接着编号不重号
+// 每次真正开始一次打印/导出才置位；同一作业被多个事件触发时只询问一次
+let pendingPrintJob=false;
 function askAdvanceCounters(){
+  const job=pendingPrintJob;pendingPrintJob=false;if(!job)return;
   const cs=elements.filter(e=>e.type==='counter'&&e.persist);if(!cs.length)return;
-  const now=Date.now();if(now-(askAdvanceCounters.last||0)<2000)return;askAdvanceCounters.last=now;
   const n=printList().length;
   if(!confirm('本次共 '+n+' 张标签已打印成功？\n确认后流水号将从下一个号码继续。'))return;
   cs.forEach(e=>{e.start=(+e.start||0)+n*(+e.step||1);});commit();renderEditor();render();
@@ -1315,7 +1329,8 @@ async function doSilentPrint(){
   if(!hasPrinter()){alert('「打印到所选打印机」仅在桌面安装版可用；网页版请用 Ctrl+P。');return;}
   const dev=$('#prnList').value;if(!dev){prnMsg('请先选择打印机',false);return;}
   prnMsg('正在打印…',true);
-  const r=await window.labelPrinter.print(dev);
+  pendingPrintJob=true;printingAll=true;render();   // 静默打印不一定触发 beforeprint，显式全量渲染
+  let r;try{r=await window.labelPrinter.print(dev);}finally{printingAll=false;render();}
   if(r.ok){prnMsg('已发送到打印机：'+dev,true);askAdvanceCounters();}else prnMsg('打印失败：'+r.error,false);
 }
 function rawTarget(){const k=$('#rawKind').value,a=$('#rawAddr').value.trim();
@@ -1325,7 +1340,7 @@ async function doSendZPL(){
   if(!$('#rawAddr').value.trim()){prnMsg('请填写打印机 IP / 共享名 / 串口',false);return;}
   prnMsg('正在发送…',true);
   const r=await window.labelPrinter.sendRaw(rawTarget(),buildZPL());
-  if(r.ok){prnMsg('已发送 '+printList().length+' 张标签到打印机',true);askAdvanceCounters();}else prnMsg(r.error,false);
+  if(r.ok){prnMsg('已发送 '+printList().length+' 张标签到打印机',true);pendingPrintJob=true;askAdvanceCounters();}else prnMsg(r.error,false);
 }
 if(hasPrinter()){
   $('#prnPanel').style.display='';
