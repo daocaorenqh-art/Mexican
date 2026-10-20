@@ -1,7 +1,7 @@
 # 交付验收报告
 
-- 版本：`96f08e7`　生成时间：2026-10-20 06:40 UTC
-- 结果：**达标 55 / 82**；不达标 5；缺口（界面尚未提供）22
+- 版本：`f9aa544`　生成时间：2026-10-20 07:04 UTC
+- 结果：**达标 63 / 89**；不达标 3；缺口（界面尚未提供）23
 - 判定方法：界面实际操作 + 独立工具判定（Zebrash 渲染 ZPL 出纸、zxing-cpp 扫码、Chromium 打印 PDF、真实 SQLite、模拟网络标签机）
 - 交付条件：不达标 = 0 且缺口 = 0；另附真机现场测试单（docs/handoff-local.md）
 
@@ -9,11 +9,9 @@
 
 | 状态 | 编号 | 项目 | 证据 |
 |---|---|---|---|
-| ❌ | B-ean-check | EAN 校验位错的记录不会打出（有提示） | 提示：无；出 3 张；扫到：6925253841665,6925253841672 |
-| ❌ | B-code128-cjk | Code128 无法编码的记录被拦下（不打错误文字） | 提示：；出 2 张 |
 | ❌ | E-pages | 标签机模式：5 张标签 = 5 页 | 1 页 |
 | ❌ | E-pagesize | 标签机模式：页面尺寸 = 标签尺寸 60×40mm | MediaBox 612.0×792.0pt，应为 170.1×113.4 |
-| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 166.2 秒，9.2MB |
+| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 200.0 秒，9.2MB |
 | ⬜ | A-barcode-tspl | Code128：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-ean13-tspl | EAN-13：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-ean8-tspl | EAN-8：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
@@ -28,6 +26,7 @@
 | ⬜ | A-datamatrix-tspl | DataMatrix 中文：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-gs1dm-tspl | GS1 DataMatrix：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | D-serial-barcode | 流水号可放进条码（{#SN}） | 条码内容里的 {#SN} 未被替换：["SNSN0001","SNSN0002","SNSN0003"] |
+| ⬜ | E-sheet | 整页模式：A4 页面、从第 N 个位置开始 | 界面尚未提供 |
 | ⬜ | F-log | 打印日志 | 界面尚未提供 |
 | ⬜ | F-shop | 车间模式（只打印） | 界面尚未提供 |
 | ⬜ | F-tspl | TSPL 指令（国产标签机） | 界面尚未提供 |
@@ -84,9 +83,9 @@
 | ✅ | A-rot180 | 旋转 180° 的条码 ZPL 出纸可扫 | [{"format":"Code128","text":"ROT180"}] |
 | ✅ | A-rot270 | 旋转 270° 的条码 ZPL 出纸可扫 | [{"format":"Code128","text":"ROT270"}] |
 | ✅ | A-noerror | 全程无脚本错误 |  |
-| ❌ | B-ean-check | EAN 校验位错的记录不会打出（有提示） | 提示：无；出 3 张；扫到：6925253841665,6925253841672 |
+| ✅ | B-ean-check | EAN 校验位错的记录不会打出（有提示） | 提示：有；出 2 张；扫到：6925253841665,6925253841672 |
 | ✅ | B-range | 打印范围填反（3→1）时不出标签并提示 | 未导出 |
-| ❌ | B-code128-cjk | Code128 无法编码的记录被拦下（不打错误文字） | 提示：；出 2 张 |
+| ✅ | B-code128-cjk | Code128 无法编码的记录被拦下（不打错误文字） | 提示：打印前预检｜1 张标签有错误，直接打印会出错误内容或扫不出的码：  ✗ 第 1 张 · #1 Code128：Code128 仅支持 ASCII 32-126；出 1 张 |
 | ✅ | C-cjk-field | 中文 / 带空格字段名可插值 | 品名：女包 558 |
 | ✅ | C-gbk | 中文版 Excel 另存的 GBK CSV 不乱码 | 品名,SKU 雨伞,A1  |
 | ✅ | C-newline | 引号内换行的 CSV 解析为 1 条 | 1 张 |
@@ -96,6 +95,7 @@
 | ✅ | D-persist | 关闭重开后流水号起始值保持 | 7 → 7 |
 | ❌ | E-pages | 标签机模式：5 张标签 = 5 页 | 1 页 |
 | ❌ | E-pagesize | 标签机模式：页面尺寸 = 标签尺寸 60×40mm | MediaBox 612.0×792.0pt，应为 170.1×113.4 |
+| ⬜ | E-sheet | 整页模式：A4 页面、从第 N 个位置开始 | 界面尚未提供 |
 | ✅ | F-qty | 数量字段（每条打几张）：界面已提供 |  |
 | ✅ | F-pick | 选择记录打印：界面已提供 |  |
 | ✅ | F-preflight | 打印前预检：界面已提供 |  |
@@ -107,9 +107,15 @@
 | ⬜ | F-sheet | 整页模式（A4 不干胶、起始位置） | 界面尚未提供 |
 | ✅ | F-fit | 文字适应宽度：界面已提供 |  |
 | ✅ | F-qty-out | 数量字段：A×2 + C×3 = 5 张 | 5 张 |
+| ✅ | I-defaults | 全部 22 种元素的默认值都能正常渲染 | text,rich,wordart,para,barcode,ean13,ean8,upca,code39,itf,qrcode,datamatrix,gs1dm,gs1128,upce,code93,codabar,counter,date,image,box,ellipse |
+| ✅ | I-roundtrip | 保存设计 → 载入后所有元素字段原样 | 22/22 个；差异 0： |
+| ✅ | I-undo | 撤消 / 重做 | [5,1,5] |
+| ✅ | I-autosave | 意外关闭后重开，设计自动恢复 |  |
+| ✅ | I-badautosave | 自动保存损坏时仍能正常启动 |  |
+| ✅ | I-baddesign | 载入损坏的设计文件：提示错误、原设计不丢 | alert:读取失败: Expected ',' or '}' after property value in JSON at position 19 (line 1 column 20) |
 | ✅ | G-import | 导入并预览 1 万条 < 5 秒 | 0.4 秒 |
 | ✅ | G-export-count | 1 万张生成 ZPL 张数正确 | 10000 张 |
-| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 166.2 秒，9.2MB |
+| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 200.0 秒，9.2MB |
 | ✅ | G-sample-0 | 抽查第 1 张：Code128 / EAN-13 / QR 都正确 | SKU00001\|6920000000012,SKU00001,6920000000012 |
 | ✅ | G-sample-9999 | 抽查第 10000 张：Code128 / EAN-13 / QR 都正确 | SKU10000\|6920000100002,SKU10000,6920000100002 |
 | ✅ | G-noerror | 大批量全程无脚本错误 |  |
