@@ -183,6 +183,16 @@ npm run test:e2e  :: 端到端测试：浏览器 + 桌面版连模拟网络标�
 
 每次推送 / PR 自动跑测试；打包前也会先跑，未通过则不出安装包。
 
+## 交付验收
+
+```bat
+xvfb-run -a node tests/acceptance/run.mjs   :: Linux 无桌面时；Windows / 有桌面时直接 node tests/acceptance/run.mjs
+```
+
+用真实界面操作，并用独立工具判定：Zebrash 渲染 ZPL 模拟斑马机出纸、zxing-cpp 扫码、Chromium 打印成 PDF 检查分页和页面尺寸、真实 SQLite、模拟网络标签机（含掉线后续打）。覆盖范围：全部码制在预览 / ZPL / TSPL 三条路径上扫码、错误数据拦截、数据导入、流水号、驱动打印分页、整页模式、生产流程（日志、车间模式、记录选择、打印时输入）、1 万条大批量的耗时和体积、设计往返与故障恢复、桌面版安全与直发。结果写入 `docs/acceptance-report.md`。
+
+打印机硬件和扫码设备需要按 `docs/field-test.md` 现场实测。
+
 ## 代码结构
 
 | 文件 | 内容 |
