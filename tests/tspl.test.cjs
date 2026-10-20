@@ -38,6 +38,17 @@ const build = (elements, extra) => ZPL.buildTSPL(Object.assign({ label: { w: 80,
     }
   }
 
+  // 一维码用 BAR 精确画出（体积小），二维码 / 文字仍用 BITMAP
+  const r1 = build([{ type: 'barcode', x: 8, y: 6, h: 10, module: 0.25, showText: false, content: 'SIZE-TEST-0001' }]);
+  const l1 = ZPL.parseTSPL(r1.data)[0];
+  check('一维码改用 BAR、不用 BITMAP', l1.bars.length > 20 && l1.bitmaps.length === 0, l1.bars.length + ' 个 BAR');
+  const bmBytes = Math.ceil(ZPL.barsBitmap(require(path.join(__dirname, '..', 'src', 'barcodes.js')).encode1D('barcode', 'SIZE-TEST-0001').bits, 2, 80).w / 8) * 80;
+  check('一维码 TSPL 体积小于位图的一半', r1.data.length < bmBytes / 2, r1.data.length + ' 字节 vs 位图 ' + bmBytes);
+  const l2 = ZPL.parseTSPL(build([{ type: 'qrcode', x: 8, y: 6, size: 18, ecl: 'M', content: '二维码仍用位图 0123456789' }]).data)[0];
+  check('二维码仍用 BITMAP', l2.bitmaps.length === 1);
+  const rr = ZPL.bitmapRects(ZPL.barsBitmap('1101', 2, 5), 100);
+  check('位图拆矩形精确', JSON.stringify(rr) === '[[0,0,4,5],[6,0,2,5]]', JSON.stringify(rr));
+
   // 头部指令
   let t = txt(build([{ type: 'box', x: 1, y: 1, w: 10, h: 5, border: 0.5 }]).data);
   check('SIZE / 默认间隙 2mm / 方向 / 原点 / CLS', t.startsWith('SIZE 80 mm,60 mm\r\nGAP 2 mm,0 mm\r\nDIRECTION 0\r\nREFERENCE 0,0\r\nCLS\r\n'), t.slice(0, 120));
