@@ -17,12 +17,12 @@ jobs:
         with:
           node-version: '24'
 
-      # 安装依赖（含可选的原生数据库驱动，编译失败的会被跳过而不中断）
+      # 按 package-lock.json 安装（可复现）；原生数据库驱动由下面打包步骤按 Electron 版本重新编译
       - name: Install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts
 
-      # 编码器正确性校验：生成的二维码/DataMatrix 必须能被独立解码器扫回原文，否则不出包
-      - name: Verify barcode encoders
+      # 编码器 / 表达式 / 预检 / ZPL 点阵扫码等全部测试，未通过则不出包
+      - name: Run tests
         run: npm test
 
       # 用 electron-builder 打包成 NSIS 安装程序

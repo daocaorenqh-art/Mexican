@@ -9,7 +9,9 @@ contextBridge.exposeInMainWorld('labelDB', {
   isDesktop: true,
   test: (cfg) => ipcRenderer.invoke('db:test', cfg),
   query: (cfg, sql) => ipcRenderer.invoke('db:query', { cfg, sql }),
-  pickFile: (kind) => ipcRenderer.invoke('db:pickFile', kind)
+  pickFile: (kind) => ipcRenderer.invoke('db:pickFile', kind),
+  encrypt: (text) => ipcRenderer.invoke('secret:encrypt', text),
+  decrypt: (b64) => ipcRenderer.invoke('secret:decrypt', b64)
 });
 
 // 打印机：列表、ZPL 直发、指定打印机静默打印
@@ -17,5 +19,5 @@ contextBridge.exposeInMainWorld('labelPrinter', {
   isDesktop: true,
   list: () => ipcRenderer.invoke('printer:list'),
   sendRaw: (target, data) => ipcRenderer.invoke('printer:sendRaw', { target, data }),
-  print: (deviceName) => ipcRenderer.invoke('printer:print', { deviceName })
+  print: (deviceName, opts) => ipcRenderer.invoke('printer:print', { deviceName, pageSize: opts && opts.pageSize })
 });
