@@ -1304,14 +1304,12 @@ function rasterize(Wd,Hd,rotDeg,paint,dither,threshold){
     if(dither){const e=v-(b?0:255);   // Floyd–Steinberg 误差扩散：照片/Logo 灰度转成黑白点阵
       if(x+1<W)lum[i+1]+=e*7/16;
       if(y+1<ch){if(x>0)lum[i+W-1]+=e*3/16;lum[i+W]+=e*5/16;if(x+1<W)lum[i+W+1]+=e/16;}}}
-  let hex='',ink=false;
+  let hex='',ink=false,o=0;const bytes=new Uint8Array(bpr*ch);
   for(let y=0;y<ch;y++)for(let bx=0;bx<bpr;bx++){let byte=0;
     for(let k=0;k<8;k++)if(bits[y*W+bx*8+k])byte|=1<<(7-k);
-    if(byte)ink=true;hex+=HEX2[byte];}
+    if(byte)ink=true;bytes[o++]=byte;hex+=HEX2[byte];}
   if(!ink)return null;
-  const HX=rasterize.HX||(rasterize.HX=Array.from({length:256},(_,v)=>(v<16?'0':'')+v.toString(16).toUpperCase()));
-  const hp=new Array(bytes.length);for(let i=0;i<bytes.length;i++)hp[i]=HX[bytes[i]];
-  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex:hp.join(''),bytes};
+  return {dx:minX,dy:minY,bpr,total:bpr*ch,hex,bytes};
 }
 // 各类元素「未旋转」时的尺寸与画法（单位：打印点）
 function painter(el,text,dpi,idx,img){
