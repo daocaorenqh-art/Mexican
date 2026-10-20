@@ -66,6 +66,7 @@ function imageSrc(el,text){const t=String(text==null?'':text).trim();
   if(/^data:image\//i.test(t)||/^(file|blob):/i.test(t))return t;
   if(/^[A-Za-z]:[\\/]/.test(t))return 'file:///'+t.replace(/\\/g,'/');          // C:\img\a.png
   if(/^\\\\/.test(t))return 'file:'+t.replace(/\\/g,'/');                      // \\server\share\a.png
+  if(/^[a-z][a-z0-9+.-]*:/i.test(t))return '';   // http(s) 等其它地址不加载：本软件完全离线，数据里的网址不会让它联网
   return t;}
 // 设计里用到的所有「打印时输入」项
 function promptsUsed(elements){const s=new Set();
@@ -121,7 +122,8 @@ function preflight(o){
         add(errors,'找不到字段 / 变量：'+[...ctx.missing].join('、'));
       if(ctx.errors.length)return;
       let size;
-      try{size=elementSize(el,text,dpi,()=>encode(el,text),o.measure);}
+      // o.sizeOf(el,text)：界面可给出它自己排版的元素（富文本、艺术字、段落折行等）的精确宽高，返回空则按通用规则估算
+      try{size=(o.sizeOf&&o.sizeOf(el,text))||elementSize(el,text,dpi,()=>encode(el,text),o.measure);}
       catch(err){add(errors,err.message);return;}
       let ox=+el.x||0;
       if((el.type==='text'||el.type==='counter'||el.type==='date')&&(el.align==='center'||el.align==='right'))ox-=el.align==='center'?size.w/2:size.w;

@@ -1,5 +1,7 @@
 // 移植自另一开发线的界面功能（docs/integration.md）逐项验收
-import { S, APP } from './_lib.mjs';
+import { S, APP, ZR } from './_lib.mjs';
+import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import pw from 'playwright';
 import { createRequire } from 'node:module';
 const require=createRequire(import.meta.url);
@@ -136,6 +138,92 @@ await p.evaluate(()=>{document.querySelector('#qtyField').value='';document.quer
 ok('不用数量字段 → 按每条份数（选中 1 条 × 1）',await p.evaluate(()=>document.querySelectorAll('#preview .label').length)===1);
 await p.evaluate(()=>{document.querySelector('#csv').value='品名\n甲\n乙';document.querySelector('#applyCsv').click();});
 ok('换数据后清空选择',await p.evaluate(()=>selectedRecs===null&&document.querySelectorAll('#preview .label').length===2));
+
+console.log('\n[9] 文字锚点对齐 / 适应宽度（预览 = 打印）');
+// 打印图里的黑点外框（点）与预览里元素的外框（换算成点）比较
+async function inkVsPreview(el,tag){
+  const zpl=await p.evaluate(async el=>{loadDesign({v:1,label:{w:60,h:30,dpi:300},elements:[el]});setRows(null);
+    document.querySelector('#zplComp').value='z64';return buildZPL();},el);
+  fs.writeFileSync(S+`out/${tag}.zpl`,zpl);execFileSync('node',[ZR,S+`out/${tag}.zpl`,S+`out/${tag}`,'60','30','12'],{stdio:'pipe'});
+  return p.evaluate(async png=>{const im=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=png;});
+    const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const g=c.getContext('2d');g.drawImage(im,0,0);
+    const d=g.getImageData(0,0,c.width,c.height).data;let x0=1e9,y0=1e9,x1=-1,y1=-1;
+    for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d[(y*c.width+x)*4]<128){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
+    const lab=document.querySelector('#preview .label').getBoundingClientRect(),n=document.querySelector('#preview .el').getBoundingClientRect(),k=12/3.78;
+    return {ink:[x0,y0,x1,y1],box:[(n.left-lab.left)*k,(n.top-lab.top)*k,(n.right-lab.left)*k,(n.bottom-lab.top)*k].map(Math.round),
+      size:parseFloat(document.querySelector('#preview .el').style.fontSize)/3.78};},'data:image/png;base64,'+fs.readFileSync(S+`out/${tag}-0.png`).toString('base64'));}
+const inside=(r,tol=4)=>r.ink[0]>=r.box[0]-tol&&r.ink[2]<=r.box[2]+tol&&r.ink[1]>=r.box[1]-tol&&r.ink[3]<=r.box[3]+tol;
+const cx=r=>(r.ink[0]+r.ink[2])/2;
+let r=await inkVsPreview({type:'text',x:30,y:10,size:4,bold:true,align:'center',content:'居中 CENTER'},'anc-c');
+ok('居中：x 为中点（打印墨迹中心 ≈ 30mm）',Math.abs(cx(r)-30*12)<=6&&inside(r),JSON.stringify(r));
+r=await inkVsPreview({type:'text',x:55,y:10,size:4,bold:true,align:'right',content:'右对齐 RIGHT'},'anc-r');
+ok('右对齐：x 为右边（墨迹右边 ≈ 55mm）',Math.abs(r.ink[2]-55*12)<=8&&inside(r),JSON.stringify(r));
+r=await inkVsPreview({type:'text',x:30,y:15,size:4,bold:true,align:'center',rot:90,content:'旋转居中'},'anc-c90');
+ok('居中 + 旋转 90°：墨迹落在预览框内、竖直中心 ≈ 15mm',Math.abs((r.ink[1]+r.ink[3])/2-15*12)<=6&&inside(r),JSON.stringify(r));
+r=await inkVsPreview({type:'counter',x:30,y:20,size:4,bold:true,align:'center',name:'SN',prefix:'NO.',start:7,step:1,pad:4},'anc-sn');
+ok('流水号也支持锚点居中',Math.abs(cx(r)-30*12)<=6&&inside(r),JSON.stringify(r));
+r=await inkVsPreview({type:'text',x:5,y:10,size:6,fitW:20,minSize:1,bold:true,content:'很长很长的品名需要自动缩小字号'},'fit');
+ok('适应宽度：字号自动缩小，打印宽度 ≤ 20mm 且与预览一致',r.size<6&&(r.ink[2]-r.ink[0])<=20*12+4&&inside(r),JSON.stringify(r));
+r=await inkVsPreview({type:'text',x:5,y:10,size:6,fitW:20,minSize:1,bold:true,content:'短'},'fit2');
+ok('适应宽度：不超宽时保持原字号',Math.abs(r.size-6)<0.01,r.size);
+
+console.log('\n[9] 动态图片 / 阈值与抖动');
+const mk=await p.evaluate(()=>{const u=c=>{const v=document.createElement('canvas');v.width=v.height=40;const g=v.getContext('2d');g.fillStyle=c;g.fillRect(0,0,40,40);return v.toDataURL();};
+  return {black:u('#000'),white:u('#fff'),gray:u('#888')};});
+// 每张标签的图片墨迹占比（打印图里图片区域的黑点比例）
+async function inkRatios(design,csv,tag){
+  const zpl=await p.evaluate(async([d,csv])=>{loadDesign(d);setRows(csv?parseData(csv):null);document.querySelector('#zplComp').value='acs';return buildZPL();},[design,csv]);
+  fs.writeFileSync(S+`out/${tag}.zpl`,zpl);execFileSync('node',[ZR,S+`out/${tag}.zpl`,S+`out/${tag}`,'30','20','8'],{stdio:'pipe'});
+  const pngs=fs.readdirSync(S+'out').filter(f=>f.startsWith(tag+'-')&&f.endsWith('.png')).sort();
+  const out=[];for(const f of pngs)out.push(await p.evaluate(async png=>{const im=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=png;});
+    const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const g=c.getContext('2d');g.drawImage(im,0,0);
+    const d=g.getImageData(8,8,80,80).data;let k=0;for(let i=0;i<d.length;i+=4)if(d[i]<128)k++;return +(k/(80*80)).toFixed(2);},'data:image/png;base64,'+fs.readFileSync(S+'out/'+f).toString('base64')));
+  return out;}
+// 右侧固定放一个字，保证每张标签都有内容（渲染器会跳过完全空白的标签）
+const img=(o)=>({v:1,label:{w:30,h:20,dpi:203},elements:[{type:'image',x:1,y:1,w:10,h:10,src:'',rot:0,...o},{type:'text',x:20,y:12,size:3,content:'X'}]});
+let ir=await inkRatios(img({content:'{图}'}),'品名,图\n甲,"'+mk.black+'"\n乙,"'+mk.white+'"','dyn');   // data: 地址里有逗号，CSV 里要加引号
+ok('动态图片：每张标签用各自记录的图片',ir.length===2&&ir[0]>0.95&&ir[1]<0.05,JSON.stringify(ir));
+ok('预览里也是各自的图片',await p.evaluate(b=>{const im=[...document.querySelectorAll('#preview .label img')];return im.length===2&&im[0].src===b;},mk.black));
+ir=await inkRatios(img({src:mk.gray,dither:'',threshold:200}),'','thr200');
+const ir2=await inkRatios(img({src:mk.gray,dither:'',threshold:100}),'','thr100');
+const ir3=await inkRatios(img({src:mk.gray,dither:'fs'}),'','fs');
+ok('阈值 200 → 灰色全黑；阈值 100 → 全白；抖动 → 约一半',ir[0]>0.95&&ir2[0]<0.05&&ir3[0]>0.3&&ir3[0]<0.7,JSON.stringify([ir[0],ir2[0],ir3[0]]));
+ir=await inkRatios(img({content:'https://example.com/x.png'}),'','net');
+ok('网址图片不加载（不联网）',ir[0]<0.05&&await p.evaluate(()=>!document.querySelector('#preview .label img')),JSON.stringify(ir));
+ok('旧设计（无 dither 字段）载入后仍为抖动',await p.evaluate(()=>{loadDesign({v:1,label:{w:30,h:20,dpi:203},elements:[{type:'image',x:1,y:1,w:5,h:5,src:''}]});return elements[0].dither==='fs';}));
+
+console.log('\n[7] 打印前预检');
+// 打开打印流程但不等待（预检对话框会等用户点）；返回对话框内容
+async function startPrint(){await p.evaluate(()=>{window.__printed=null;window.print=()=>{window.__printed=printList().length;};doPrint();});
+  await p.waitForTimeout(150);return p.evaluate(()=>({open:getComputedStyle(document.querySelector('#dlg')).display!=='none',
+    title:document.querySelector('#dlgHd').textContent,body:document.querySelector('#dlgBody').innerText.replace(/✗/g,'[错误]'),   // ✗ 会被汇总脚本当成失败标记
+    btns:[...document.querySelectorAll('#dlgFt button')].map(b=>b.textContent)}));}
+const clickBtn=t=>p.evaluate(t=>{[...document.querySelectorAll('#dlgFt button')].find(b=>b.textContent.includes(t)).click();},t);
+await p.evaluate(()=>{loadDesign({v:1,label:{w:50,h:30,dpi:203},elements:[{type:'ean13',x:6,y:3,h:10,module:0.33,showText:true,content:'{条码}'},
+  {type:'text',x:6,y:22,size:3,content:'{品名}'}]});document.querySelector('#copies').value='1';
+  setRows(parseData('品名,条码\n甲,6925253841665\n乙,6925253841660\n丙,692525384166'));});
+let dg=await startPrint();
+ok('有错误时弹出预检，指出第 2 张校验位错误',dg.open&&dg.title==='打印前预检'&&dg.body.includes('第 2 张')&&dg.body.includes('校验位'),dg.body);
+ok('提供「跳过出错的 1 张，打印其余 2 张」',dg.btns.some(b=>b.includes('跳过出错的 1 张'))&&!dg.btns.includes('继续打印'),JSON.stringify(dg.btns));
+await clickBtn('跳过');await p.waitForTimeout(150);
+ok('跳过后只打 2 张',await p.evaluate(()=>window.__printed)===2,await p.evaluate(()=>window.__printed));
+await p.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
+ok('打印结束后预览恢复全部 3 张',await p.evaluate(()=>document.querySelectorAll('#preview .label').length===3&&jobSkip===null));
+dg=await startPrint();await clickBtn('返回修改');await p.waitForTimeout(100);
+ok('返回修改 → 不打印',await p.evaluate(()=>window.__printed)===null);
+await p.evaluate(()=>{elements[1].content='{品名}{颜色}';render();});
+dg=await startPrint();
+ok('数据里没有的字段报错',dg.body.includes('找不到字段')&&dg.body.includes('颜色'),dg.body);
+await clickBtn('返回修改');
+await p.evaluate(()=>{loadDesign({v:1,label:{w:30,h:15,dpi:203},elements:[{type:'rich',x:2,y:2,w:40,size:3,content:'[b]宽于标签的富文本[/b]'}]});setRows(null);});
+dg=await startPrint();
+ok('只有警告（富文本超出标签）→ 可「继续打印」',dg.body.includes('超出标签')&&dg.btns.includes('继续打印'),JSON.stringify(dg));
+await clickBtn('继续打印');await p.waitForTimeout(150);
+ok('继续 → 打印',await p.evaluate(()=>window.__printed)===1);
+await p.evaluate(()=>{window.dispatchEvent(new Event('afterprint'));loadDesign({v:1,label:{w:30,h:15,dpi:203},elements:[{type:'text',x:2,y:2,size:3,content:'正常'}]});});
+dg=await startPrint();
+ok('没有问题 → 不弹预检直接打印',!dg.open&&await p.evaluate(()=>window.__printed)===1,JSON.stringify(dg));
+await p.evaluate(()=>window.dispatchEvent(new Event('afterprint')));
 
 ok('全程无 JS 错误',errors.length===0,errors.join(';'));
 console.log(`\n==== 移植功能验收：通过 ${pass} / 失败 ${fail} ====`);
