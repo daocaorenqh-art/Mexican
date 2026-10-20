@@ -1,7 +1,7 @@
 # 交付验收报告
 
-- 版本：`5f5e4ca`　生成时间：2026-10-20 06:19 UTC
-- 结果：**达标 35 / 71**；不达标 9；缺口（界面尚未提供）27
+- 版本：`9bcf784`　生成时间：2026-10-20 06:34 UTC
+- 结果：**达标 45 / 81**；不达标 9；缺口（界面尚未提供）27
 - 判定方法：界面实际操作 + 独立工具判定（Zebrash 渲染 ZPL 出纸、zxing-cpp 扫码、Chromium 打印 PDF、真实 SQLite、模拟网络标签机）
 - 交付条件：不达标 = 0 且缺口 = 0；另附真机现场测试单（docs/handoff-local.md）
 
@@ -17,20 +17,20 @@
 | ❌ | C-xlsx | 直接导入 .xlsx | 品名： |
 | ❌ | E-pages | 标签机模式：5 张标签 = 5 页 | 1 页 |
 | ❌ | E-pagesize | 标签机模式：页面尺寸 = 标签尺寸 60×40mm | MediaBox 612.0×792.0pt，应为 170.1×113.4 |
-| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 187.5 秒，9.2MB |
+| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 160.2 秒，9.2MB |
 | ⬜ | A-barcode-tspl | Code128：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-ean13-tspl | EAN-13：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-ean8-tspl | EAN-8：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-upca-tspl | UPC-A：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-upce | UPC-E：界面可添加 | 界面没有这种元素 |
+| ⬜ | A-upce-tspl | UPC-E：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-code39-tspl | Code39：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-code93 | Code93：界面可添加 | 界面没有这种元素 |
-| ⬜ | A-codabar | Codabar：界面可添加 | 界面没有这种元素 |
+| ⬜ | A-code93-tspl | Code93：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
+| ⬜ | A-codabar-tspl | Codabar：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-itf-tspl | ITF-25：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-gs1128 | GS1-128：界面可添加 | 界面没有这种元素 |
+| ⬜ | A-gs1128-tspl | GS1-128：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-qrcode-tspl | QR 中文：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | A-datamatrix-tspl | DataMatrix 中文：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-gs1dm | GS1 DataMatrix：界面可添加 | 界面没有这种元素 |
+| ⬜ | A-gs1dm-tspl | GS1 DataMatrix：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ⬜ | D-serial-barcode | 流水号可放进条码（{#SN}） | 条码内容里的 {#SN} 未被替换：["SN[#SN]","SN[#SN]","SN[#SN]"] |
 | ⬜ | F-qty | 数量字段（每条打几张） | 界面尚未提供 |
 | ⬜ | F-pick | 选择记录打印 | 界面尚未提供 |
@@ -62,23 +62,33 @@
 | ✅ | A-upca-preview | UPC-A：预览可扫回原文 | [{"format":"EAN13","text":"0036000291452"}] |
 | ✅ | A-upca-zpl | UPC-A：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"EAN13","text":"0036000291452"}] |
 | ⬜ | A-upca-tspl | UPC-A：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-upce | UPC-E：界面可添加 | 界面没有这种元素 |
+| ✅ | A-upce-preview | UPC-E：预览可扫回原文 | [{"format":"UPCE","text":"0012345000065"}] |
+| ✅ | A-upce-zpl | UPC-E：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"UPCE","text":"0012345000065"}] |
+| ⬜ | A-upce-tspl | UPC-E：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ✅ | A-code39-preview | Code39：预览可扫回原文 | [{"format":"Code39","text":"SN-001"}] |
 | ✅ | A-code39-zpl | Code39：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"Code39","text":"SN-001"}] |
 | ⬜ | A-code39-tspl | Code39：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-code93 | Code93：界面可添加 | 界面没有这种元素 |
-| ⬜ | A-codabar | Codabar：界面可添加 | 界面没有这种元素 |
+| ✅ | A-code93-preview | Code93：预览可扫回原文 | [{"format":"Code93","text":"CODE93-1"}] |
+| ✅ | A-code93-zpl | Code93：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"Code93","text":"CODE93-1"}] |
+| ⬜ | A-code93-tspl | Code93：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
+| ✅ | A-codabar-preview | Codabar：预览可扫回原文 | [{"format":"Codabar","text":"A40156B"}] |
+| ✅ | A-codabar-zpl | Codabar：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"Codabar","text":"A40156B"}] |
+| ⬜ | A-codabar-tspl | Codabar：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ✅ | A-itf-preview | ITF-25：预览可扫回原文 | [{"format":"ITF","text":"1234567890"}] |
 | ✅ | A-itf-zpl | ITF-25：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"ITF","text":"1234567890"}] |
 | ⬜ | A-itf-tspl | ITF-25：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-gs1128 | GS1-128：界面可添加 | 界面没有这种元素 |
+| ✅ | A-gs1128-preview | GS1-128：预览可扫回原文 | [{"format":"Code128","text":"(01)06925253841665(17)271231(10)B26"}] |
+| ✅ | A-gs1128-zpl | GS1-128：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"Code128","text":"(01)06925253841665(17)271231(10)B26"}] |
+| ⬜ | A-gs1128-tspl | GS1-128：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ✅ | A-qrcode-preview | QR 中文：预览可扫回原文 | [{"format":"QRCode","text":"合格证 SN0001 品名：女包"}] |
 | ✅ | A-qrcode-zpl | QR 中文：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"QRCode","text":"合格证 SN0001 品名：女包"}] |
 | ⬜ | A-qrcode-tspl | QR 中文：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ✅ | A-datamatrix-preview | DataMatrix 中文：预览可扫回原文 | [{"format":"DataMatrix","text":"批号B26 合格证"}] |
 | ✅ | A-datamatrix-zpl | DataMatrix 中文：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"DataMatrix","text":"批号B26 合格证"}] |
 | ⬜ | A-datamatrix-tspl | DataMatrix 中文：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
-| ⬜ | A-gs1dm | GS1 DataMatrix：界面可添加 | 界面没有这种元素 |
+| ✅ | A-gs1dm-preview | GS1 DataMatrix：预览可扫回原文 | [{"format":"DataMatrix","text":"(01)06925253841665(10)LOT7(21)SN01"}] |
+| ✅ | A-gs1dm-zpl | GS1 DataMatrix：ZPL 出纸（Zebrash）可扫回原文 | [{"format":"DataMatrix","text":"(01)06925253841665(10)LOT7(21)SN01"}] |
+| ⬜ | A-gs1dm-tspl | GS1 DataMatrix：TSPL 出纸可扫回原文 | 界面没有 TSPL 指令语言选项 |
 | ✅ | A-rot90 | 旋转 90° 的条码 ZPL 出纸可扫 | [{"format":"Code128","text":"ROT90"}] |
 | ✅ | A-rot180 | 旋转 180° 的条码 ZPL 出纸可扫 | [{"format":"Code128","text":"ROT180"}] |
 | ✅ | A-rot270 | 旋转 270° 的条码 ZPL 出纸可扫 | [{"format":"Code128","text":"ROT270"}] |
@@ -105,9 +115,9 @@
 | ⬜ | F-batch | 分批直发 / 续打 | 界面尚未提供 |
 | ⬜ | F-sheet | 整页模式（A4 不干胶、起始位置） | 界面尚未提供 |
 | ⬜ | F-fit | 文字适应宽度 | 界面尚未提供 |
-| ✅ | G-import | 导入并预览 1 万条 < 5 秒 | 0.4 秒 |
+| ✅ | G-import | 导入并预览 1 万条 < 5 秒 | 0.3 秒 |
 | ✅ | G-export-count | 1 万张生成 ZPL 张数正确 | 10000 张 |
-| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 187.5 秒，9.2MB |
+| ❌ | G-export-time | 1 万张生成 ZPL < 90 秒 | 160.2 秒，9.2MB |
 | ✅ | G-sample-0 | 抽查第 1 张：Code128 / EAN-13 / QR 都正确 | SKU00001\|6920000000012,SKU00001,6920000000012 |
 | ✅ | G-sample-9999 | 抽查第 10000 张：Code128 / EAN-13 / QR 都正确 | SKU10000\|6920000100002,SKU10000,6920000100002 |
 | ✅ | G-noerror | 大批量全程无脚本错误 |  |
