@@ -148,6 +148,17 @@ const im=await p.evaluate(()=>{const saved=(localStorage.getItem('label.autosave
 ok('自动保存里有新图片',im.saved);
 ok('撤消恢复为换图前',im.after==='',JSON.stringify(im).slice(0,80));
 
+console.log('\n[G4 载入设计文件校验]');
+alerts.length=0;
+const g4=await p.evaluate(()=>{loadDesign({v:1,label:{w:50,h:30,dpi:203},elements:[{type:'nosuch',x:1},null,{type:'text',x:'3',y:'4',content:12},
+  {type:'image',x:1,y:1,w:5,h:5,src:'https://example.com/a.png'},{type:'barcode',content:'X1'}],vars:[{name:'批次'},'bad',null]});
+  renderEditor();return {n:elements.length,types:elements.map(e=>e.type),x:elements[0].x,c:elements[0].content,size:elements[0].size,
+    img:elements[1].src,bh:elements[2].h,vars:vars.length,labels:document.querySelectorAll('#preview .label').length};});
+ok('未知类型 / 空项被剔除并提示',g4.n===3&&alerts.some(a=>/nosuch/.test(a)&&/外部图片地址/.test(a)),JSON.stringify(g4)+alerts.join('|'));
+ok('数值字段转数字、内容转文字、缺省字段补默认值',g4.x===3&&g4.c==='12'&&g4.size>0&&g4.bh>0,JSON.stringify(g4));
+ok('外部图片地址被清空（不连外网）',g4.img==='');
+ok('无效变量被剔除',g4.vars===1);
+
 console.log('\n==== 页面错误 ====',errors.length?errors:'无');if(errors.length)fail++;
 console.log(`\n==== 正确性（A 组）：通过 ${pass} / 失败 ${fail} ====`);
 await b.close();process.exit(fail?1:0);

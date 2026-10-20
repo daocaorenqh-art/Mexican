@@ -1128,8 +1128,25 @@ $('#saveBtn').onclick=()=>{
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
   URL.revokeObjectURL(a.href);
 };
+// 载入校验：未知类型剔除并提示；缺省字段补默认值；数值字段转数字；图片只接受内嵌 data: 地址（不连外网）
+const NUMKEYS=['x','y','size','h','module','w','border','rot','start','step','pad','bend','spacing','stroke','shadow'];
+function sanitizeElements(list){
+  const bad=[],out=[];
+  for(const el of list){
+    if(!el||typeof el!=='object'||!Object.prototype.hasOwnProperty.call(DEFAULTS,el.type)){bad.push(el&&el.type);continue;}
+    const o=Object.assign(JSON.parse(JSON.stringify(DEFAULTS[el.type])),el);
+    NUMKEYS.forEach(k=>{if(k in o)o[k]=+o[k]||0;});
+    if(o.content!=null&&typeof o.content!=='string')o.content=String(o.content);
+    if(o.type==='image'&&o.src&&!/^data:image\//.test(o.src)){bad.push('外部图片地址');o.src='';}
+    out.push(o);
+  }
+  return {out,bad};
+}
 function loadDesign(d){
   if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
+  const {out,bad}=sanitizeElements(d.elements);
+  if(bad.length)alert('以下内容无法识别，已略过：'+[...new Set(bad.map(String))].join('、'));
+  d={...d,elements:out,vars:Array.isArray(d.vars)?d.vars.filter(v=>v&&typeof v==='object'&&typeof v.name==='string'):[]};
   if(d.label){const L=d.label;$('#lw').value=fromMM(L.w??50);$('#lh').value=fromMM(L.h??30);$('#dpi').value=L.dpi??203;
     $('#cols').value=L.cols??0;$('#gapX').value=fromMM(L.gapX??L.tile??3);$('#gapY').value=fromMM(L.gapY??L.tile??3);
     // 旧设计没有打印方式：设了「每行数量」的按整页，否则按标签机
