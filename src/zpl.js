@@ -78,7 +78,82 @@ function setupCmds(p){p=p||{};let s='';
   if(p.left!==''&&p.left!=null&&+p.left)s+='^LS'+Math.round(+p.left);
   return s?s+'\n':'';}
 
-/* ---------- 生成 ----------
+/* ---------- 元素布局（ZPL / TSPL 共用） ----------
+   把一张标签的元素转成与指令语言无关的中间项（坐标单位：打印点，已含旋转偏移）：
+     {k:'bm', x, y, bm}                        位图（文字、条码、图片……）
+     {k:'box'|'ellipse', x, y, w, h, th, fill} 线框 / 椭圆（90° 倍数旋转已换算宽高）
+     {k:'native', t, el, res|m, x, y, rot, ...} 原生条码（仅 ZPL 的原生指令模式）
+   env：{dpi, opt, R, warn, lang} */
+function labelItems(o,e,ctx,env){
+  const {dpi,opt,R,warn,lang}=env,items=[];
+  const bmAt=(x,y,r)=>{if(r)items.push({k:'bm',x:Math.max(0,x+r.dx),y:Math.max(0,y+r.dy),bm:r.bm});};
+  // 位图放到元素位置（rot 为 90 倍数时本地旋转，否则交给 raster.rotate）
+  const place=(x,y,bm,rot)=>{
+    if(isRightAngle(rot)){const off=rotOffset(bm.w,bm.h,rot);bmAt(x,y,{bm:rotateBitmap(bm,rot),dx:off.dx,dy:off.dy});return;}
+    if(R.rotate){bmAt(x,y,R.rotate(bm,rot));return;}
+    warn('任意角度旋转需要在界面中导出');bmAt(x,y,{bm,dx:0,dy:0});};
+  for(const el of o.elements){
+    const x=Job.dots(el.x,dpi),y=Job.dots(el.y,dpi),rot=+el.rot||0;
+    let text;try{text=Job.elementText(el,ctx,e);}catch(err){warn(err.message);continue;}
+    const t=el.type;
+    try{
+      if(t==='text'||t==='counter'||t==='date'){
+        if(text==='')continue;
+        if(R.text)bmAt(x,y,R.text(text,el,dpi,rot));else warn('文字需要在界面中导出');
+      }
+      else if(t==='para'){
+        if(text==='')continue;
+        if(R.para)bmAt(x,y,R.para(text,el,dpi,rot));else warn('段落需要在界面中导出');
+      }
+      else if(B.BARCODE_1D.includes(t)){
+        const res=B.encode1D(t,text),md=Job.moduleDots(el.module,dpi),hd=Job.dots(el.h,dpi);
+        if(lang==='zpl'&&opt.barcodes==='native'&&isRightAngle(rot)&&NATIVE_1D.includes(t)){
+          items.push({k:'native',t,el,res,x,y,rot,md,hd});continue;}
+        let bm=barsBitmap(res.bits,md,hd);
+        if(el.showText){
+          if(R.text){const hri=R.text(res.text,{type:'hri',size:2.7,font:'monospace',bold:false},dpi,0).bm;
+            const all=Bitmap(Math.max(bm.w,hri.w),hd+Job.dots(0.3,dpi)+hri.h);blit(all,bm,0,0);
+            blit(all,hri,Math.max(0,Math.round((bm.w-hri.w)/2)),hd+Job.dots(0.3,dpi));bm=all;}
+          else warn('条码下方文字需要在界面中导出');
+        }
+        place(x,y,bm,rot);
+      }
+      else if(B.BARCODE_2D.includes(t)){
+        const m=B.encode2D(t,text,el.ecl),md=Job.matrixModuleDots(el.size,m.size,dpi);
+        if(lang==='zpl'&&opt.barcodes==='native'&&((t==='datamatrix'&&isRightAngle(rot))||(t==='qrcode'&&!rot))){
+          items.push({k:'native',t,el,m,x,y,rot,md,text});continue;}
+        place(x,y,matrixBitmap(m.modules,m.size,md),rot);
+      }
+      else if(t==='image'){
+        const src=Job.imageSrc(el,text);if(!src)continue;
+        if(R.image){const r=R.image(el,dpi,rot,src);if(r)bmAt(x,y,r);else warn('图片无法读取：'+src.slice(0,80));}
+        else warn('图片需要在界面中导出');
+      }
+      else if(t==='box'||t==='ellipse'){
+        let w=Job.dots(el.w,dpi),h=Job.dots(el.h,dpi);const th=Math.max(1,Job.dots(el.border,dpi));
+        if(isRightAngle(rot)){const k=((Math.round(rot/90)%4)+4)%4,off=rotOffset(w,h,rot);if(k%2)[w,h]=[h,w];
+          items.push({k:t,x:Math.max(0,x+off.dx),y:Math.max(0,y+off.dy),w,h,th,fill:!!el.fill});}
+        else if(R.shape)bmAt(x,y,R.shape(el,dpi,rot));else warn('任意角度的图形需要在界面中导出');
+      }
+    }catch(err){warn(err.message);}
+  }
+  return items;
+}
+// 按标签生成指令体并合并相同的连续标签：serialize(items) → 字符串；emit(body, 张数)
+function eachLabel(o,lang,serialize,emit){
+  const dpi=+o.label.dpi||203,opt=Object.assign({barcodes:'bitmap',compress:true},o.options||{}),R=o.raster||{},warnings=[];
+  const env={dpi,opt,R,lang,warn:m=>{if(!warnings.includes(m))warnings.push(m);}};
+  let prev=null,count=0,labels=0;
+  const flush=()=>{if(prev!=null){emit(prev,count);labels+=count;}};
+  for(const e of o.list){
+    const body=serialize(labelItems(o,e,Job.labelCtx(o.elements,e,o),env),env);
+    if(body===prev)count++;else{flush();prev=body;count=1;}
+  }
+  flush();
+  return {labels,warnings,dpi,opt};
+}
+
+/* ---------- ZPL ----------
    o.label {w,h,dpi}；o.elements；o.list（Job.makePrintList 的结果）；o.prompts / o.now；
    o.options {barcodes:'bitmap'|'native', compress:true, printer:{darkness,speed,media,track,mode,top,left}}；
    o.raster（可选，浏览器提供）：
@@ -88,93 +163,92 @@ function setupCmds(p){p=p||{};let s='';
      rotate(bm, rotDeg) → {bm,dx,dy}              任意角度旋转位图
      shape(el, dpi, rotDeg) → {bm,dx,dy}          任意角度的线框 / 椭圆
    返回 {zpl, labels(张数), warnings:[]} */
+function zplItems(items,env){
+  const G=bm=>gfa(bm,env.opt.compress);let body='';
+  for(const it of items){
+    if(it.k==='bm')body+='^FO'+it.x+','+it.y+G(it.bm)+'^FS\n';
+    else if(it.k==='box')body+='^FO'+it.x+','+it.y+'^GB'+it.w+','+it.h+','+(it.fill?Math.min(it.w,it.h):Math.min(it.th,it.w,it.h))+',B^FS\n';
+    else if(it.k==='ellipse')body+='^FO'+it.x+','+it.y+'^GE'+it.w+','+it.h+','+(it.fill?Math.ceil(Math.min(it.w,it.h)/2):it.th)+',B^FS\n';
+    else if(it.k==='native'){
+      const {t,el,x,y,rot,md}=it,o4=ORI[((Math.round(rot/90)%4)+4)%4];
+      if(it.res){const f=el.showText?'Y':'N',bw=it.res.bits.length*md,bh=it.hd+(el.showText?Job.dots(3,env.dpi):0);
+        const off=rotOffset(bw,bh,rot),pos='^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+'^BY'+Math.min(10,md),d=it.res.text,hd=it.hd;
+        if(t==='barcode')body+=pos+'^BC'+o4+','+hd+','+f+',N,N,A'+fd(d)+'\n';
+        else if(t==='ean13')body+=pos+'^BE'+o4+','+hd+','+f+',N^FD'+d.slice(0,12)+'^FS\n';
+        else if(t==='ean8')body+=pos+'^B8'+o4+','+hd+','+f+',N^FD'+d.slice(0,7)+'^FS\n';
+        else if(t==='upca')body+=pos+'^BU'+o4+','+hd+','+f+',N^FD'+d.slice(0,11)+'^FS\n';
+        else if(t==='code39')body+=pos+'^B3'+o4+',N,'+hd+','+f+',N'+fd(d)+'\n';
+        else if(t==='itf')body+=pos+'^B2'+o4+','+hd+','+f+',N,N^FD'+d+'^FS\n';}
+      else if(t==='datamatrix'){const s=it.m.size*md,off=rotOffset(s,s,rot);
+        body+='^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+'^BX'+o4+','+md+',200'+fd(it.text||' ')+'\n';}
+      else body+='^FO'+x+','+y+'^BQN,2,'+Math.min(10,md)+'^FH_^FD'+(el.ecl||'M')+'A,'+fd(it.text||' ').slice(7)+'\n';
+    }
+  }
+  return body;
+}
 function build(o){
-  const dpi=+o.label.dpi||203,opt=Object.assign({barcodes:'bitmap',compress:true},o.options||{}),R=o.raster||{};
-  const Wd=Job.dots(o.label.w,dpi),Hd=Job.dots(o.label.h,dpi),warnings=[];
-  const warn=m=>{if(!warnings.includes(m))warnings.push(m);};
-  const G=bm=>gfa(bm,opt.compress);
-  const pr=opt.printer||{};
+  const pr=(o.options&&o.options.printer)||{},dpi=+o.label.dpi||203;
   let out='';
   if(pr.darkness!==''&&pr.darkness!=null)out+='~SD'+String(Math.max(0,Math.min(30,Math.round(+pr.darkness)))).padStart(2,'0')+'\n';
-  const head='^XA\n^CI28\n^PW'+Wd+'\n^LL'+Hd+'\n^LH0,0\n'+setupCmds(pr);
-  let prevBody=null,count=0,labels=0;
-  const flush=()=>{if(prevBody!=null){out+=head+prevBody+'^PQ'+count+'\n^XZ\n';labels+=count;}};
-  // 位图放到元素位置（rot 为 90 倍数时本地旋转，否则交给 raster.rotate）
-  const place=(x,y,bm,rot)=>{
-    if(isRightAngle(rot)){const off=rotOffset(bm.w,bm.h,rot);const r=rotateBitmap(bm,rot);
-      return '^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+G(r)+'^FS\n';}
-    if(R.rotate){const r=R.rotate(bm,rot);return '^FO'+Math.max(0,x+r.dx)+','+Math.max(0,y+r.dy)+G(r.bm)+'^FS\n';}
-    warn('任意角度旋转需要在界面中导出');return '^FO'+x+','+y+G(bm)+'^FS\n';};
-  const placeR=(x,y,r)=>r?'^FO'+Math.max(0,x+r.dx)+','+Math.max(0,y+r.dy)+G(r.bm)+'^FS\n':'';
-  for(const e of o.list){
-    const ctx=Job.labelCtx(o.elements,e,o);let body='';
-    for(const el of o.elements){
-      const x=Job.dots(el.x,dpi),y=Job.dots(el.y,dpi),rot=+el.rot||0;
-      let text;try{text=Job.elementText(el,ctx,e);}catch(err){warn(err.message);continue;}
-      const t=el.type;
-      try{
-        if(t==='text'||t==='counter'||t==='date'){
-          if(text==='')continue;
-          if(R.text)body+=placeR(x,y,R.text(text,el,dpi,rot));else warn('文字需要在界面中导出');
-        }
-        else if(t==='para'){
-          if(text==='')continue;
-          if(R.para)body+=placeR(x,y,R.para(text,el,dpi,rot));else warn('段落需要在界面中导出');
-        }
-        else if(B.BARCODE_1D.includes(t)){
-          const res=B.encode1D(t,text),md=Job.moduleDots(el.module,dpi),hd=Job.dots(el.h,dpi);
-          if(opt.barcodes==='native'&&isRightAngle(rot)&&NATIVE_1D.includes(t)){
-            const o4=ORI[((Math.round(rot/90)%4)+4)%4],f=el.showText?'Y':'N',bw=res.bits.length*md,bh=hd+(el.showText?Job.dots(3,dpi):0);
-            const off=rotOffset(bw,bh,rot),pos='^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+'^BY'+Math.min(10,md);
-            const d=res.text;
-            if(t==='barcode')body+=pos+'^BC'+o4+','+hd+','+f+',N,N,A'+fd(d)+'\n';
-            else if(t==='ean13')body+=pos+'^BE'+o4+','+hd+','+f+',N^FD'+d.slice(0,12)+'^FS\n';
-            else if(t==='ean8')body+=pos+'^B8'+o4+','+hd+','+f+',N^FD'+d.slice(0,7)+'^FS\n';
-            else if(t==='upca')body+=pos+'^BU'+o4+','+hd+','+f+',N^FD'+d.slice(0,11)+'^FS\n';
-            else if(t==='code39')body+=pos+'^B3'+o4+',N,'+hd+','+f+',N'+fd(d)+'\n';
-            else if(t==='itf')body+=pos+'^B2'+o4+','+hd+','+f+',N,N^FD'+d+'^FS\n';
-          } else {
-            let bm=barsBitmap(res.bits,md,hd);
-            if(el.showText){
-              if(R.text){const hri=R.text(res.text,{type:'hri',size:2.7,font:'monospace',bold:false},dpi,0).bm;
-                const all=Bitmap(Math.max(bm.w,hri.w),hd+Job.dots(0.3,dpi)+hri.h);blit(all,bm,0,0);
-                blit(all,hri,Math.max(0,Math.round((bm.w-hri.w)/2)),hd+Job.dots(0.3,dpi));bm=all;}
-              else warn('条码下方文字需要在界面中导出');
-            }
-            body+=place(x,y,bm,rot);
-          }
-        }
-        else if(B.BARCODE_2D.includes(t)){
-          const m=B.encode2D(t,text,el.ecl);
-          const md=Job.matrixModuleDots(el.size,m.size,dpi);
-          if(opt.barcodes==='native'&&t==='datamatrix'&&isRightAngle(rot)){const s=m.size*md,off=rotOffset(s,s,rot);
-            body+='^FO'+Math.max(0,x+off.dx)+','+Math.max(0,y+off.dy)+'^BX'+ORI[((Math.round(rot/90)%4)+4)%4]+','+md+',200'+fd(text||' ')+'\n';}
-          else if(opt.barcodes==='native'&&t==='qrcode'&&!rot)
-            body+='^FO'+x+','+y+'^BQN,2,'+Math.min(10,md)+'^FH_^FD'+(el.ecl||'M')+'A,'+fd(text||' ').slice(7)+'\n';
-          else body+=place(x,y,matrixBitmap(m.modules,m.size,md),rot);
-        }
-        else if(t==='image'){
-          const src=Job.imageSrc(el,text);if(!src)continue;
-          if(R.image){const r=R.image(el,dpi,rot,src);if(r)body+=placeR(x,y,r);else warn('图片无法读取：'+src.slice(0,80));}
-          else warn('图片需要在界面中导出');
-        }
-        else if(t==='box'||t==='ellipse'){
-          let w=Job.dots(el.w,dpi),h=Job.dots(el.h,dpi);const th=Math.max(1,Job.dots(el.border,dpi));
-          if(isRightAngle(rot)){const k=((Math.round(rot/90)%4)+4)%4,off=rotOffset(w,h,rot);if(k%2)[w,h]=[h,w];
-            const fx=Math.max(0,x+off.dx),fy=Math.max(0,y+off.dy);
-            if(t==='box')body+='^FO'+fx+','+fy+'^GB'+w+','+h+','+(el.fill?Math.min(w,h):Math.min(th,Math.min(w,h)))+',B^FS\n';
-            else body+='^FO'+fx+','+fy+'^GE'+w+','+h+','+(el.fill?Math.ceil(Math.min(w,h)/2):th)+',B^FS\n';}
-          else if(R.shape)body+=placeR(x,y,R.shape(el,dpi,rot));else warn('任意角度的图形需要在界面中导出');
-        }
-      }catch(err){warn(err.message);}
-    }
-    // 连续相同的标签合并为一个 ^PQ n（无逐张变化时份数不再重复发送整张数据）
-    if(body===prevBody)count++;else{flush();prevBody=body;count=1;}
-  }
-  flush();
-  return {zpl:out,labels,warnings};
+  const head='^XA\n^CI28\n^PW'+Job.dots(o.label.w,dpi)+'\n^LL'+Job.dots(o.label.h,dpi)+'\n^LH0,0\n'+setupCmds(pr);
+  // 连续相同的标签合并为一个 ^PQ n（无逐张变化时份数不再重复发送整张数据）
+  const r=eachLabel(o,'zpl',zplItems,(body,n)=>{out+=head+body+'^PQ'+n+'\n^XZ\n';});
+  return {zpl:out,labels:r.labels,warnings:r.warnings};
 }
 
-const api={build,Bitmap,setPx,getPx,fillRect,blit,barsBitmap,matrixBitmap,rotateBitmap,rotOffset,gfa,gfaDecode,compressRow,fd};
+/* ---------- TSPL（TSC / 佳博 / 芯烨 等国产标签机） ----------
+   全部内容按位图（BITMAP）输出，与预览逐点一致、无需打印机中文字库；线框用 BOX / BAR，椭圆画成位图。
+   o.options.printer 额外支持：gap（间隙/黑标高度 mm，默认 2）、invert（位图反色，TSPL 默认 1=白点，默认 true）。
+   返回 {data: Uint8Array, labels, warnings} */
+// 椭圆位图（纯 JS，无需 canvas）
+function ellipseBitmap(w,h,th,fill){const bm=Bitmap(w,h),a=w/2,b=h/2,ai=Math.max(0,a-th),bi=Math.max(0,b-th);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const dx=x+0.5-a,dy=y+0.5-b;
+    if(dx*dx/(a*a)+dy*dy/(b*b)<=1&&(fill||ai<=0||bi<=0||dx*dx/(ai*ai)+dy*dy/(bi*bi)>1))setPx(bm,x,y);}
+  return bm;}
+function tsplBitmapBytes(bm,invert){let s='';for(let i=0;i<bm.data.length;i++)s+=String.fromCharCode(invert?(~bm.data[i])&0xFF:bm.data[i]);return s;}
+function buildTSPL(o){
+  const pr=(o.options&&o.options.printer)||{},dpi=+o.label.dpi||203,invert=pr.invert!==false;
+  const W=+o.label.w,H=+o.label.h,gap=pr.gap===''||pr.gap==null?2:Math.max(0,+pr.gap);
+  let head='SIZE '+W+' mm,'+H+' mm\r\n';
+  head+=pr.track==='mark'?'BLINE '+gap+' mm,0 mm\r\n':pr.track==='continuous'?'GAP 0 mm,0 mm\r\n':'GAP '+gap+' mm,0 mm\r\n';
+  head+='DIRECTION 0\r\nREFERENCE '+(+pr.left?Math.round(+pr.left):0)+',0\r\n';
+  if(+pr.top)head+='SHIFT '+Math.round(+pr.top)+'\r\n';
+  if(pr.speed!==''&&pr.speed!=null)head+='SPEED '+Math.max(1,Math.min(14,Math.round(+pr.speed)))+'\r\n';
+  if(pr.darkness!==''&&pr.darkness!=null)head+='DENSITY '+Math.max(0,Math.min(15,Math.round(+pr.darkness/2)))+'\r\n';
+  if(pr.mode==='peel')head+='SET PEEL ON\r\n';else if(pr.mode==='cut')head+='SET CUTTER 1\r\n';else if(pr.mode==='tear')head+='SET TEAR ON\r\n';
+  head+='CLS\r\n';
+  const ser=(items)=>{let body='';
+    for(const it of items){
+      if(it.k==='bm')body+='BITMAP '+it.x+','+it.y+','+it.bm.bpr+','+it.bm.h+',0,'+tsplBitmapBytes(it.bm,invert)+'\r\n';
+      else if(it.k==='box')body+=it.fill?'BAR '+it.x+','+it.y+','+it.w+','+it.h+'\r\n':'BOX '+it.x+','+it.y+','+(it.x+it.w)+','+(it.y+it.h)+','+Math.min(it.th,it.w,it.h)+'\r\n';
+      else if(it.k==='ellipse'){const bm=ellipseBitmap(it.w,it.h,it.th,it.fill);
+        body+='BITMAP '+it.x+','+it.y+','+bm.bpr+','+bm.h+',0,'+tsplBitmapBytes(bm,invert)+'\r\n';}
+    }
+    return body;};
+  let out='';
+  const r=eachLabel(Object.assign({},o,{options:Object.assign({},o.options,{barcodes:'bitmap'})}),'tspl',ser,(body,n)=>{out+=head+body+'PRINT 1,'+n+'\r\n';});
+  const data=new Uint8Array(out.length);for(let i=0;i<out.length;i++)data[i]=out.charCodeAt(i)&0xFF;
+  return {data,labels:r.labels,warnings:r.warnings};
+}
+// 解析 TSPL（测试用）：返回每张 {bitmaps:[{x,y,bpr,h,bytes}], boxes, bars, copies}
+function parseTSPL(u8){
+  const labels=[];let cur=null,i=0;const n=u8.length;
+  const line=()=>{let s='';while(i<n&&u8[i]!==10)s+=String.fromCharCode(u8[i++]);i++;return s.replace(/\r$/,'');};
+  while(i<n){
+    // BITMAP 行的数据是二进制，需按头里的字节数读取
+    let j=i,hdr='';while(j<n&&u8[j]!==10&&hdr.length<64&&!(hdr.startsWith('BITMAP ')&&hdr.split(',').length===6))hdr+=String.fromCharCode(u8[j++]);
+    if(hdr.startsWith('BITMAP ')&&hdr.split(',').length===6){
+      const [x,y,bpr,h]=hdr.slice(7).split(',').map(Number);const start=j,len=bpr*h;
+      cur.bitmaps.push({x,y,bpr,h,bytes:u8.slice(start,start+len)});i=start+len;while(i<n&&u8[i]!==10)i++;i++;continue;}
+    const s=line();
+    if(s==='CLS'){cur={bitmaps:[],boxes:[],bars:[],copies:1,head:labels.length?null:[]};labels.push(cur);}
+    else if(s.startsWith('PRINT '))cur.copies=+s.split(',')[1];
+    else if(s.startsWith('BOX '))cur.boxes.push(s.slice(4).split(',').map(Number));
+    else if(s.startsWith('BAR '))cur.bars.push(s.slice(4).split(',').map(Number));
+  }
+  return labels;
+}
+
+const api={build,buildTSPL,parseTSPL,ellipseBitmap,Bitmap,setPx,getPx,fillRect,blit,barsBitmap,matrixBitmap,rotateBitmap,rotOffset,gfa,gfaDecode,compressRow,fd};
 if(isNode)module.exports=api;else root.ZPL=api;
 })(typeof window!=='undefined'?window:globalThis);

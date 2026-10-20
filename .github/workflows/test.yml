@@ -1,13 +1,18 @@
 name: Test
 
-# 每次推送和 PR 都跑全部测试（编码器扫码校验、表达式、预检、ZPL 点阵扫码、数据来源、直发）
+# 每次推送和 PR 都跑全部测试（编码器扫码校验、表达式、预检、ZPL/TSPL 点阵扫码、数据来源、直发）
+# Windows 上额外验证：共享打印机 / 按打印机名 RAW 直发的 Windows 专用代码能运行
 on:
   push:
   pull_request:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

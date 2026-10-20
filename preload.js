@@ -19,5 +19,6 @@ contextBridge.exposeInMainWorld('labelPrinter', {
   isDesktop: true,
   list: () => ipcRenderer.invoke('printer:list'),
   sendRaw: (target, data) => ipcRenderer.invoke('printer:sendRaw', { target, data }),
+  status: (target, lang) => ipcRenderer.invoke('printer:status', { target, lang }),
   print: (deviceName, opts) => ipcRenderer.invoke('printer:print', { deviceName, pageSize: opts && opts.pageSize })
 });

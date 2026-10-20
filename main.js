@@ -98,6 +98,16 @@ ipcMain.handle('printer:sendRaw', async (e, { target, data }) => {
   }
 });
 
+// 读取网络打印机状态（缺纸 / 开盖 / 缺碳带 / 分辨率）：lang 为 'zpl' 或 'tspl'
+ipcMain.handle('printer:status', async (e, { target, lang }) => {
+  try {
+    trusted(e);
+    return { ok: true, status: await rawprint.printerStatus(target, lang) };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+});
+
 // 按指定打印机静默打印当前页面（不弹系统打印对话框）
 // pageSize：标签机模式传 {width,height}（微米，= 标签尺寸），整页模式传 'A4' 等纸张名
 const PAPERS = new Set(['A3', 'A4', 'A5', 'Legal', 'Letter', 'Tabloid']);
