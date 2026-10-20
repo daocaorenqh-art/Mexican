@@ -115,9 +115,13 @@
             <option value="300">300 (高精标签机)</option>
           </select>
         </label>
-        <label class="f"><span>标签间距 (mm)</span><input id="tile" type="number" value="3" min="0" step="1"></label>
+        <label class="f"><span>每行数量（0=自动）</span><input id="cols" type="number" value="0" min="0" step="1"></label>
       </div>
-      <p class="hint">办公打印机整页套打时，多张标签会按间距自动平铺换行；标签机一般每张一页。</p>
+      <div class="row">
+        <label class="f"><span>列间距 (mm)</span><input id="gapX" type="number" value="3" min="0" step="0.5"></label>
+        <label class="f"><span>行间距 (mm)</span><input id="gapY" type="number" value="3" min="0" step="0.5"></label>
+      </div>
+      <p class="hint">整页套打：「每行数量」设 N 则按 N 列网格排布（如 A4 不干胶多张/页）；设 0 则按宽度自动平铺换行。标签机一般每张一页。</p>
     </div>
 
     <div class="panel">
@@ -132,8 +136,11 @@
         <button data-add="code39">+ Code39</button>
         <button data-add="itf">+ ITF-25</button>
         <button data-add="qrcode">+ 二维码</button>
+        <button data-add="counter">+ 流水号</button>
+        <button data-add="date">+ 日期</button>
         <button data-add="image">+ 图片/Logo</button>
         <button data-add="box">+ 线条/边框</button>
+        <button data-add="ellipse">+ 椭圆</button>
       </div>
       <p class="hint">坐标单位 mm，从标签左上角算起。内容里用 <code>{字段名}</code> 套数据。</p>
     </div>
@@ -429,7 +436,12 @@ function barsSVG(bits, modPx, heightPx){
 }
 
 /* ---------- 渲染单张标签 ---------- */
-function renderLabel(row){
+function fmtDate(d,f){const p=(n,l=2)=>String(n).padStart(l,'0');
+  return String(f).replace(/YYYY/g,d.getFullYear()).replace(/MM/g,p(d.getMonth()+1)).replace(/DD/g,p(d.getDate()))
+    .replace(/HH/g,p(d.getHours())).replace(/mm/g,p(d.getMinutes())).replace(/ss/g,p(d.getSeconds()));}
+
+function renderLabel(row,idx){
+  idx=idx||0;
   const W=+$('#lw').value,H=+$('#lh').value;
   const d=document.createElement('div');
   d.className='label'+($('#showGrid').checked?' grid':'');
@@ -480,6 +492,20 @@ function renderLabel(row){
         if(el.fill)node.style.background='#000';
         else node.style.border=(el.border*PXMM)+'px solid #000';
       }
+      else if(el.type==='ellipse'){
+        node.style.width=(el.w*PXMM)+'px';node.style.height=(el.h*PXMM)+'px';node.style.borderRadius='50%';
+        if(el.fill)node.style.background='#000';
+        else node.style.border=(el.border*PXMM)+'px solid #000';
+      }
+      else if(el.type==='counter'){
+        const n=(+el.start||0)+idx*(+el.step||1);
+        node.textContent=(el.prefix||'')+String(n).padStart(+el.pad||0,'0')+(el.suffix||'');
+        node.style.fontSize=(el.size*PXMM)+'px';node.style.fontWeight=el.bold?'700':'400';
+      }
+      else if(el.type==='date'){
+        node.textContent=fmtDate(new Date(),el.format||'YYYY-MM-DD');
+        node.style.fontSize=(el.size*PXMM)+'px';node.style.fontWeight=el.bold?'700':'400';
+      }
     }catch(err){node.textContent='⚠ '+err.message;node.style.cssText+=';color:#c00;font-size:10px';}
     d.appendChild(node);
   }
@@ -488,10 +514,15 @@ function renderLabel(row){
 
 function render(){
   const pv=$('#preview');pv.innerHTML='';
-  pv.style.setProperty('--tile',(+$('#tile').value)*PXMM+'px');
+  const cols=+$('#cols').value||0;
+  const gapX=(+$('#gapX').value||0)*PXMM, gapY=(+$('#gapY').value||0)*PXMM;
+  const W=+$('#lw').value;
+  if(cols>0){pv.style.display='grid';pv.style.gridTemplateColumns='repeat('+cols+','+(W*PXMM)+'px)';}
+  else{pv.style.display='flex';}
+  pv.style.gap=gapY+'px '+gapX+'px';
   const list=rows?rows:[null];
-  list.forEach(r=>pv.appendChild(renderLabel(r)));
-  $('#pager').textContent=rows?('共 '+rows.length+' 张标签'):'单张预览（未加载数据）';
+  list.forEach((r,i)=>pv.appendChild(renderLabel(r,i)));
+  $('#pager').textContent=rows?('共 '+rows.length+' 张标签'+(cols>0?('（每行 '+cols+'）'):'')):'单张预览（未加载数据）';
 }
 
 /* ---------- 元素编辑 UI ---------- */
@@ -505,10 +536,13 @@ const FIELDS={
   code39:BC('内容(字母/数字)'),
   itf:BC('内容(数字,奇数自动补0)'),
   qrcode:[['content','内容','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','边长(mm)','num'],['rot','旋转°','num']],
+  counter:[['prefix','前缀','text'],['start','起始','num'],['step','步进','num'],['pad','补零位数','num'],['suffix','后缀','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
+  date:[['format','格式','text'],['x','X(mm)','num'],['y','Y(mm)','num'],['size','字号(mm)','num'],['bold','加粗','bool'],['rot','旋转°','num']],
   image:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['src','图片','file'],['rot','旋转°','num']],
-  box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
+  box:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']],
+  ellipse:[['x','X(mm)','num'],['y','Y(mm)','num'],['w','宽(mm)','num'],['h','高(mm)','num'],['border','线宽(mm)','num'],['fill','填充黑块','bool'],['rot','旋转°','num']]
 };
-const TYPENAME={text:'文字',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',image:'图片',box:'线条/边框'};
+const TYPENAME={text:'文字',barcode:'Code128',ean13:'EAN-13',ean8:'EAN-8',upca:'UPC-A',code39:'Code39',itf:'ITF-25',qrcode:'二维码',counter:'流水号',date:'日期',image:'图片',box:'线条/边框',ellipse:'椭圆'};
 
 function renderEditor(){
   const box=$('#elist');box.innerHTML='';
@@ -549,8 +583,11 @@ const DEFAULTS={
   code39:{type:'code39',x:3,y:12,h:12,module:0.3,showText:true,rot:0,content:'CODE39'},
   itf:{type:'itf',x:3,y:12,h:12,module:0.33,showText:true,rot:0,content:'1234567890'},
   qrcode:{type:'qrcode',x:3,y:3,size:15,rot:0,content:'https://'},
+  counter:{type:'counter',x:3,y:3,size:4,bold:false,rot:0,prefix:'',start:1,step:1,pad:4,suffix:''},
+  date:{type:'date',x:3,y:3,size:4,bold:false,rot:0,format:'YYYY-MM-DD'},
   image:{type:'image',x:3,y:3,w:15,h:15,src:'',rot:0},
-  box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0}
+  box:{type:'box',x:2,y:2,w:46,h:26,border:0.4,fill:false,rot:0},
+  ellipse:{type:'ellipse',x:3,y:3,w:15,h:15,border:0.4,fill:false,rot:0}
 };
 document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
   elements.push(JSON.parse(JSON.stringify(DEFAULTS[b.dataset.add])));
@@ -559,7 +596,7 @@ document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
 $('#elist').addEventListener('input',e=>{
   const i=e.target.dataset.i,k=e.target.dataset.k;
   if(i!=null){let v=e.target.value;
-    if(['x','y','size','h','module','w','border','rot'].includes(k))v=parseFloat(v)||0;
+    if(['x','y','size','h','module','w','border','rot','start','step','pad'].includes(k))v=parseFloat(v)||0;
     if(['bold','showText','fill'].includes(k))v=v==='1';
     elements[i][k]=v;render();return;}
   const img=e.target.dataset.img;
@@ -587,7 +624,7 @@ $('#clearCsv').onclick=()=>{rows=null;render();};
 $('#importFile').onclick=()=>$('#fileIn').click();
 $('#fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();
   fr.onload=()=>{$('#csv').value=fr.result;refreshFields();rows=parseData(fr.result);render();};fr.readAsText(f);};
-$('#lw').oninput=$('#lh').oninput=$('#tile').oninput=render;
+$('#lw').oninput=$('#lh').oninput=$('#cols').oninput=$('#gapX').oninput=$('#gapY').oninput=render;
 $('#dpi').onchange=render;
 $('#showGrid').onchange=render;
 $('#zoom').oninput=()=>{try{$('#preview').style.zoom=(+$('#zoom').value/100);}catch(e){}};
@@ -595,15 +632,16 @@ $('#printBtn').onclick=()=>window.print();
 
 /* ---------- 保存 / 载入设计 ---------- */
 $('#saveBtn').onclick=()=>{
-  const design={v:1,label:{w:+$('#lw').value,h:+$('#lh').value,dpi:+$('#dpi').value,tile:+$('#tile').value},elements};
+  const design={v:1,label:{w:+$('#lw').value,h:+$('#lh').value,dpi:+$('#dpi').value,
+    cols:+$('#cols').value,gapX:+$('#gapX').value,gapY:+$('#gapY').value},elements};
   const blob=new Blob([JSON.stringify(design,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='label-design.json';a.click();
   URL.revokeObjectURL(a.href);
 };
 function loadDesign(d){
   if(!d||!Array.isArray(d.elements)){alert('不是有效的设计文件');return;}
-  if(d.label){$('#lw').value=d.label.w??50;$('#lh').value=d.label.h??30;
-    $('#dpi').value=d.label.dpi??203;$('#tile').value=d.label.tile??3;}
+  if(d.label){const L=d.label;$('#lw').value=L.w??50;$('#lh').value=L.h??30;$('#dpi').value=L.dpi??203;
+    $('#cols').value=L.cols??0;$('#gapX').value=L.gapX??L.tile??3;$('#gapY').value=L.gapY??L.tile??3;}
   elements=d.elements;sel=-1;renderEditor();render();
 }
 $('#loadBtn').onclick=()=>$('#designIn').click();

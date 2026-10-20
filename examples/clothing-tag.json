@@ -1,19 +1,20 @@
 {
   "v": 1,
-  "_note": "由上传的 StrandWare/.qdf 吊牌模板还原的示例设计。字段与表达式照搬自原模板；坐标/字号为估算，可自行调整。配合 clothing-tag.csv 使用。内容语法：{字段}=简单插值；=开头=表达式。",
-  "label": { "w": 40, "h": 70, "dpi": 203, "tile": 3 },
+  "_note": "还原 LABEL MATRIX 合格证吊牌版面的示例设计（原创实现）。配合 clothing-tag.csv。内容语法：普通文字直接写；{字段}=插值；=开头=表达式。坐标可按实际标签微调。",
+  "label": { "w": 60, "h": 112, "dpi": 203, "cols": 0, "gapX": 3, "gapY": 3 },
   "elements": [
-    { "type": "text",   "x": 3, "y": 3,  "size": 3.6, "bold": true,  "content": "{GOODSNAME}" },
-    { "type": "text",   "x": 3, "y": 8.5,"size": 3,   "bold": false, "content": "{L2NAME}" },
-    { "type": "text",   "x": 3, "y": 13, "size": 3,   "bold": false, "content": "{GOODSCODE}" },
-    { "type": "text",   "x": 3, "y": 18, "size": 2.6, "bold": false, "content": "QB/T1333-2018" },
-    { "type": "text",   "x": 3, "y": 23, "size": 2.8, "bold": false, "content": "{LILIAO}" },
-    { "type": "text",   "x": 3, "y": 28, "size": 2.6, "bold": false, "content": "=left([GOODSRMK],20)" },
-    { "type": "text",   "x": 3, "y": 32, "size": 2.6, "bold": false, "content": "=mid([GOODSRMK],21,25)" },
-    { "type": "text",   "x": 3, "y": 37, "size": 2.6, "bold": false, "content": "{washchar}" },
-    { "type": "text",   "x": 3, "y": 44, "size": 5,   "bold": true,  "content": "=[JYPRICE] + \".00\"" },
-    { "type": "text",   "x": 26,"y": 45, "size": 3,   "bold": false, "content": "=[YWPRICE] + \"Z\"" },
-    { "type": "ean13",  "x": 3, "y": 51, "h": 11, "module": 0.33, "showText": true, "content": "{BARCODE1}" },
-    { "type": "text",   "x": 3, "y": 66, "size": 2.6, "bold": false, "content": "{SKU}" }
+    { "type": "text", "x": 18, "y": 4,  "size": 6,   "bold": true,  "rot": 0, "content": "合格证" },
+    { "type": "text", "x": 5,  "y": 18, "size": 3.6, "bold": true,  "rot": 0, "content": "品名：{PINMING}" },
+    { "type": "text", "x": 5,  "y": 25, "size": 3.6, "bold": true,  "rot": 0, "content": "型号：{XINGHAO}" },
+    { "type": "text", "x": 5,  "y": 32, "size": 3.6, "bold": true,  "rot": 0, "content": "颜色：{YANSE}" },
+    { "type": "text", "x": 5,  "y": 39, "size": 3.6, "bold": true,  "rot": 0, "content": "面料：{MIANLIAO}" },
+    { "type": "text", "x": 5,  "y": 46, "size": 3.6, "bold": true,  "rot": 0, "content": "里料：{LILIAO}" },
+    { "type": "text", "x": 5,  "y": 53, "size": 3.6, "bold": true,  "rot": 0, "content": "规格：{GUIGE}" },
+    { "type": "text", "x": 5,  "y": 60, "size": 3.6, "bold": true,  "rot": 0, "content": "质量等级：{DENGJI}" },
+    { "type": "text", "x": 5,  "y": 67, "size": 3.6, "bold": true,  "rot": 0, "content": "执行标准：QB/T1333-2018" },
+    { "type": "text", "x": 5,  "y": 74, "size": 4.2, "bold": true,  "rot": 0, "content": "=\"零售价：\"+[JYPRICE]+\".00\"" },
+    { "type": "text", "x": 44, "y": 83, "size": 3.4, "bold": true,  "rot": 0, "content": "=[YW]+\"Z\"" },
+    { "type": "barcode", "x": 5, "y": 82, "h": 10, "module": 0.33, "showText": true, "rot": 0, "content": "{SKU}" },
+    { "type": "ean13",   "x": 5, "y": 97, "h": 12, "module": 0.33, "showText": true, "rot": 0, "content": "{BARCODE1}" }
   ]
 }
