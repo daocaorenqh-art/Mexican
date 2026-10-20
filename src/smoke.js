@@ -61,6 +61,11 @@ async function run(win, pageErrors) {
   for (const m of ['mysql2/promise', 'pg', 'mssql']) await check(m + ' 驱动', () => { require(m); return '已加载'; });
   // odbc 依赖系统的 ODBC 管理器，Windows 自带；其它平台未必有，只在 Windows 上要求
   if (process.platform === 'win32') await check('odbc 驱动', () => { require('odbc'); return '已加载'; });
+  await check('程序图标', () => {
+    const f = path.join(__dirname, '..', 'assets', 'icon.ico');
+    if (!fs.existsSync(f)) throw new Error('缺少 ' + f);
+    return fs.statSync(f).size + ' 字节';
+  });
   await check('打印机列表', async () => (await win.webContents.getPrintersAsync()).length + ' 台');
   await check('页面无报错', () => {
     if (pageErrors.length) throw new Error(pageErrors.join('; '));

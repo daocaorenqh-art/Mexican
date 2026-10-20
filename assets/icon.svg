@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f7ae0"/><stop offset="1" stop-color="#0b4fa8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <!-- 吊牌：右上斜切角 + 穿绳孔 -->
+  <path d="M52 64h112l40 40v100a12 12 0 0 1-12 12H52a12 12 0 0 1-12-12V76a12 12 0 0 1 12-12z" fill="#fff"/>
+  <circle cx="176" cy="96" r="9" fill="#0b4fa8"/>
+  <!-- 条码 -->
+  <g fill="#1b2633">
+    <rect x="62" y="120" width="8" height="64"/><rect x="76" y="120" width="4" height="64"/>
+    <rect x="86" y="120" width="12" height="64"/><rect x="104" y="120" width="4" height="64"/>
+    <rect x="114" y="120" width="8" height="64"/><rect x="128" y="120" width="4" height="64"/>
+    <rect x="138" y="120" width="12" height="64"/><rect x="156" y="120" width="4" height="64"/>
+    <rect x="166" y="120" width="8" height="64"/><rect x="180" y="120" width="4" height="64"/>
+  </g>
+  <rect x="62" y="84" width="72" height="12" rx="6" fill="#1f7ae0"/>
+  <rect x="62" y="194" width="122" height="8" rx="4" fill="#c5d3e3"/>
+</svg>

@@ -1,6 +1,6 @@
 {
   "name": "label-print-tool",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "本地安装运行的标签/条码设计与批量打印客户端，支持多种数据库套打",
   "main": "main.js",
   "scripts": {
@@ -33,9 +33,11 @@
       "preload.js",
       "index.html",
       "src/**/*",
-      "examples/**/*"
+      "examples/**/*",
+      "assets/**/*"
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         "nsis"
       ]
@@ -43,7 +45,9 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
     }
   }
 }
